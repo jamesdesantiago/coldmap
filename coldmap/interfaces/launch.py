@@ -549,7 +549,11 @@ class App:
         env = {"COLDMAP_CASES": str(cases) if cases else "", "COLDMAP_HOME": str(home())}
         if clearance and clearance.exists():
             env["COLDMAP_CLEARANCE"] = str(clearance)
-        local = {"command": sys.executable, "args": ["-m", "coldmap.interfaces.mcp_server"], "env": env}
+        # The installed coldmap-mcp program, not `python -m`: Claude starts servers from the user's home
+        # folder, where a folder named coldmap (a clone of this project) would shadow the package.
+        exe = Path(sys.executable).with_name("coldmap-mcp.exe" if os.name == "nt" else "coldmap-mcp")
+        local = ({"command": str(exe), "args": [], "env": env} if exe.exists()
+                 else {"command": sys.executable, "args": ["-m", "coldmap.interfaces.mcp_server"], "env": env})
         uvx = {"command": "uvx", "args": ["--from", "coldmap[mcp] @ https://github.com/jamesdesantiago/coldmap/"
                                           "archive/refs/heads/main.zip", "coldmap-mcp"], "env": env}
         ready = importlib.util.find_spec("mcp") is not None

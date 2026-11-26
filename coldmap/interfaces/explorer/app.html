@@ -722,7 +722,7 @@ function renderAI(){
  setMain('ai',`<div class="view"><div class="page">
   <h1>AI assistants</h1><p class="lede">Connect Claude, or any assistant that speaks MCP, to coldmap. It can read the same flags and shortlist you see, explain why a place was flagged, pull the case rows, check the data's known problems and run models. Every answer carries the ethics notice, and it can't send anything or contact anyone; you stay the one who decides.</p>
   ${a.sdk_installed?'':`<p class="msg warn">The MCP library isn't installed in this copy of coldmap, so the setup below installs coldmap with it (<code>coldmap[mcp]</code>) through uvx.</p>`}
-  <div class="box"><h2>Claude Desktop</h2><p class="muted">Settings › Developer › Edit Config, then add this inside the file and restart Claude.</p><pre id="cfgDesk">${esc(json)}</pre><button class="btn" data-copy="cfgDesk">Copy</button></div>
+  <div class="box"><h2>Claude Desktop</h2><p class="muted">Settings › Developer › Edit Config. The file is one JSON object: add <code>"mcpServers"</code> as another key inside its outer braces (put a comma after the key before it), or merge it into an existing <code>"mcpServers"</code>. Don't paste a second <code>{ … }</code> below the first. Save, then quit Claude completely and reopen it.</p><pre id="cfgDesk">${esc(json)}</pre><button class="btn" data-copy="cfgDesk">Copy</button></div>
   <div class="box"><h2>Claude Code</h2><p class="muted">Run this once in a terminal.</p><pre id="cfgCode">${esc(a.claude_code)}</pre><button class="btn" data-copy="cfgCode">Copy</button></div>
   <h3>Things to ask</h3><ul class="notes" style="padding-left:18px">
    <li>“Which high-confidence flags for women in Ohio have the largest gap? Explain each in two sentences.”</li>
