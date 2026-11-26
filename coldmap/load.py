@@ -87,4 +87,6 @@ def load_clearance(path: str | Path) -> pd.DataFrame:
                              "CLR": "cleared", "Source": "source", "State": "state",
                              "County": "county", "Agency": "agency"})
     df["cleared"] = df.cleared.fillna(0)
+    # Align county names with the case file (Dade County became Miami-Dade in 1997).
+    df["county"] = df.county.replace({"Dade, FL": "Miami-Dade, FL"})
     return df

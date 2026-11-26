@@ -20,6 +20,14 @@ A named relationship implies police knew who the offender was. Without a fix, Ca
 
 **To do:** report to MAP and confirm the cause.
 
+## case-file-coverage (caveat, measured per flag)
+
+The case file only contains murders agencies reported in detail. Some places report summary counts to the clearance file but few or no case details. Examples in the 2000s: Kane County, Illinois (1% of reported murders in the case file), Will County (2%), Peoria County (7%). Clusters in those places cannot be detected. `coldmap coverage` lists the gaps; `add_coverage` attaches a coverage figure to each flag.
+
+## dade-county-name (fixed)
+
+The clearance file uses both "Dade, FL" and "Miami-Dade, FL"; the case file uses only "Miami-Dade, FL". `load_clearance` merges them so coverage isn't misread as zero.
+
 ## Adding an issue
 
 1. Write a fix function in `coldmap/issues.py` (or `fix=None` for a caveat).

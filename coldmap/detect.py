@@ -33,6 +33,11 @@ class Flag:
     baseline: float | None = None   # long-run solve rate for this place/sex/weapon
     p_value: float | None = None    # chance of this few solved if the baseline held
     fixes: tuple[str, ...] = ()
+    q_value: float | None = None    # false-discovery-rate adjusted (scan detector)
+    llr: float | None = None        # scan log-likelihood ratio
+    level: str = "county"           # agency, county or msa
+    coverage: float | None = None   # share of the period's murders present in the case file
+    kind: str | None = None         # serial-pattern or accountability (scan detector)
 
     @property
     def unsolved(self) -> int:
@@ -74,7 +79,7 @@ def map_algorithm(df: pd.DataFrame, place: str = "county", victim_sex: str = "Fe
     g = g[g.solved / g.total <= threshold]
     g = g.assign(uns=g.total - g.solved).sort_values("uns", ascending=False)
     return [Flag("map", r[place], victim_sex, r["weapon"], int(r["start"]), int(r["end"]),
-                 int(r["total"]), int(r["solved"]), fixes=fixes) for _, r in g.iterrows()]
+                 int(r["total"]), int(r["solved"]), fixes=fixes, level=place) for _, r in g.iterrows()]
 
 
 def sliding_window(df: pd.DataFrame, place: str = "county", victim_sex: str = "Female",
@@ -107,7 +112,7 @@ def sliding_window(df: pd.DataFrame, place: str = "county", victim_sex: str = "F
                 pv = float(binom.cdf(s, t, base))
                 if max_p is None or pv <= max_p:
                     cands.append(Flag("sliding_window", p, victim_sex, w, end_year - window + 1,
-                                      end_year, t, s, round(base, 3), pv, fixes))
+                                      end_year, t, s, round(base, 3), pv, fixes, level=place))
         cands.sort(key=lambda f: f.unsolved, reverse=True)
         kept: list[Flag] = []
         for f in cands:
@@ -121,8 +126,8 @@ def cases_for(df: pd.DataFrame, flag: Flag, use_fixes: bool = True,
               min_age: int | None = 12) -> pd.DataFrame:
     """The case rows behind a flag, unsolved first. min_age should match the detector's."""
     d, _ = _prep(df, use_fixes)
-    col = "weapon_group" if flag.method == "sliding_window" else "weapon"
-    place_col = "county" if flag.place in set(d.county) else "msa"
+    col = "weapon" if flag.method == "map" else "weapon_group"
+    place_col = flag.level
     m = ((d[place_col] == flag.place) & (d[col] == flag.weapon) & (d.vic_sex == flag.victim_sex)
          & d.year.between(flag.start, flag.end))
     if min_age is not None:

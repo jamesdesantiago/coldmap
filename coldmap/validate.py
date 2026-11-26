@@ -1,11 +1,15 @@
-"""Validation against known, adjudicated serial cases.
+"""Validation and backtesting against known, adjudicated serial cases.
 
 A detector that cannot find killers we already know about should not be trusted
 to find ones we don't. Each entry is a solved series whose cases still appear as
 unsolved in the data (MAP records 'solved' at report time).
 
-Add cases only when they are publicly adjudicated (conviction or official
-attribution), and cite the source in `note`.
+Backtesting asks the more useful question: using only the data available at the
+time, in what year would the detector first have flagged the series? The gap
+between that year and the arrest is the lead time the tool could have given.
+
+Add series only when they are publicly adjudicated (conviction, guilty plea or
+official attribution), and cite the source in `note`.
 """
 
 from __future__ import annotations
@@ -21,56 +25,86 @@ from .detect import Flag, sliding_window
 class KnownSeries:
     name: str
     state: str
-    place: str
+    county: str
+    agency: str | None            # agency that reported most victims, if one dominates
     victim_sex: str
     weapons: tuple[str, ...]      # weapon groups the victims are likely coded under
     start: int
     end: int
-    expect_detected: bool = True  # False = documented blind spot we want to fix
+    arrest: int                   # year the offender was arrested
     note: str = ""
 
 
 KNOWN_SERIES: list[KnownSeries] = [
     KnownSeries("William Suff (Riverside Prostitute Killer)", "California", "Riverside, CA",
-                "Female", ("Other/unknown", "Strangle/asphyxia", "Knife"), 1986, 1991,
-                note="Convicted 1995 of 12 murders in Riverside County, 1986-1991."),
+                "Riverside County", "Female", ("Other/unknown", "Strangle/asphyxia", "Knife"),
+                1986, 1991, 1992, "Convicted 1995 of 12 murders in Riverside County, 1986-1991."),
     KnownSeries("Hillside Stranglers (Bianchi and Buono)", "California", "Los Angeles, CA",
-                "Female", ("Strangle/asphyxia",), 1977, 1978,
-                note="Strangulations of women in Los Angeles, 1977-1978; both convicted."),
+                "Los Angeles", "Female", ("Strangle/asphyxia",), 1977, 1978, 1979,
+                "Strangulations of women in Los Angeles, 1977-1978; both convicted."),
     KnownSeries("Golden State Killer, Orange County murders", "California", "Orange, CA",
-                "Female", ("Beating/blunt",), 1980, 1981,
-                note="Joseph DeAngelo bludgeoned victims in Orange County 1980-1981; pleaded guilty 2020."),
-    KnownSeries("Gary Ridgway (Green River Killer)", "Washington", "King, WA",
-                "Female", ("Other/unknown", "Strangle/asphyxia"), 1982, 1984,
-                note="Pleaded guilty 2003 to 48 murders, most in King County 1982-1984. "
-                     "Used by MAP to develop its algorithm."),
-    KnownSeries("Darren Vann (Gary, Indiana)", "Indiana", "Lake, IN",
-                "Female", ("Strangle/asphyxia",), 1994, 2014, expect_detected=False,
-                note="Strangulations spread thinly over ~20 years. MAP's original county "
-                     "grouping flagged Gary; coldmap's 4-year windows currently miss it. "
-                     "Known blind spot: slow, long-running series."),
+                None, "Female", ("Beating/blunt",), 1980, 1981, 2018,
+                "Joseph DeAngelo bludgeoned victims in Orange County 1980-1981; pleaded guilty 2020."),
+    KnownSeries("Gary Ridgway (Green River Killer)", "Washington", "King, WA", "King County",
+                "Female", ("Other/unknown", "Strangle/asphyxia"), 1982, 1984, 2001,
+                "Pleaded guilty 2003 to 48 murders, most in King County 1982-1984. "
+                "Used by MAP to develop its algorithm."),
+    KnownSeries("Darren Vann (Gary, Indiana)", "Indiana", "Lake, IN", "Gary", "Female",
+                ("Strangle/asphyxia",), 1994, 2014, 2014,
+                "Strangulations spread thinly over ~20 years; identified after MAP's algorithm "
+                "flagged Gary. Missed by 4-year windows; caught by the scan detector."),
 ]
 
 
-def detected_by(series: KnownSeries, flags: list[Flag]) -> list[Flag]:
-    return [f for f in flags if f.place == series.place and f.victim_sex == series.victim_sex
-            and f.weapon in series.weapons and f.start <= series.end and f.end >= series.start]
+def _hit(series: KnownSeries, flags: list[Flag]) -> list[Flag]:
+    places = {series.county, series.agency}
+    return [f for f in flags if f.place in places and f.victim_sex == series.victim_sex
+            and f.weapon in series.weapons and f.start <= series.end and f.end >= series.start
+            and (f.kind in (None, "serial-pattern"))]
 
 
-def run_validation(df: pd.DataFrame, **detector_kwargs) -> pd.DataFrame:
-    """Run sliding_window on each known series' state and report hits and misses."""
+def _detect(df, series, detector, as_of=None, **kw):
+    if detector == "window":
+        d = df if as_of is None else df[df.year <= as_of]
+        return sliding_window(d, state=series.state, **kw)
+    from .scan import scan
+    flags = scan(df, state=series.state, place="county", as_of=as_of, **kw)
+    if series.agency:
+        flags += scan(df, state=series.state, place="agency", as_of=as_of, **kw)
+    return flags
+
+
+def run_validation(df: pd.DataFrame, detectors=("window", "scan"), **kw) -> pd.DataFrame:
+    """Did each detector flag each known series, using all data?"""
     rows = []
-    cache: dict[str, list[Flag]] = {}
+    cache: dict = {}
     for s in KNOWN_SERIES:
-        if s.state not in cache:
-            cache[s.state] = sliding_window(df, state=s.state, **detector_kwargs)
-        hits = detected_by(s, cache[s.state])
-        best = max(hits, key=lambda f: f.unsolved) if hits else None
-        rows.append({
-            "series": s.name, "place": s.place, "years": f"{s.start}-{s.end}",
-            "detected": bool(hits), "expected": s.expect_detected,
-            "ok": bool(hits) == s.expect_detected or bool(hits),
-            "best_flag": (f"{best.weapon} {best.start}-{best.end}: {best.solved}/{best.total} solved"
-                          if best else ""),
-        })
+        row = {"series": s.name, "years": f"{s.start}-{s.end}"}
+        for det in detectors:
+            key = (det, s.state, s.agency is not None)
+            if key not in cache:
+                cache[key] = _detect(df, s, det, **kw.get(det, {}))
+            hits = _hit(s, cache[key])
+            best = max(hits, key=lambda f: f.unsolved) if hits else None
+            row[det] = (f"{best.place}: {best.weapon} {best.start}-{best.end}, "
+                        f"{best.solved}/{best.total} solved" if best else "missed")
+        rows.append(row)
     return pd.DataFrame(rows)
+
+
+def backtest(df: pd.DataFrame, series: KnownSeries, detector: str = "scan",
+             years_after: int = 3, **kw) -> dict:
+    """First year the detector would have flagged the series using only data up to that year."""
+    first = None
+    for y in range(series.start, series.end + years_after + 1):
+        if _hit(series, _detect(df, series, detector, as_of=y, **kw)):
+            first = y
+            break
+    return {"series": series.name, "detector": detector, "series_years": f"{series.start}-{series.end}",
+            "arrest": series.arrest, "first_flagged": first,
+            "lead_time_years": (series.arrest - first) if first else None}
+
+
+def run_backtests(df: pd.DataFrame, detectors=("window", "scan"), **kw) -> pd.DataFrame:
+    return pd.DataFrame([backtest(df, s, det, **kw.get(det, {}))
+                         for s in KNOWN_SERIES for det in detectors])
