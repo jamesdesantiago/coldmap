@@ -52,21 +52,47 @@ def _mask(c, r: dict, by_year: bool):
     return m
 
 
+MAX_CASES = 6000
+
+
+def _age_band(a) -> str:
+    a = int(a)
+    return "Unknown" if a >= 999 else "Under 18" if a < 18 else "18–29" if a < 30 else "30–44" if a < 45 else "45 and over"
+
+
 def flag_detail(data, r: dict) -> dict:
-    """The trend behind a flag (this place, method and victims, every year), the state's rate
-    for the same method, and the case rows in the flagged years (no names exist in the data)."""
+    """Everything needed to research a flag: this place, method and victims in every year (the
+    trend and the case rows, no names exist in the data), the state's rate for the same method,
+    and how the rest of the state's cases break down in the flagged years, for comparison."""
     c = data.cases
-    place = c[_mask(c, r, by_year=True)]
+    place_mask = _mask(c, r, by_year=True)
+    place = c[place_mask]
     series = place.groupby("year").solved.agg(["size", "sum"])
-    st = c[(c.state == r["state"]) & (c.vic_sex == r["sex"]) & (c.weapon_group == r["weapon"]) & (c.vic_age >= 12)]
-    state_series = st.groupby("year").solved.agg(["size", "sum"])
-    rows = place[place.year.between(r["start"], r["end"])].sort_values(["year", "month"])
+    same = (c.state == r["state"]) & (c.vic_sex == r["sex"]) & (c.weapon_group == r["weapon"]) & (c.vic_age >= 12)
+    state_series = c[same].groupby("year").solved.agg(["size", "sum"])
+    rows = place
+    covered = [int(c.year.min()), int(c.year.max())]
+    if len(rows) > MAX_CASES:  # very large places: the flagged years and the years around them
+        for pad in (25, 15, 10, 5, 2, 0):
+            rows = place[place.year.between(r["start"] - pad, r["end"] + pad)]
+            if len(rows) <= MAX_CASES:
+                break
+        rows = rows.head(MAX_CASES)
+        covered = [int(rows.year.min()), int(rows.year.max())]
+    rows = rows.sort_values(["year", "month"])
     cases = [[_clean(v) for v in rec] for rec in rows[CASE_COLS].itertuples(index=False)]
+    rest = c[same & ~place_mask & c.year.between(r["start"], r["end"])]
+    base = {"month": rest.month.value_counts(normalize=True), "age": rest.vic_age.map(_age_band).value_counts(normalize=True),
+            "relationship": rest.relationship.fillna("").replace("", "Not recorded").value_counts(normalize=True),
+            "circumstance": rest.circumstance.fillna("").replace("", "Not recorded").value_counts(normalize=True),
+            "weapon": rest.weapon.value_counts(normalize=True), "race": rest.vic_race.value_counts(normalize=True)}
     y0, y1 = int(c.year.min()), int(c.year.max())
-    return {"years": [y0, y1],
+    return {"years": [y0, y1], "covered": covered, "truncated": len(place) > len(rows),
             "series": [[int(y), int(n), int(s)] for y, (n, s) in series.iterrows()],
             "state_series": [[int(y), int(n), int(s)] for y, (n, s) in state_series.iterrows()],
-            "case_cols": CASE_COLS, "cases": cases[:400], "cases_total": len(cases)}
+            "case_cols": CASE_COLS, "cases": cases, "cases_total": int(len(place)),
+            "baseline": {k: {str(_clean(i)): round(float(v), 4) for i, v in ser.head(40).items()} for k, ser in base.items()},
+            "baseline_n": int(len(rest))}
 
 
 def _clean(v):

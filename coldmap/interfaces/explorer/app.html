@@ -153,6 +153,42 @@ kbd{font:500 10.5px var(--mono);border:1px solid var(--line2);border-bottom-widt
 .cases td{font-size:12px;white-space:nowrap}
 .st.no{color:var(--red);font-weight:600}.st.yes{color:var(--solved);font-weight:600}
 
+/* evidence workbench: select years, filter by any attribute, see the cases */
+.wb{display:grid;gap:12px}
+.wbbar{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;background:var(--surf);border:1px solid var(--line);border-radius:6px;padding:8px 10px;position:sticky;top:0;z-index:2;box-shadow:0 2px 6px rgba(0,0,0,.04)}
+.wbbar .lbl{font-size:11px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);margin-right:2px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:1px solid var(--line2);border-radius:13px;background:var(--surf);cursor:pointer;font-size:12.5px;font-weight:600;white-space:nowrap}
+.chip:hover{border-color:var(--mute)}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--surf);border-color:var(--ink)}
+.chip.filter{background:var(--hl);border-color:var(--hlline)}
+.chip.filter span{font-weight:400;color:var(--mute)}
+.wbbar .sum{margin-left:auto;font-size:12.5px;color:var(--mute)}
+.wbbar .sum b{color:var(--ink);font-family:var(--mono);font-weight:600}
+.wbbar select{height:26px;padding:0 24px 0 8px;font-size:12.5px;background-position:right 7px center}
+.hit{cursor:crosshair}
+.tl svg{display:block;width:100%}
+.tl circle{cursor:default}
+.facets{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.facet{background:var(--surf);border:1px solid var(--line);border-radius:6px;padding:10px 10px 8px}
+.facet h4{margin:0 4px 6px;font-size:11px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);display:flex;justify-content:space-between}
+.fv{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:minmax(0,1fr) 74px 34px 38px;gap:8px;align-items:center;padding:3px 4px;border-radius:3px;cursor:pointer;font-size:12.5px}
+.fv:hover{background:var(--surf2)}
+.fv.on{background:var(--hl)}
+.fv:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.fv .fl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fb{position:relative;height:8px;background:var(--pale);border-radius:1px}
+.fb i{position:absolute;inset:0 auto 0 0;background:var(--ink);opacity:.72;border-radius:1px}
+.fb b{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--accent)}
+.fv .fn,.fv .fu{text-align:right;font:12px var(--mono)}
+.fv .fu{color:var(--red)}
+.flegend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--mute)}
+.flegend i{display:inline-block;width:14px;height:8px;background:var(--ink);opacity:.72;margin-right:5px;vertical-align:0}
+.flegend s{display:inline-block;width:2px;height:12px;background:var(--accent);margin-right:5px;vertical-align:-2px;text-decoration:none}
+th[data-sort]{cursor:pointer}th[data-sort]:hover{color:var(--ink)}
+th[aria-sort]{color:var(--ink)}
+.tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--surf);font-size:12px;line-height:1.45;padding:7px 10px;border-radius:4px;z-index:60;max-width:320px;white-space:pre-line;box-shadow:0 6px 18px rgba(0,0,0,.2)}
+.tip b{font-weight:700}
+
 /* shortlist board */
 .board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
 .col{background:var(--side);border:1px solid var(--line);border-radius:6px;min-height:120px}
@@ -432,17 +468,16 @@ async function renderFlag(id){
   <div class="row"><span class="tag ${f.confidence}">${CONF[f.confidence]} confidence</span><span class="tag">${esc(f.kind||'')}</span><span class="muted" style="font-size:12px">found by ${esc((f.by||[]).join(' + '))}${f.q!=null?` · q = ${f.q}`:''}</span></div>
   <div class="quote"><div><b>${pct(f.solved/f.total)}</b><span>Solved</span></div><div><b>${pct(f.expected)}</b><span>Expected</span></div><div class="${g<0?'neg':''}"><b>${gapTxt(g)}</b><span>Gap, points</span></div><div><b>${nf.format(f.total-f.solved)}</b><span>Unsolved of ${nf.format(f.total)}</span></div><div><b>${f.end-f.start+1}</b><span>Years</span></div></div>
   ${decideBox(id,f,dec)}
-  <div class="chart" id="ch"></div>
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
   ${(f.plugins||[]).length?`<h3>From plugins</h3>${f.plugins.map(n=>`<div class="plug"><b>${esc(n.title)}</b> <span class="by">${esc(n.by)}</span><p style="margin:4px 0 0">${esc(n.text)}</p></div>`).join('')}`:''}
   ${(f.data||[]).length?`<h3>Known problems in the data</h3><div class="notes"><ul>${f.data.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></div>`:''}
   ${f.cases?`<h3>Victims, in aggregate</h3><p>${esc(f.cases)}</p>`:''}
   ${f.namus?`<h3>NamUs</h3><p>${esc(f.namus)}</p>`:''}
-  <h3>Case rows <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">${nf.format(d.cases_total)} in the flagged years${d.cases_total>d.cases.length?`, first ${d.cases.length} shown`:''}. The data has no names.</span></h3>
-  <div class="cases"><table><thead><tr><th>Year</th><th>Mo.</th><th>Agency</th><th>Solved</th><th class="n">Age</th><th>Race</th><th>Weapon</th><th>Relationship</th><th>Circumstance</th></tr></thead><tbody>${d.cases.map(c=>`<tr><td class="num">${c[0]}</td><td class="num">${c[1]||''}</td><td>${esc(c[2])}</td><td class="st ${c[3]?'yes':'no'}">${c[3]?'Yes':'No'}</td><td class="n">${c[4]>=999?'?':c[4]}</td><td>${esc(c[5])}</td><td>${esc(c[6])}</td><td>${esc(c[7])}</td><td>${esc(c[8]||'')}</td></tr>`).join('')}</tbody></table></div>
+  <h3>Explore the evidence <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">hover for numbers · click or drag across years · click any value to filter</span></h3>
+  <section class="wb" id="wb"></section>
   <h3>Next steps</h3><div class="notes"><ol style="padding-left:18px"><li>Search public news and court records: is a series here already known or solved?</li><li>Read the case rows: do dates, ages and circumstances resemble each other?</li><li>If it still looks unexplained, keep it and ask a second person to review it, then export it for MAP.</li></ol><p class="muted" style="margin-top:8px">Never contact families, witnesses or possible suspects. A flag is a pattern worth review, not evidence that cases are linked.</p></div>
  </div>`;
- if(pane._h!==h){const sc=pane._h&&pane._h.includes(f.place)?pane.scrollTop:0;pane.innerHTML=h;pane._h=h;pane.scrollTop=sc;drawFlagChart(d)}
+ if(pane._h!==h){const sc=pane._h&&pane._h.includes(f.place)?pane.scrollTop:0;pane.innerHTML=h;pane._h=h;pane.scrollTop=sc;renderWB(id)}
 }
 function decideBox(id,f,dec){
  const s=dec?dec.status:null;
@@ -457,23 +492,91 @@ function decideBox(id,f,dec){
  if(s==='sent')act=`<div class="row"><span class="tag sent">Sent ${esc(day(dec.updated))}</span><span class="muted">reviewed by ${esc(dec.reviewer)}</span><button class="btn" data-act="export">${ICON.out}Export again</button></div>`;
  return `<div class="decide ${s}">${steps}${note}${act}</div>`;
 }
-function drawFlagChart(d){
- const el=$('ch');if(!el)return;const f=d.flag;
- const [Y0,Y1]=d.years,N=Y1-Y0+1,W=el.clientWidth-24||640,H=240,L=34,R=8,T=8,mid=128,B=20;
+// ---- evidence workbench ---------------------------------------------------------------------
+const MONTHS=['Unknown','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ageBand=a=>a>=999?'Unknown':a<18?'Under 18':a<30?'18–29':a<45?'30–44':'45 and over';
+// [key, label, value of a case row, how to show it]; case rows: year, month, agency, solved, age, race, weapon, relationship, circumstance
+const FACETS=[['month','Month',r=>String(r[1]||0),v=>MONTHS[+v]],['age','Victim age',r=>ageBand(r[4]),v=>v],
+ ['relationship','Relationship',r=>r[7]||'Not recorded',v=>v],['circumstance','Circumstance',r=>r[8]||'Not recorded',v=>v],
+ ['agency','Agency',r=>r[2],v=>v],['weapon','Weapon recorded',r=>r[6],v=>v],['race','Victim race',r=>r[5],v=>v]];
+const CASEH=['Year','Month','Agency','Solved','Age','Race','Weapon','Relationship','Circumstance'];
+S.wb={};
+function wbOf(id){const f=S.detail[id].flag;return S.wb[id]||(S.wb[id]={y0:f.start,y1:f.end,sel:{},sort:[0,1],limit:300})}
+function wbRows(d,w,skip){return d.cases.filter(r=>r[0]>=w.y0&&r[0]<=w.y1&&FACETS.every(([k,,fn])=>k===skip||w.sel[k]==null||fn(r)===w.sel[k]))}
+function renderWB(id){
+ const el=$('wb');const d=S.detail[id];if(!el||!d||d.error)return;
+ const f=d.flag,w=wbOf(id),rows=wbRows(d,w),uns=rows.filter(r=>!r[3]).length;
+ const [Y0,Y1]=d.years,isFlag=w.y0===f.start&&w.y1===f.end,isAll=w.y0===Y0&&w.y1===Y1;
+ const yopt=(v,sel)=>{let o='';for(let y=Y0;y<=Y1;y++)o+=`<option${y===sel?' selected':''}>${y}</option>`;return o};
+ const chips=Object.entries(w.sel).map(([k,v])=>{const F=FACETS.find(x=>x[0]===k);return `<button class="chip filter" data-wbx="${k}" aria-label="Remove filter ${esc(F[1])}">${esc(F[3](v))} <span>${esc(F[1].toLowerCase())}</span> ×</button>`}).join('');
+ const bar=`<div class="wbbar"><span class="lbl">Years</span>
+  <button class="chip" data-wbr="flag" aria-pressed="${isFlag}">Flagged ${yrs(f.start,f.end)}</button><button class="chip" data-wbr="all" aria-pressed="${isAll}">All years</button>
+  <select class="sel" id="wbY0" aria-label="From year">${yopt(0,w.y0)}</select><span class="muted">to</span><select class="sel" id="wbY1" aria-label="To year">${yopt(0,w.y1)}</select>
+  ${chips}${chips||!isFlag?'<button class="chip" data-wbr="reset">Reset</button>':''}
+  <span class="sum"><b>${nf.format(rows.length)}</b> cases · <b>${nf.format(uns)}</b> unsolved (${rows.length?Math.round(uns/rows.length*100):0}%)</span></div>`;
+ const facets=FACETS.map(([k,label,fn,fmt])=>{
+  const base=wbRows(d,w,k),cnt={},un={};base.forEach(r=>{const v=fn(r);cnt[v]=(cnt[v]||0)+1;if(!r[3])un[v]=(un[v]||0)+1});
+  let vals=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);if(k==='month')vals=vals.sort((a,b)=>(+a||13)-(+b||13));
+  const show=k==='month'?vals:vals.slice(0,w['all_'+k]?60:7),tot=base.length||1,bl=d.baseline[k]||{};
+  return `<div class="facet"><h4><span>${esc(label)}</span><span>n · unsolved</span></h4>${show.map(v=>{const sh=cnt[v]/tot,st=bl[v];
+   const tip=`${fmt(v)}\n${cnt[v]} of ${base.length} cases here (${Math.round(sh*100)}%)${st!=null?`\n${Math.round(st*100)}% across the rest of ${f.state}, ${yrs(f.start,f.end)}`:''}\n${un[v]||0} unsolved (${Math.round((un[v]||0)/cnt[v]*100)}%)`;
+   return `<button class="fv${w.sel[k]===v?' on':''}" data-fk="${k}" data-fv="${esc(v)}" data-tip="${esc(tip)}" aria-pressed="${w.sel[k]===v}"><span class="fl">${esc(fmt(v))}</span><span class="fb"><i style="width:${(sh*100).toFixed(1)}%"></i>${st!=null&&k!=='agency'?`<b style="left:${Math.min(100,st*100).toFixed(1)}%"></b>`:''}</span><span class="fn">${cnt[v]}</span><span class="fu">${Math.round((un[v]||0)/cnt[v]*100)}%</span></button>`}).join('')}
+   ${vals.length>show.length?`<button class="fv" data-fmore="${k}" style="color:var(--accent)"><span class="fl">Show all ${vals.length}</span></button>`:''}</div>`}).join('');
+ const [sc,dir]=w.sort,sorted=[...rows].sort((a,b)=>{const x=a[sc],y=b[sc];return (x>y?1:x<y?-1:sc!==1?0:0)*dir||a[0]-b[0]||a[1]-b[1]});
+ const table=`<div class="cases"><table><thead><tr>${CASEH.map((h,i)=>`<th data-sort="${i}"${sc===i?` aria-sort="${dir>0?'ascending':'descending'}"`:''} class="${i===4?'n':''}">${h}${sc===i?(dir>0?' ↑':' ↓'):''}</th>`).join('')}</tr></thead><tbody>${sorted.slice(0,w.limit).map(c=>`<tr><td class="num">${c[0]}</td><td>${MONTHS[c[1]||0]}</td><td>${esc(c[2])}</td><td class="st ${c[3]?'yes':'no'}">${c[3]?'Yes':'No'}</td><td class="n">${c[4]>=999?'?':c[4]}</td><td>${esc(c[5])}</td><td>${esc(c[6])}</td><td>${esc(c[7])}</td><td>${esc(c[8]||'')}</td></tr>`).join('')}</tbody></table></div>
+  ${sorted.length>w.limit?`<div class="more"><button class="btn" data-wbmore="1">Show ${Math.min(300,sorted.length-w.limit)} more of ${nf.format(sorted.length)}</button></div>`:''}`;
+ el.innerHTML=`${bar}<div class="chart" id="ch"></div><div class="chart tl" id="tl"></div>
+  <div class="flegend"><span><i></i>share of the cases selected here</span><span><s></s>share across the rest of ${esc(f.state)}, same method and victims, ${yrs(f.start,f.end)}</span><span style="color:var(--red)">% unsolved</span></div>
+  <div class="facets">${facets}</div>
+  ${d.truncated?`<p class="muted" style="font-size:12px;margin:0">This place has ${nf.format(d.cases_total)} cases; the ones from ${d.covered[0]}–${d.covered[1]} are loaded here.</p>`:''}
+  ${table}`;
+ drawWBChart(id);drawTimeline(id,rows);
+}
+function drawWBChart(id){
+ const el=$('ch');const d=S.detail[id];if(!el)return;const f=d.flag,w=wbOf(id);
+ const [Y0,Y1]=d.years,N=Y1-Y0+1,W=el.clientWidth-24||640,H=230,L=34,R=8,T=8,mid=120,B=20;
  const by=Object.fromEntries(d.series.map(([y,n,s])=>[y,[n,s]])),st=Object.fromEntries(d.state_series.map(([y,n,s])=>[y,[n,s]]));
  const maxn=Math.max(1,...d.series.map(x=>x[1])),cw=(W-L-R)/N,x=y=>L+(y-Y0)*cw;
+ const top2=mid+14,bot2=H-B-2,rt=v=>top2+(1-v)*(bot2-top2);
  let h=`<rect x="${x(f.start)}" y="${T}" width="${(f.end-f.start+1)*cw}" height="${H-T-B}" fill="var(--hl)" opacity=".7"/>`;
+ h+=`<rect id="selr" x="${x(w.y0)}" y="${T-2}" width="${(w.y1-w.y0+1)*cw}" height="${H-T-B+4}" fill="color-mix(in oklab,var(--accent) 8%,transparent)" stroke="var(--accent)" stroke-width="1.5" rx="2"/>`;
  for(let y=Y0;y<=Y1;y++){const [n,s]=by[y]||[0,0];if(!n)continue;const hn=(mid-T-6)*n/maxn,hs=(mid-T-6)*s/maxn;
   h+=`<rect x="${x(y)+1}" y="${mid-hn}" width="${Math.max(cw-2,1)}" height="${hn-hs}" fill="var(--red)"/><rect x="${x(y)+1}" y="${mid-hs}" width="${Math.max(cw-2,1)}" height="${hs}" fill="var(--solved)"/>`}
- const rt=(y0,top,bot)=>top+(1-y0)*(bot-top);const top2=mid+14,bot2=H-B-2;
- let ps='',pp='';for(let y=Y0;y<=Y1;y++){const a=st[y];if(a&&a[0])ps+=`${ps?'L':'M'}${x(y)+cw/2},${rt(a[1]/a[0],top2,bot2)}`;const b=by[y];if(b&&b[0]>=2)pp+=`<circle cx="${x(y)+cw/2}" cy="${rt(b[1]/b[0],top2,bot2)}" r="2.6" fill="var(--ink)"/>`}
+ let ps='',pp='';for(let y=Y0;y<=Y1;y++){const a=st[y];if(a&&a[0])ps+=`${ps?'L':'M'}${x(y)+cw/2},${rt(a[1]/a[0])}`;const b=by[y];if(b&&b[0]>=2)pp+=`<circle cx="${x(y)+cw/2}" cy="${rt(b[1]/b[0])}" r="2.6" fill="var(--ink)"/>`}
  h+=`<path d="${ps}" fill="none" stroke="var(--mute)" stroke-width="1.5" stroke-dasharray="4 3"/>${pp}`;
- if(f.expected!=null)h+=`<line x1="${x(f.start)}" x2="${x(f.end+1)}" y1="${rt(f.expected,top2,bot2)}" y2="${rt(f.expected,top2,bot2)}" stroke="var(--ink)" stroke-width="2"/>`;
+ if(f.expected!=null)h+=`<line x1="${x(f.start)}" x2="${x(f.end+1)}" y1="${rt(f.expected)}" y2="${rt(f.expected)}" stroke="var(--ink)" stroke-width="2"/>`;
  h+=`<line x1="${L}" x2="${W-R}" y1="${mid}" y2="${mid}" stroke="var(--line2)"/><text x="${L-6}" y="${T+10}" text-anchor="end">${maxn}</text><text x="${L-6}" y="${top2+4}" text-anchor="end">100%</text><text x="${L-6}" y="${bot2}" text-anchor="end">0%</text>`;
  for(let y=Math.ceil(Y0/5)*5;y<=Y1;y+=5)h+=`<text x="${x(y)+cw/2}" y="${H-5}" text-anchor="middle">${y}</text>`;
- el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Killings per year and share solved, ${esc(f.place)}">${h}</svg>
-  <div class="key"><span><i style="background:var(--red)"></i>unsolved</span><span><i style="background:var(--solved)"></i>solved (killings per year, top)</span><span><i style="background:var(--ink);border-radius:50%"></i>share solved here</span><span><i style="border-top:2px dashed var(--mute);height:0"></i>${esc(f.state)} average, same method</span><span><i style="background:var(--hl)"></i>flagged years, with the expected rate</span></div>`;
+ for(let y=Y0;y<=Y1;y++){const [n,s]=by[y]||[0,0],a=st[y];
+  const tip=`<b>${y}</b>${y>=f.start&&y<=f.end?' · flagged years':''}\n${n} killings here: ${s} solved, ${n-s} unsolved${n?` (${Math.round(s/n*100)}% solved)`:''}${a&&a[0]?`\n${f.state}: ${Math.round(a[1]/a[0]*100)}% solved, ${nf.format(a[0])} killings`:''}`;
+  h+=`<rect class="hit" data-hy="${y}" data-tip="${esc(tip)}" x="${x(y)}" y="${T}" width="${cw}" height="${H-T-B}" fill="transparent"/>`}
+ el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="Killings per year and share solved, ${esc(f.place)}. The case table below lists the same data.">${h}</svg>
+  <div class="key"><span><i style="background:var(--red)"></i>unsolved</span><span><i style="background:var(--solved)"></i>solved (killings per year)</span><span><i style="background:var(--ink);border-radius:50%"></i>share solved here</span><span><i style="border-top:2px dashed var(--mute);height:0"></i>${esc(f.state)} average</span><span><i style="background:var(--hl)"></i>flagged years and expected rate</span><span><i style="border:1.5px solid var(--accent)"></i>your selection</span></div>`;
+ el.dataset.geo=JSON.stringify({L,cw,Y0,Y1});
 }
+function drawTimeline(id,rows){
+ const el=$('tl');const d=S.detail[id];if(!el)return;const w=wbOf(id),span=w.y1-w.y0+1;
+ if(span>25){el.innerHTML=`<p class="muted" style="margin:4px 2px;font-size:12.5px">Select 25 years or fewer to see each case on a month-by-month timeline.</p>`;return}
+ const W=el.clientWidth-24||640,L=34,R=8,cw=(W-L-R)/(span*12),stack={};let maxk=0;
+ const pts=rows.map((r,i)=>{const m=r[1]||0,slot=(r[0]-w.y0)*12+(m?m-1:5.5),key=r[0]+'-'+m,k=stack[key]=(stack[key]||0)+1;maxk=Math.max(maxk,k);return [slot,k,r,m]});
+ const step=Math.max(4,Math.min(8,cw*.9)),H=Math.max(56,maxk*step+30);
+ let h='';for(let y=w.y0;y<=w.y1;y++){const xx=L+(y-w.y0)*12*cw;h+=`<line x1="${xx}" x2="${xx}" y1="4" y2="${H-18}" stroke="var(--line)"/>`;if(span<=12||y%5===0)h+=`<text x="${xx+6*cw}" y="${H-4}" text-anchor="middle">${y}</text>`}
+ pts.forEach(([slot,k,r,m])=>{const cx=L+(slot+.5)*cw,cy=H-22-(k-1)*step;
+  const tip=`<b>${MONTHS[m]} ${r[0]}</b> · ${r[3]?'solved':'unsolved'}\n${esc(r[2])}\nVictim ${r[4]>=999?'age unknown':'age '+r[4]}, ${esc(r[5])}\n${esc(r[6])}\n${esc(r[7])}${r[8]?' · '+esc(r[8]):''}`;
+  h+=`<circle cx="${cx.toFixed(1)}" cy="${cy}" r="${Math.min(3.2,step/2-.4)}" fill="${m?(r[3]?'var(--solved)':'var(--red)'):'none'}" stroke="${r[3]?'var(--solved)':'var(--red)'}" stroke-width="1.2" data-tip="${esc(tip)}"/>`});
+ el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="Each case in the selected years by month">${h}</svg><div class="key"><span>Each dot is one case, by month: <span style="color:var(--red)">unsolved</span>, <span style="color:var(--solved)">solved</span>; hollow means the month wasn't recorded.</span></div>`;
+}
+// tooltips: anything with data-tip
+const tipEl=document.createElement('div');tipEl.className='tip';tipEl.hidden=true;document.body.append(tipEl);
+document.addEventListener('mouseover',e=>{const t=e.target.closest('[data-tip]');if(!t){tipEl.hidden=true;return}tipEl.innerHTML=t.dataset.tip.replace(/&lt;b&gt;|&lt;\/b&gt;/g,m=>m.includes('/')?'</b>':'<b>');tipEl.hidden=false});
+document.addEventListener('mousemove',e=>{if(tipEl.hidden)return;const r=tipEl.getBoundingClientRect();let x=e.clientX+14,y=e.clientY+14;if(x+r.width>innerWidth-8)x=e.clientX-r.width-14;if(y+r.height>innerHeight-8)y=e.clientY-r.height-14;tipEl.style.left=x+'px';tipEl.style.top=y+'px'});
+document.addEventListener('mouseleave',()=>tipEl.hidden=true);
+// drag across years on the chart
+let drag=null;
+document.addEventListener('mousedown',e=>{const t=e.target.closest('.hit');if(!t||!S.sel)return;e.preventDefault();drag={a:+t.dataset.hy,b:+t.dataset.hy};showDrag()});
+document.addEventListener('mouseover',e=>{if(!drag)return;const t=e.target.closest('.hit');if(t){drag.b=+t.dataset.hy;showDrag()}});
+document.addEventListener('mouseup',()=>{if(!drag)return;const w=wbOf(S.sel);w.y0=Math.min(drag.a,drag.b);w.y1=Math.max(drag.a,drag.b);w.limit=300;drag=null;renderWB(S.sel)});
+function showDrag(){const g=JSON.parse($('ch').dataset.geo||'{}'),r=$('selr');if(!r)return;const a=Math.min(drag.a,drag.b),b=Math.max(drag.a,drag.b);r.setAttribute('x',g.L+(a-g.Y0)*g.cw);r.setAttribute('width',(b-a+1)*g.cw)}
 
 // ---- shortlist -------------------------------------------------------------------------------
 function renderShortlist(){
@@ -534,7 +637,7 @@ function drawHeat(d){const el=$('heat');if(!el)return;const [Y0,Y1]=d.years,W=el
  const maxn=Math.max(1,...d.cells.map(c=>c[2]));let h='';
  ws.forEach((w,i)=>{h+=`<text x="${L-8}" y="${4+i*rh+rh/2+4}" text-anchor="end">${esc(w.replace('Strangle/asphyxia','Strangle').replace('Beating/blunt','Beating').replace('Other/unknown','Other').replace('Not reported','Not rep.'))}</text>`});
  d.cells.forEach(([w,y,n,s])=>{const p=s/n,col=p<.5?`color-mix(in oklab,var(--red) ${Math.round((1-p*2)*100)}%,var(--pale))`:`color-mix(in oklab,var(--solved) ${Math.round((p-.5)*200)}%,var(--pale))`;
-  h+=`<rect x="${L+(y-Y0)*cw+.5}" y="${4+w*rh+.5}" width="${Math.max(cw-1,1)}" height="${rh-1}" fill="${col}" opacity="${(.35+.65*Math.sqrt(n/maxn)).toFixed(2)}"><title>${esc(ws[w])} ${y}: ${s} of ${n} solved</title></rect>`});
+  h+=`<rect x="${L+(y-Y0)*cw+.5}" y="${4+w*rh+.5}" width="${Math.max(cw-1,1)}" height="${rh-1}" fill="${col}" opacity="${(.35+.65*Math.sqrt(n/maxn)).toFixed(2)}" data-tip="${esc(`<b>${ws[w]} · ${y}</b>\n${n} killings: ${s} solved, ${n-s} unsolved (${Math.round(p*100)}% solved)`)}"/>`});
  for(let y=Math.ceil(Y0/5)*5;y<=Y1;y+=5)h+=`<text x="${L+(y-Y0)*cw+cw/2}" y="${H-3}" text-anchor="middle">${y}</text>`;
  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Share solved by method and year">${h}</svg>`}
 
@@ -654,6 +757,7 @@ document.addEventListener('click',async e=>{
  if(a&&!e.metaKey&&!e.ctrlKey){e.preventDefault();if(a.dataset.scope!=null){S.f.state=a.dataset.scope;S.f.county='';S.sel=null}go(a.getAttribute('href'));return}
  const tr=e.target.closest('[data-href]');if(tr){go(tr.dataset.href);return}
  const op=e.target.closest('[data-open]');if(op){S.f.show='all';selectFlag(op.dataset.open);return}
+ const th=e.target.closest('th[data-sort]');if(th&&S.sel){const w=wbOf(S.sel),i=+th.dataset.sort;w.sort=[i,w.sort[0]===i?-w.sort[1]:1];renderWB(S.sel);return}
  const t=e.target.closest('button');if(!t)return;
  if(t.dataset.themeSet){document.documentElement.dataset.theme=t.dataset.themeSet;try{localStorage.setItem('coldmap-theme',t.dataset.themeSet)}catch(_){}document.querySelectorAll('svg').length&&($('main').dataset.key='');render();return}
  if(t.dataset.f){S.f[t.dataset.f]=t.dataset.v;S.limit=200;$('main').dataset.key=location.pathname.startsWith('/places')?'':$('main').dataset.key;render();return}
@@ -664,6 +768,11 @@ document.addEventListener('click',async e=>{
  if(t.id==='check'){S.checking=1;render();try{await post('/api/check')}catch(err){toast(err.message)}S.checking=0;poll();return}
  if(t.id==='update'){try{await post('/api/download?refresh=1')}catch(err){toast(err.message)}poll();return}
  if(t.dataset.act)return act(t.dataset.act);
+ if(t.dataset.wbr&&S.sel){const w=wbOf(S.sel),f=S.detail[S.sel].flag,[Y0,Y1]=S.detail[S.sel].years;if(t.dataset.wbr==='all'){w.y0=Y0;w.y1=Y1}else{w.y0=f.start;w.y1=f.end}if(t.dataset.wbr==='reset')w.sel={};w.limit=300;renderWB(S.sel);return}
+ if(t.dataset.wbx&&S.sel){delete wbOf(S.sel).sel[t.dataset.wbx];renderWB(S.sel);return}
+ if(t.dataset.fk&&S.sel){const w=wbOf(S.sel);if(w.sel[t.dataset.fk]===t.dataset.fv)delete w.sel[t.dataset.fk];else w.sel[t.dataset.fk]=t.dataset.fv;w.limit=300;renderWB(S.sel);return}
+ if(t.dataset.fmore&&S.sel){wbOf(S.sel)['all_'+t.dataset.fmore]=1;renderWB(S.sel);return}
+ if(t.dataset.wbmore&&S.sel){wbOf(S.sel).limit+=300;renderWB(S.sel);return}
  if(t.dataset.copy){navigator.clipboard.writeText($(t.dataset.copy).textContent).then(()=>toast('Copied'));return}
  if(t.dataset.pa){plugin(t.dataset.pa);return}
  if(t.dataset.rm){if(confirm(`Remove ${t.dataset.rm}? This deletes the file from your models folder.`))plugin('remove',{file:t.dataset.rm});return}
@@ -695,6 +804,7 @@ document.addEventListener('change',e=>{
  const t=e.target;
  if(t.id==='fState'){S.f.state=t.value;S.f.county='';S.limit=200;render()}
  if(t.id==='fCounty'){S.f.county=t.value;render()}
+ if((t.id==='wbY0'||t.id==='wbY1')&&S.sel){const w=wbOf(S.sel);w[t.id==='wbY0'?'y0':'y1']=+t.value;if(w.y0>w.y1)[w.y0,w.y1]=[w.y1,w.y0];renderWB(S.sel)}
  if(t.id==='fKind'){S.f.kind=t.value;render()}
  if(t.id==='fShow'){S.f.show=t.value;render()}
  if(t.id==='fSort'){S.f.sort=t.value;render()}
@@ -715,7 +825,7 @@ document.addEventListener('keydown',e=>{
  else if(e.key==='s'&&S.sel&&!status(S.sel)){act('kept')}
  else if(e.key==='x'&&S.sel&&!status(S.sel)){act('dismissed')}
 });
-addEventListener('resize',()=>{const m=$('main');if(m){const pane=$('flagPane');if(pane)pane._h='';m.dataset.key=location.pathname.startsWith('/places')?'':m.dataset.key;render()}});
+addEventListener('resize',()=>{const m=$('main');if(m){const pane=$('flagPane');if(pane)pane._h='';tipEl.hidden=true;m.dataset.key=location.pathname.startsWith('/places')?'':m.dataset.key;render()}});
 if(location.pathname==='/')history.replaceState(null,'','/flags');
 poll();
 </script>
