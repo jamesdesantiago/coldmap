@@ -32,6 +32,8 @@ code{font-family:"JetBrains Mono",monospace;font-size:.92em}
 .bar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--surf);border-bottom:1px solid var(--line)}
 .logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.02em;white-space:nowrap}
 .statechip{font-size:12px;font-weight:600;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:4px 10px;white-space:nowrap}
+select.statepick{appearance:none;-webkit-appearance:none;font-size:13px;color:var(--ink);background:var(--surf2) no-repeat right 10px center/10px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238694a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");padding:0 28px 0 12px;min-height:32px;cursor:pointer;max-width:200px}
+select.statepick:hover{border-color:var(--mute)}
 .grow{flex:1}
 .seg{display:inline-flex;background:var(--surf2);border:1px solid var(--line);border-radius:9px;padding:2px}
 .seg button{border:0;background:none;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;color:var(--mute);white-space:nowrap;min-height:32px}
@@ -168,6 +170,7 @@ details summary::before{content:"";display:inline-block;width:6px;height:6px;mar
  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
  .bar{gap:8px;padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top,0))}
  .bar .grow,.statechip{display:none}.logo{flex:1}
+ .bar:has(select.statepick) .wordmark{display:none}.bar select.statepick{display:block;max-width:130px}
  .rail{grid-row:3;flex-direction:row;justify-content:space-around;border-right:0;border-top:1px solid var(--line);padding:4px 4px max(4px,env(safe-area-inset-bottom,0));overflow:visible}
  .rail button{padding:6px 2px;font-size:11px;flex:1}
  .rail svg{width:20px;height:20px}
@@ -189,7 +192,7 @@ details summary::before{content:"";display:inline-block;width:6px;height:6px;mar
 <body>
 <div class="app" id="app">
  <header class="bar">
-  <div class="logo"><svg width="24" height="24" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="5" fill="var(--ink)"/><rect x="5" y="5" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="5" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="5" width="4" height="4" fill="var(--red)"/><rect x="5" y="9" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="9" y="9" width="4" height="4" fill="var(--red)"/><rect x="13" y="9" width="4" height="4" fill="var(--red)"/><rect x="5" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="13" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/></svg>coldmap</div>
+  <div class="logo"><svg width="24" height="24" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="5" fill="var(--ink)"/><rect x="5" y="5" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="5" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="5" width="4" height="4" fill="var(--red)"/><rect x="5" y="9" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="9" y="9" width="4" height="4" fill="var(--red)"/><rect x="13" y="9" width="4" height="4" fill="var(--red)"/><rect x="5" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="13" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/></svg><span class="wordmark">coldmap</span></div>
   <span class="statechip" id="stateChip">Loading</span>
   <div class="grow"></div>
   <div class="seg" id="sex" role="group" aria-label="Victims"><button data-v="0" aria-pressed="true">Women</button><button data-v="1" aria-pressed="false">Men</button></div>
@@ -541,6 +544,18 @@ function renderPlugins(){
  $('copySnip').addEventListener('click',()=>copy(SNIPPET,'Code copied'));
 }
 
+/* state menu: only when served by `coldmap open`, which can build any state on request */
+function statePicker(){
+ fetch('../states.json').then(r=>r.ok?r.json():null).then(j=>{
+  if(!j||!j.states||j.states.length<2)return;
+  const sel=document.createElement('select');
+  sel.className='statechip statepick';sel.id='stateChip';sel.setAttribute('aria-label','State');
+  sel.innerHTML=j.states.map(s=>`<option value="${esc(s.slug)}"${s.name===M.state?' selected':''}>${esc(s.name)}</option>`).join('');
+  sel.addEventListener('change',()=>{location.href='../'+encodeURIComponent(sel.value)+'/'+location.hash});
+  $('stateChip').replaceWith(sel);
+ }).catch(()=>{});
+}
+
 /* about */
 $('aboutBtn').addEventListener('click',()=>{$('about').classList.add('open');$('aboutClose').focus()});
 function closeAbout(){if(!$('about').classList.contains('open'))return;$('about').classList.remove('open');$('aboutBtn').focus()}
@@ -559,6 +574,7 @@ Promise.all([fetch('agg.json').then(r=>r.json()),fetch('cases.json').then(r=>r.j
  if(sv){if(M.findings[sv.view])S.view=sv.view;S.sex=sv.sex===1?1:0;S.serial=sv.serial!==false;S.adult=sv.adult!==false;if(sv.county!=null&&M.counties[sv.county])$('county').value=sv.county}
  setSeg('sex',S.sex);$('serial').setAttribute('aria-pressed',S.serial);$('adult').checked=S.adult;
  refresh();renderOverview();renderBench();renderRel();renderQuality();renderPlugins();
+ statePicker();
  const h=location.hash.slice(1);go(SECTIONS.includes(h)?h:'overview');
 }).catch(err=>{console.error(err);$('stateChip').textContent='Data failed to load';$('s-overview').innerHTML='<p class="muted">The data did not load. Reload to try again.</p>'});
 }

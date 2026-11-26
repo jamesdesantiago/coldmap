@@ -218,7 +218,44 @@ def explorer(cases, source, clearance, skip_fix, namus_missing, namus_unidentifi
     path = build_site(_load(cases, source, clearance, skip_fix, namus_missing, namus_unidentified), state,
                       Path(out_dir), dets or DEFAULT_DETECTORS, prm, profiles=not no_profiles,
                       benchmark_file=benchmark_json, controls_file=controls_json)
-    click.echo(f"Explorer written to {path}. Serve the folder (python -m http.server) and open index.html.")
+    click.echo(f"Explorer written to {path}. Serve the folder (python -m http.server) and open index.html,\n"
+               f"or use `coldmap open` to build, serve and open it in one step.")
+
+
+@main.command("open")
+@click.argument("state", required=False)
+@click.option("--cases", type=click.Path(exists=True, dir_okay=False), help="Use this case file instead of downloading")
+@click.option("--clearance", type=click.Path(exists=True, dir_okay=False), help="Use this clearance file")
+@click.option("--sample", is_flag=True, help="Open the synthetic sample (fictional 'Samplestate'), no download")
+@click.option("--refresh", is_flag=True, help="Download MAP's files again (after MAP publishes an update)")
+@click.option("--rebuild", is_flag=True, help="Rebuild the explorer even if a current one exists")
+@click.option("--port", default=8765, show_default=True)
+@click.option("--no-browser", is_flag=True, help="Don't open a browser window")
+def open_cmd(state, cases, clearance, sample, refresh, rebuild, port, no_browser):
+    """The easy way in: get the data, build the explorer and open it in your browser.
+
+    Opens STATE first; every other state in the file is a menu choice away in the page.
+
+    
+    coldmap open California
+    coldmap open --sample
+    """
+    from . import launch
+    click.echo(NOTICE)
+    if sample:
+        from ..sample import make_sample
+        cases, clearance = make_sample(launch.home() / "sample")
+        state = "Samplestate"
+    elif cases:
+        cases, clearance = Path(cases), Path(clearance) if clearance else None
+    else:
+        cases, clearance = launch.ensure_data(refresh)
+    lib = launch.Library(Path(cases), Path(clearance) if clearance else None, rebuild=rebuild or refresh)
+    if not state:
+        state = click.prompt("Which state first? (switch to any other in the browser)", default="California")
+    state = lib.resolve(state.strip())
+    lib.build(state)
+    launch.serve(lib, state, port, open_browser=not no_browser)
 
 
 @main.command()
