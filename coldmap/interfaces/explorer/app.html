@@ -355,7 +355,7 @@ function renderStatus(){
   kept?`<span>shortlist <b>${kept}</b></span>`:'',
   job?`<span><span class="spin"></span> ${esc(job.title)} ${clock(job.elapsed)}</span>`:'',
   `<span class="live">local only · nothing is uploaded</span>`].join('');
- $('ctFlags').textContent=S.flags?nf.format(S.flags.filter(f=>f.sex===S.f.sex&&f.confidence!=='possible').length):'';
+ $('ctFlags').textContent=S.flags?nf.format(S.flags.filter(f=>(S.f.sex==='all'||f.sex===S.f.sex)&&f.confidence!=='possible').length):'';
  $('ctShort').textContent=kept||'';$('ctShort').classList.toggle('on',!!st.decisions.kept);
  $('ctModels').textContent=st.plugins.files?'+'+st.plugins.files:'';
  $('ctData').textContent=n&&n.stale?'update':'';
@@ -424,7 +424,7 @@ function renderFlags(r){
  const tb=`<h1>Flags</h1>
   <select class="sel" id="fState" aria-label="State"><option value="">All states</option>${states.map(s=>`<option${s===f.state?' selected':''}>${esc(s)}</option>`).join('')}</select>
   ${f.state?`<select class="sel" id="fCounty" aria-label="County"><option value="">All counties</option>${counties.map(c=>`<option${c===f.county?' selected':''}>${esc(c)}</option>`).join('')}</select>`:''}
-  ${seg('sex',[['Female','Women'],['Male','Men']])}
+  ${seg('sex',[['Female','Women'],['Male','Men'],['all','Both']])}
   ${seg('conf',[['high','High'],['strong','High + strong'],['all','All']])}
   <select class="sel" id="fKind" aria-label="Kind"><option value="all">Any kind</option><option value="serial-pattern"${f.kind==='serial-pattern'?' selected':''}>Serial-pattern</option><option value="accountability"${f.kind==='accountability'?' selected':''}>Accountability</option></select>
   <select class="sel" id="fShow" aria-label="Show"><option value="open"${f.show==='open'?' selected':''}>Not dismissed</option><option value="kept"${f.show==='kept'?' selected':''}>Kept only</option><option value="dismissed"${f.show==='dismissed'?' selected':''}>Dismissed</option><option value="all"${f.show==='all'?' selected':''}>Everything</option></select>
@@ -596,7 +596,7 @@ function renderShortlist(){
 // ---- places ----------------------------------------------------------------------------------
 async function placeData(key,url){if(!S.places[key]){S.places[key]={loading:true};try{S.places[key]=await api(url)}catch(e){S.places[key]={error:e.message}}render()}return S.places[key]}
 function renderPlaces(r){
- const sex=S.f.sex,sexSeg=`<div class="seg" role="group">${[['Female','Women'],['Male','Men']].map(([v,l])=>`<button data-f="sex" data-v="${v}" aria-pressed="${sex===v}">${l}</button>`).join('')}</div>`;
+ const sex=S.f.sex,sexSeg=`<div class="seg" role="group">${[['Female','Women'],['Male','Men'],['all','Both']].map(([v,l])=>`<button data-f="sex" data-v="${v}" aria-pressed="${sex===v}">${l}</button>`).join('')}</div>`;
  const wrap=(crumb,body)=>setMain('places:'+location.pathname+sex+body.length,`<div class="view"><div class="page">${crumb}${body}</div></div>`);
  const loadingOr=(d)=>d.loading?`<p><span class="spin"></span> Reading the case file…</p>`:d.error?`<p class="msg err">${esc(d.error)}</p>`:null;
  if(!r.a){
@@ -620,11 +620,11 @@ function renderPlaces(r){
  if(st.loading||st.error)return wrap('',loadingOr(st));
  const county=(st.counties.find(c=>slug(c.county)===r.b)||{}).county||r.b;
  placeData('ct:'+state+county+sex,`/api/place?state=${encodeURIComponent(state)}&county=${encodeURIComponent(county)}&sex=${sex}`);const d=S.places['ct:'+state+county+sex];
- const here=(S.flags||[]).filter(f=>f.state===state&&f.sex===sex&&(f.counties||[f.county]).includes(county)&&f.confidence!=='possible');
+ const here=(S.flags||[]).filter(f=>f.state===state&&(sex==='all'||f.sex===sex)&&(f.counties||[f.county]).includes(county)&&f.confidence!=='possible');
  const body=loadingOr(d)??`<div class="row" style="justify-content:space-between;margin:6px 0 4px"><h1>${esc(county)}</h1>${sexSeg}</div>
   <p class="lede"><span class="num">${nf.format(d.killings)}</span> killings of ${who(sex)} 12 and older, <span class="num">${pct(d.solved/d.killings)}</span> solved. Each square is a year and method; red means few were solved, blue means most were.</p>
   <div class="chart heat" id="heat"></div>
-  <h3>Flags here (${here.length})</h3>${here.length?`<table><tbody>${here.map(f=>`<tr class="click" data-href="/flags/${f.id}"><td><span class="tag ${f.confidence}">${CONF[f.confidence]}</span></td><td>${esc(f.place)}</td><td class="muted">${esc(String(f.weapon).toLowerCase())} · ${yrs(f.start,f.end)}</td><td class="n" style="color:var(--red)">${gapTxt(gapOf(f))}</td></tr>`).join('')}</tbody></table>`:`<p class="muted">No high or strong flags for ${who(sex)} here.</p>`}
+  <h3>Flags here (${here.length})</h3>${here.length?`<table><tbody>${here.map(f=>`<tr class="click" data-href="/flags/${f.id}"><td><span class="tag ${f.confidence}">${CONF[f.confidence]}</span></td><td>${esc(f.place)}</td><td class="muted">${esc(String(f.weapon).toLowerCase())} · ${who(f.sex)} · ${yrs(f.start,f.end)}</td><td class="n" style="color:var(--red)">${gapTxt(gapOf(f))}</td></tr>`).join('')}</tbody></table>`:`<p class="muted">No high or strong flags for ${who(sex)} here.</p>`}
   <h3>Largest agencies</h3><table><thead><tr><th>Agency</th><th class="n">Killings</th><th class="n">Solved</th></tr></thead><tbody>${d.agencies.map(a=>`<tr><td>${esc(a.agency)}</td><td class="n">${nf.format(a.killings)}</td><td class="n">${pct(a.solved/a.killings)}</td></tr>`).join('')}</tbody></table>`;
  const changed=wrap(`<div class="crumb"><a href="/places" data-nav>Places</a> › <a href="/places/${slug(state)}" data-nav>${esc(state)}</a> › <b>${esc(county)}</b></div>`,body);
  if(d&&d.cells&&changed)drawHeat(d);

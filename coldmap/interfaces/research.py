@@ -104,24 +104,37 @@ def _clean(v):
 
 
 # ---- places ----------------------------------------------------------------------------------
+BOTH = ("all", "both", "")
+
+
+def _sex(c, sex: str):
+    """Rows for one victim sex, or every victim when sex is "all"."""
+    return c.vic_sex.notna() if sex.lower() in BOTH else c.vic_sex == sex
+
+
+def _sex_ok(f: dict, sex: str) -> bool:
+    return sex.lower() in BOTH or f["sex"] == sex
+
+
 def states_table(data, flags: list[dict], sex: str) -> list[dict]:
-    c = data.cases[(data.cases.vic_sex == sex) & data.cases.county.notna()]
+    c = data.cases[_sex(data.cases, sex) & data.cases.county.notna() & (data.cases.vic_age >= 12)]
     g = c.groupby("state").solved.agg(["size", "sum"])
     nflags: dict[str, int] = {}
     for f in flags:
-        if f["sex"] == sex and f["confidence"] != "possible":
+        if _sex_ok(f, sex) and f["confidence"] != "possible":
             nflags[f["state"]] = nflags.get(f["state"], 0) + 1
     return [{"state": s, "killings": int(n), "solved": int(k), "flags": nflags.get(s, 0)} for s, (n, k) in g.iterrows()]
 
 
 def state_profile(data, flags: list[dict], state: str, sex: str) -> dict:
-    c = data.cases[(data.cases.state == state) & (data.cases.vic_sex == sex) & data.cases.county.notna()]
+    c = data.cases[(data.cases.state == state) & _sex(data.cases, sex) & data.cases.county.notna()
+                   & (data.cases.vic_age >= 12)]
     if c.empty:
         raise KeyError(state)
     g = c.groupby("county").solved.agg(["size", "sum"])
     nflags: dict[str, int] = {}
     for f in flags:
-        if f["state"] == state and f["sex"] == sex and f["confidence"] != "possible":
+        if f["state"] == state and _sex_ok(f, sex) and f["confidence"] != "possible":
             for k in f.get("counties") or [f.get("county")]:
                 nflags[k] = nflags.get(k, 0) + 1
     trend = c.groupby("year").solved.agg(["size", "sum"])
@@ -132,7 +145,7 @@ def state_profile(data, flags: list[dict], state: str, sex: str) -> dict:
 
 
 def county_profile(data, state: str, county: str, sex: str) -> dict:
-    c = data.cases[(data.cases.state == state) & (data.cases.county == county) & (data.cases.vic_sex == sex)
+    c = data.cases[(data.cases.state == state) & (data.cases.county == county) & _sex(data.cases, sex)
                    & (data.cases.vic_age >= 12)]
     if c.empty:
         raise KeyError(county)

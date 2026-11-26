@@ -226,6 +226,10 @@ def test_research_flow_from_flag_to_export(chome, tmp_path, server):
 
     places = json.loads(get("/api/places?sex=Female")[1])
     assert {p["state"] for p in places} == {"Samplestate", "Otherstate"}
+    both = {p["state"]: p for p in json.loads(get("/api/places?sex=all")[1])}
+    women = {p["state"]: p for p in places}
+    assert both["Samplestate"]["killings"] > women["Samplestate"]["killings"]  # men and women together
+    assert both["Samplestate"]["flags"] >= women["Samplestate"]["flags"]
     prof = json.loads(get("/api/place?state=Samplestate&sex=Female")[1])
     county = prof["counties"][0]["county"]
     cp = json.loads(get(f"/api/place?state=Samplestate&county={urllib.parse.quote(county)}&sex=Female")[1])
