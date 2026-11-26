@@ -37,7 +37,12 @@ class Matcher:
         return (f.county or f.place, f.victim_sex, f.weapon)
 
     def agree(self, a: Finding, b: Finding) -> bool:
-        return self.key(a) == self.key(b) and a.start <= b.end and b.start <= a.end
+        if self.key(a) != self.key(b) or a.start > b.end or b.start > a.end:
+            return False
+        # Profiles must not contradict: a split finding agrees with an unsplit one,
+        # but not with a finding for a different age band or circumstance.
+        pa, pb = a.extras.get("profile", {}), b.extras.get("profile", {})
+        return all(pa[k] == pb[k] for k in pa.keys() & pb.keys())
 
     def duplicate(self, a: Finding, b: Finding, span_ratio: float = 2.0) -> bool:
         return self.agree(a, b) and max(a.span, b.span) <= span_ratio * min(a.span, b.span)
@@ -87,7 +92,11 @@ class Ensemble:
         return sorted(all_f, key=lambda f: (_RANK[f.confidence], -f.unsolved))
 
 
-def run(data: Dataset, query: Query | None = None, detectors=DEFAULT_DETECTORS,
-        params: dict[str, dict] | None = None, kind: str | None = None, **ensemble_kw) -> list[Finding]:
-    """One call to run any set of registered detectors as an ensemble."""
-    return Ensemble.from_names(detectors, params, **ensemble_kw).run(data, query or Query(), kind=kind)
+def run(data: Dataset, query: Query | None = None, detectors=None,
+        params: dict[str, dict] | None = None, kind: str | None = None, preset: str | None = None,
+        **ensemble_kw) -> list[Finding]:
+    """One call to run any set of registered detectors as an ensemble, optionally from a preset."""
+    from .presets import resolve
+    detectors, params = resolve(preset, detectors, params)
+    return Ensemble.from_names(detectors or DEFAULT_DETECTORS, params, **ensemble_kw).run(
+        data, query or Query(), kind=kind)

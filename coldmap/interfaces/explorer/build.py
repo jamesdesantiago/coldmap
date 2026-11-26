@@ -14,6 +14,7 @@ from pathlib import Path
 from ...core.types import Dataset, Query
 from ...detectors import DETECTORS
 from ...enrichers import enrich
+from ...explain import explain
 from ...ensemble import DEFAULT_DETECTORS, Ensemble
 from ...sources.map_files import WEAPON_GROUPS
 
@@ -70,7 +71,9 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
                 None if fd.q_value is None else round(fd.q_value, 4),
                 [names.index(x) for x in fd.found_by if x in names], CONF.index(fd.confidence), fd.kind,
                 {k.split("-")[1]: [v["count"], v["typical"]] for k, v in fd.extras.items()
-                 if k.startswith("namus-") and isinstance(v, dict)} or None]
+                 if k.startswith("namus-") and isinstance(v, dict)} or None,
+                {k: v for k, v in explain(fd, data).items() if k in ("what", "agreement", "statistics", "data", "cases", "namus")},
+                fd.extras.get("profile", {}).get("age_band")]
 
     strip = counties[0][counties[0].rfind(","):] if "," in counties[0] else ""
     busiest = d.county.value_counts().index[0]

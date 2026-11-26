@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coldmap"
-version = "0.2.0"
+version = "0.3.0"
 description = "An extensible framework for finding clusters of unsolved homicides in public U.S. homicide data"
 readme = "README.md"
 requires-python = ">=3.10"

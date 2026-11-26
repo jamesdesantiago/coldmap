@@ -32,6 +32,13 @@ class Fix:
     summary: str
     apply: Callable[[pd.DataFrame], pd.DataFrame] | None = None
     sources: tuple[str, ...] = ("map-shr",)   # sources this fix applies to
+    states: tuple[str, ...] = ()               # where it matters; empty = everywhere
+    years: tuple[int, int] | None = None       # when it matters; None = always
+
+    def applies_to(self, state: str | None, start: int, end: int) -> bool:
+        in_state = not self.states or state in self.states
+        in_years = self.years is None or (start <= self.years[1] and end >= self.years[0])
+        return in_state and in_years
 
 
 FIXES: Registry[Fix] = Registry("fix", "coldmap.fixes")
@@ -60,7 +67,7 @@ FIXES.register(Fix(
     "relationship that implies police knew who it was (wife, girlfriend, acquaintance, known to "
     "victim). Likely tied to the FBI's 2021 move to NIBRS. Fix: count those 2021 cases as solved. "
     "'Stranger' is left unsolved, since it doesn't identify anyone.",
-    _fix_2021_relationship,
+    _fix_2021_relationship, years=(2021, 2021),
 ))
 
 
@@ -70,6 +77,19 @@ FIXES.register(Fix(
     "offender (mostly 'Other - known to victim'), against about 2% elsewhere; most come from Los Angeles "
     "agencies. Not fixed: unlike 2021 there may be a legitimate reason. Treat California solve rates in "
     "this period with caution and raise it with MAP.",
+    states=("California",), years=(1983, 1995),
+))
+FIXES.register(Fix(
+    "california-2021-solve-rate", "California 2021 solve rate still anomalous after the fix",
+    "Even after the 2021 relationship fix, California's 2021 solve rate is 38% against 59% in the "
+    "surrounding years. The NIBRS transition likely caused more problems; treat 2021 findings with caution.",
+    states=("California",), years=(2021, 2021),
+))
+FIXES.register(Fix(
+    "new-york-2021-weapons", "New York 2021: no weapons recorded",
+    "All 488 New York City cases in 2021 (and several other New York agencies) have no weapon recorded, so "
+    "method-based detection can't see them.",
+    states=("New York",), years=(2021, 2021),
 ))
 
 

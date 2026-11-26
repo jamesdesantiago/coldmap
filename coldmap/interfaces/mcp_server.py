@@ -41,8 +41,10 @@ def _data():
 
 @mcp.tool()
 def list_plugins() -> dict:
-    """Installed detectors (with tiers and parameters), data fixes and enrichers."""
+    """Installed detectors (with tiers and parameters), presets, data fixes and enrichers."""
+    from ..presets import PRESETS
     return {"detectors": [c.describe() for _, c in DETECTORS],
+            "presets": {n: {"summary": p.summary, "detectors": list(p.detectors)} for n, p in PRESETS},
             "default_ensemble": list(DEFAULT_DETECTORS),
             "fixes": [{"name": n, "title": f.title, "summary": f.summary, "changes_data": bool(f.apply)}
                       for n, f in FIXES],
@@ -51,18 +53,47 @@ def list_plugins() -> dict:
 
 @mcp.tool()
 def scan_clusters(state: str, detectors: list[str] | None = None, params: dict | None = None,
-                  victim_sex: str = "Female", kind: str | None = "serial-pattern", top: int = 20) -> dict:
+                  victim_sex: str = "Female", kind: str | None = "serial-pattern", top: int = 20,
+                  preset: str | None = None) -> dict:
     """Run detectors as an ensemble for a state (full name, e.g. 'California').
     detectors: names from list_plugins (default: the default ensemble).
     params: per-detector overrides, e.g. {"scan": {"levels": ["agency"]}, "window": {"window": 6}}.
     Each finding has found_by and confidence: high (2+ detectors agree), strong (one strict
-    detector), possible (one sensitive detector). kind: 'serial-pattern', 'accountability' or null."""
+    detector), possible (one sensitive detector; mostly noise in false-alarm tests).
+    kind: 'serial-pattern', 'accountability' or null. preset: strict, balanced, profiles, exploratory."""
+    from ..presets import resolve
     params = {k: {pk: tuple(pv) if isinstance(pv, list) else pv for pk, pv in v.items()}
               for k, v in (params or {}).items()}
+    detectors, params = resolve(preset, detectors, params)
     ens = Ensemble.from_names(detectors or DEFAULT_DETECTORS, params)
     findings = ens.run(_data(), Query(state=state, victim_sex=victim_sex), kind=kind)
     return {"findings": [f.to_dict() for f in findings[:top]], "total": len(findings),
             "detectors": [d.name for d in ens.detectors], "data_fixes": list(_data().fixes),
+            "notice": ETHICS}
+
+
+@mcp.tool()
+def triage_finding(state: str, place: str, weapon_group: str, start: int, end: int,
+                   level: str = "county", victim_sex: str = "Female") -> dict:
+    """Explain a finding in plain language and check it: the numbers, which detectors agree and how
+    much to trust that, data problems touching this place and period, coverage, NamUs context,
+    who the victims were in aggregate, and next steps. Then search public news for whether the
+    series is already known before suggesting anyone act on it."""
+    from ..explain import explain
+    from ..presets import resolve
+    dets, prm = resolve("balanced")
+    findings = Ensemble.from_names(dets, prm).run(_data(), Query(state=state, victim_sex=victim_sex))
+    match = [f for f in findings if f.place == place and f.weapon == weapon_group
+             and f.start <= end and f.end >= start]
+    if not match:
+        return {"found": False, "note": "No detector flags this place, method and period at default settings.",
+                "notice": ETHICS}
+    f = max(match, key=lambda x: (x.start == start and x.end == end, x.unsolved))
+    e = explain(f, _data())
+    return {"found": True, "finding": f.to_dict(), "explanation": {k: v for k, v in e.items() if k != "text"},
+            "markdown": e["text"], "news_search_queries": [
+                f"{(f.county or place).split(',')[0]} County women killed {start} {end} unsolved",
+                f"{(f.county or place).split(',')[0]} serial killer {start}s women"],
             "notice": ETHICS}
 
 

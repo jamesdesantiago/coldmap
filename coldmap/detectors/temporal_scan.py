@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import binom
 
+from ..core.profile import add_profile
 from ..core.types import Finding
 from ..stats import bh_qvalues, scan_group, windows
 from . import DETECTORS
@@ -44,11 +45,15 @@ class TemporalScan(Detector):
         shrink: float = field(default=20.0, metadata={"help": "Smoothing of yearly reference rates (cases)"})
         screen_p: float = field(default=0.05, metadata={"help": "Skip simulation if best window's p exceeds this"})
         seed: int = field(default=0, metadata={"help": "Random seed"})
+        min_unsolved: int = field(default=0, metadata={"help": "Minimum unsolved killings in a flagged window"})
+        split_by: tuple[str, ...] = field(default=(), metadata={
+            "help": "Victim-profile splits: age_band (see core/profile.py for why others are not offered)"})
 
     def detect(self, data, query):
         out = []
+        d = add_profile(data.select(query), tuple(self.params.split_by))
         for level in self.params.levels:
-            out += self._detect_level(data.select(query), query, level)
+            out += self._detect_level(d, query, level)
         return sorted(out, key=lambda f: (f.q_value, -f.score))
 
     def _detect_level(self, d: pd.DataFrame, query, level: str) -> list[Finding]:
@@ -60,17 +65,21 @@ class TemporalScan(Detector):
             return []
         years = np.arange(d.year.min(), d.year.max() + 1)
         wi, wj = windows(len(years), p.min_len, p.max_len)
-        ref = d.groupby(["state", "weapon_group", "year"]).solved.agg(["size", "sum"])
-        g = d.groupby(["state", level, "weapon_group", "year"]).solved.agg(["size", "sum"])
+        split = list(p.split_by)
+        ref = d.groupby(["state", "weapon_group", *split, "year"]).solved.agg(["size", "sum"])
+        keys = ["state", level, "weapon_group", *split]
+        g = d.groupby(keys + ["year"]).solved.agg(["size", "sum"])
+        lv = list(range(len(keys)))
         rng = np.random.default_rng(p.seed)
         results, tested = [], 0
-        for (st, place, w), grp in g.groupby(level=[0, 1, 2]):
-            grp = grp.droplevel([0, 1, 2]).reindex(years, fill_value=0)
+        for key, grp in g.groupby(level=lv):
+            st, place, w, prof = key[0], key[1], key[2], dict(zip(split, key[3:]))
+            grp = grp.droplevel(lv).reindex(years, fill_value=0)
             n, s = grp["size"].to_numpy(float), grp["sum"].to_numpy(float)
             if n.sum() < p.min_cases:
                 continue
             tested += 1
-            rs = ref.loc[(st, w)].reindex(years, fill_value=0)
+            rs = ref.loc[(st, w, *prof.values())].reindex(years, fill_value=0)
             rest_n = rs["size"].to_numpy(float) - n
             rest_s = rs["sum"].to_numpy(float) - s
             if rest_n.sum() <= 0:
@@ -86,10 +95,11 @@ class TemporalScan(Detector):
             for i, j, NN, SS, p0, score, pv in scan_group(n, s, p0t, wi, wj, p.min_cases, p.reps, rng, p.top_k):
                 results.append(Finding(self.name, place, level, query.victim_sex, w, int(years[i]),
                                        int(years[j]), NN, SS, expected=round(p0, 3), p_value=pv,
-                                       score=round(score, 2), county=place if level == "county" else None))
+                                       score=round(score, 2), county=place if level == "county" else None,
+                                       extras={"profile": prof} if prof else {}))
         if not results:
             return []
         q = bh_qvalues(np.array([f.p_value for f in results]), m=max(tested, len(results)))
         for f, qq in zip(results, q):
             f.q_value = float(qq)
-        return [f for f in results if p.max_q is None or f.q_value <= p.max_q]
+        return [f for f in results if (p.max_q is None or f.q_value <= p.max_q) and f.unsolved >= p.min_unsolved]

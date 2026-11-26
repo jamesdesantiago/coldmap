@@ -41,6 +41,7 @@ pip install -e ".[mcp,dev]"
 
 coldmap plugins                                               # what's installed, with every parameter
 coldmap scan SHR76_25a.csv --state California --kind serial-pattern
+coldmap scan SHR76_25a.csv --state California --preset strict --explain 3   # plain-language triage
 coldmap scan SHR76_25a.csv --state Indiana -d scan -p scan.levels=agency
 coldmap scan SHR76_25a.csv --state California -d scan -d window -d map   # any combination
 coldmap benchmark SHR76_25a.csv --backtest
@@ -60,6 +61,23 @@ findings = coldmap.run(data, coldmap.Query(state="Indiana"),
 coldmap.findings_frame(findings)
 ```
 
+## Presets
+
+| Preset | What it runs | Use it for |
+|---|---|---|
+| `strict` | Strict detector only, 5% false discovery rate, at least 5 unsolved | Leads to send someone |
+| `balanced` (default) | Strict + sensitive, labeled by agreement | Everyday use |
+| `profiles` | Balanced, split by victim age band (12–17, 18–29, 30–44, 45+) | Offenders who target one age group |
+| `exploratory` | Looser thresholds, metro areas, MAP's original method | Research; expect noise |
+
+Explicit `-d` and `-p` options override a preset. Presets are a registry too, so a plugin can ship its own.
+
+**Why only age bands?** Race and ethnicity are left out on purpose: race-based clusters risk spotlighting communities and are easy to misuse. Circumstance is left out because it is circular: police record "circumstances undetermined" largely *because* a case is unsolved, so splitting on it manufactures clusters, and false-alarm tests can't catch that.
+
+## Why was this flagged?
+
+`coldmap.explain(finding, data)`, `coldmap scan --explain N`, the MCP `triage_finding` tool and the explorer's panel all give the same plain-language triage: the numbers against what was expected, which detectors agree and how much that level of confidence is worth, statistics, data problems that touch that state and period, coverage, NamUs context, who the victims were in aggregate, and next steps.
+
 ## Ensembles and confidence
 
 No single model catches everything, so detectors are combined. The ensemble runs any set of detectors and a `Matcher` decides which findings agree (default: same county, victim sex and method, overlapping years). Each finding gets `found_by` and a confidence:
@@ -74,21 +92,32 @@ Swap in a different `Matcher` to define agreement another way (neighboring count
 
 ## Benchmarks
 
-`coldmap benchmark` scores any detector, or the ensemble, against known adjudicated series stored in [`coldmap/benchmarks/known_series.json`](coldmap/benchmarks/known_series.json). Results on MAP's August 2026 file:
+`coldmap benchmark` scores any detector, preset or the ensemble against known adjudicated series in [`coldmap/benchmarks/known_series.json`](coldmap/benchmarks/known_series.json). A hit is **full** if the finding covers at least half the series' years without being much longer, and **partial** if it touches the series but mostly describes something else. Results on MAP's August 2026 file:
 
-| Series | window | scan | map | ensemble |
+| Series | window | scan | balanced | profiles |
 |---|---|---|---|---|
-| William Suff, Riverside County 1986–1991 | caught | caught | missed | high |
-| Hillside Stranglers, Los Angeles 1977–1978 | caught | missed | missed | high |
-| Golden State Killer, Orange County 1980–1981 | caught | missed | missed | possible |
-| Green River Killer, King County WA 1982–1984 | caught | caught | missed | high |
-| Darren Vann, Gary IN 1994–2014 | missed | caught | missed | strong |
+| William Suff, Riverside County 1986–1991 | full | partial | full (high) | missed |
+| Hillside Stranglers, Los Angeles 1977–1978 | full | missed | full (high) | full (high) |
+| Golden State Killer, Orange County 1980–1981 | full | missed | full (possible) | missed |
+| Green River Killer, King County WA 1982–1984 | full | full | full (high) | full (high) |
+| Darren Vann, Gary IN 1994–2014 | missed | full | full (strong) | full (strong) |
+| Chester Turner, Los Angeles 1987–1998 | partial | full | full (high) | full (high) |
+| Lonnie Franklin Jr., Los Angeles 1985–2007 | partial | missed | partial (high) | partial (high) |
+| Randy Kraft, Orange County 1976–1983 (male victims) | missed | missed | missed | missed |
+| Andre Crawford, Chicago 1993–1999 | missed | partial | partial (high) | full (strong) |
+| **Recovered** | 4 full, 2 partial | 3 full, 2 partial | **6 full, 2 partial** | 5 full, 1 partial |
 
-MAP's original method pools all 50 years for a county, which dilutes these short series; it was designed for national screening with expert review, and its strongest flags (such as strangulations of women in Fulton County, Georgia) are reproduced exactly.
+What the table says:
+- **No detector or preset catches everything,** which is why they're combined, and why `profiles` is worth running alongside `balanced` (it's the only one that fully catches Chicago).
+- **Overlapping series blur together.** Turner, Franklin and others were active in South Los Angeles at the same time, so one finding can touch several series.
+- **Gun series are a blind spot.** Franklin shot most of his victims; gun findings are labeled accountability because most gun clusters are not serial.
+- **Male victims are a blind spot.** Kraft is missed by everything. Killings of men are dominated by other patterns, and improving this is on the roadmap.
+
+MAP's original method pools all 50 years for a county, which dilutes these series; it was designed for national screening with expert review, and its strongest flags (such as strangulations of women in Fulton County, Georgia) are reproduced exactly.
 
 `--backtest` reports the first year each would have been flagged using only data available then (Suff: 1986, arrest 1992; Green River: 1982, arrest 2001; Gary: 1998, arrest 2014). Lead times are optimistic: any finding overlapping the series' years counts.
 
-A new detector earns its place by catching what others miss without adding noise. The benchmark is how you show that.
+A new detector earns its place by catching what others miss without adding noise. The benchmark and the negative controls are how you show both.
 
 ## How often is it wrong?
 
@@ -128,17 +157,19 @@ Serial victims are often never found (missing persons) or found but never named 
              "COLDMAP_NAMUS_MISSING": "/path/missing.csv", "COLDMAP_NAMUS_UNIDENTIFIED": "/path/uid.csv" } } } }
 ```
 
-Tools: `list_plugins`, `scan_clusters` (any detectors, any parameters), `get_cases`, `coverage_gaps`, `data_quality`, `false_alarms`, `benchmark`. Every result carries the ethics notice.
+Tools: `list_plugins`, `scan_clusters` (any detectors, parameters or preset), `triage_finding`, `get_cases`, `coverage_gaps`, `data_quality`, `false_alarms`, `benchmark`. Every result carries the ethics notice.
 
 ## Explorer
 
-`coldmap explorer` builds a static site for one state: a heatmap of solve rates by year and method, findings from every detector you ran (alone or combined), and the case records behind each. The page reads detector names from the data, so new plugins appear automatically.
+`coldmap explorer` builds a static site for one state: a heatmap of solve rates by year and method, findings from every detector you ran (alone or combined), a "why this was flagged" panel, and the case records behind each. The page reads detector names from the data, so new plugins appear automatically.
 
 ## Extending
 
 [CONTRIBUTING.md](CONTRIBUTING.md) walks through adding a detector, source, fix or enricher, and packaging it as a plugin. Ideas on the roadmap:
 
 - Better baselines for states dominated by one county (compare with similar counties nationally)
+- Detection for male victims and gun series (the two blind spots in the benchmark)
+- A missing-to-unidentified matcher using NamUs exports, with resolved cases as its benchmark
 - Spatial scan across neighboring counties (needs county centroids or adjacency)
 - Victim-profile detectors (age band, circumstance) and a matcher that compares profiles
 - Sources: Jacob Kaplan's FBI SHR files, city open-data portals

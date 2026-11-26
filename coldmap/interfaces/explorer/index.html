@@ -65,6 +65,9 @@ td{border-bottom:1px solid var(--rule);padding:7px 8px 7px 0;vertical-align:top}
 td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .st{white-space:nowrap;font-weight:600;font-size:13px}
 .st.no{color:var(--red)}.st.yes{color:var(--slate)}
+.why{border-left:4px solid var(--red);background:var(--pale);padding:12px 14px;margin:8px 0 18px;font-size:14px}
+.why h3{font:600 18px/1.2 "Source Serif 4",Georgia,serif;margin:0 0 6px}
+.why p{margin:6px 0}.why ul{margin:4px 0 0;padding-left:18px}
 .notes{font-size:14px;color:var(--mute);border-top:2px solid var(--ink)}
 .notes h2{color:var(--ink)}
 .notes p{max-width:78ch;margin:8px 0}
@@ -101,6 +104,7 @@ a{color:var(--slate)}
  <ul class="list" id="flags"></ul>
 </div>
 <div>
+ <div id="why" class="why" hidden></div>
  <h2 id="filet">Case file</h2>
  <p class="lede" id="filesum" style="font-size:14px">Pick a finding or a square to list the cases behind it.</p>
  <div class="scroll"><table class="stack" id="cases"></table></div>
@@ -135,7 +139,7 @@ const at=(c,w,y)=>(c*cube.NW+w)*NY+(y-Y0);
 
 function flagsFor(o){
  const rows=((M.findings[o.view]||{})[o.sex])||[];
- let out=rows.map(r=>({c:r[0],agency:r[1],w:r[2],y0:r[3],y1:r[4],t:r[5],s:r[6],exp:r[7],q:r[8],by:r[9].map(i=>M.detectors[i].name),conf:M.confidence[r[10]],kind:r[11],namus:r[12]||null}));
+ let out=rows.map(r=>({c:r[0],agency:r[1],w:r[2],y0:r[3],y1:r[4],t:r[5],s:r[6],exp:r[7],q:r[8],by:r[9].map(i=>M.detectors[i].name),conf:M.confidence[r[10]],kind:r[11],namus:r[12]||null,ex:r[13]||null,band:r[14]||null}));
  if(o.serial)out=out.filter(f=>f.kind==='serial-pattern');
  return out;
 }
@@ -182,7 +186,7 @@ function listFlags(o){
  const nh=FLAGS.filter(f=>f.conf==='high').length;
  $('flagsum').textContent=FLAGS.length?`${FLAGS.length} findings in ${new Set(FLAGS.map(f=>f.c)).size} counties from ${v}${o.view==='ensemble'?`, ${nh} where detectors agree`:''}. Strongest first.`:'No findings for this view.';
  $('flags').innerHTML=FLAGS.slice(0,150).map((f,i)=>{
-  const where=f.agency?`${f.agency} (${M.counties[f.c]})`:M.counties[f.c];
+  const where=(f.agency?`${f.agency} (${M.counties[f.c]})`:M.counties[f.c])+(f.band?`, ages ${f.band}`:'');
   const by=f.by.join(' + ');
   const exp=f.exp==null?'':`, against ${Math.round(f.exp*100)}% expected`;
   const q=f.q==null?'':`; q = ${f.q<0.001?'<0.001':f.q.toFixed(3)}`;
@@ -190,12 +194,23 @@ function listFlags(o){
   return `<li><button data-i="${i}" aria-pressed="${same(state.sel,f)}"><span class="t"><span class="badge b-${f.conf}">${esc(CONFLABEL[f.conf])}</span>${esc(where)} · ${esc(M.weapons[f.w])} · ${f.y0}–${f.y1}</span><span class="n">${f.t-f.s} unsolved</span><span class="s">${f.s} of ${f.t} solved (${Math.round(f.s/f.t*100)}%)${esc(exp)}${esc(q)}. Found by ${esc(by)}.${esc(nm)}</span></button></li>`}).join('');
 }
 
+function showWhy(sel){
+ const w=$('why');const e=sel&&sel.ex;
+ if(!e){w.hidden=true;w.textContent='';return}
+ w.hidden=false;w.innerHTML='';
+ const h=document.createElement('h3');h.textContent='Why this was flagged';w.appendChild(h);
+ for(const k of ['what','agreement','statistics','cases','namus']){if(!e[k])continue;const p=document.createElement('p');p.textContent=e[k];if(k==='what')p.style.fontWeight='600';w.appendChild(p)}
+ if(e.data&&e.data.length){const p=document.createElement('p');p.textContent='Data notes:';w.appendChild(p);const ul=document.createElement('ul');for(const n of e.data){const li=document.createElement('li');li.textContent=n;ul.appendChild(li)}w.appendChild(ul)}
+}
+
 function showCases(sel){
- state.sel=sel;const o=opt(),tb=$('cases');
+ state.sel=sel;const o=opt(),tb=$('cases');showWhy(sel);
  $('filet').textContent=`${sel.agency?sel.agency+', ':''}${M.counties[sel.c]} · ${M.weapons[sel.w]} · ${sel.y0}${sel.y1!==sel.y0?'–'+sel.y1:''}`;
  if(o.sex!==0){$('filesum').textContent='The case list covers women only. Switch Victims to Women to see the records.';tb.innerHTML='';listFlags(o);drawHM();return}
  const ai=sel.agency?M.agencies.indexOf(sel.agency):-1;
- const rows=CASES.filter(r=>r[0]===sel.c&&r[7]===sel.w&&r[1]>=sel.y0&&r[1]<=sel.y1&&r[5]>=12&&(!sel.agency||r[3]===ai)).sort((a,b)=>a[4]-b[4]||a[1]-b[1]||a[2]-b[2]);
+ const band=sel.band?sel.band.split(/[-+]/).map(Number):null;
+ const inBand=a=>!band||(a<999&&a>=band[0]&&(isNaN(band[1])||!band[1]?true:a<=band[1]));
+ const rows=CASES.filter(r=>r[0]===sel.c&&r[7]===sel.w&&r[1]>=sel.y0&&r[1]<=sel.y1&&r[5]>=12&&(!sel.agency||r[3]===ai)&&inBand(r[5])).sort((a,b)=>a[4]-b[4]||a[1]-b[1]||a[2]-b[2]);
  $('filesum').textContent=`${rows.length} killings of women 12 and older, ${rows.filter(r=>!r[4]).length} unsolved. Unsolved cases are listed first.`;
  tb.innerHTML='<thead><tr><th>Date</th><th>Agency</th><th>Age</th><th>Race</th><th>Weapon</th><th>Circumstance</th><th>Relationship</th><th>Status</th></tr></thead><tbody>'+rows.map(r=>`<tr><td data-l="Date" class="num">${MON[r[2]]||''} ${r[1]}</td><td data-l="Agency">${esc(M.agencies[r[3]])}</td><td data-l="Age" class="num">${r[5]>=999?'Unknown':r[5]}</td><td data-l="Race">${esc(M.race[r[6]])}</td><td data-l="Weapon">${esc(M.weaponRaw[r[8]])}</td><td data-l="Circumstance">${esc(M.circ[r[9]])}</td><td data-l="Relationship">${esc(M.rel[r[10]])}</td><td data-l="Status"><span class="st ${r[4]?'yes':'no'}">${r[4]?'Solved':'Unsolved'}</span></td></tr>`).join('')+'</tbody>';
  listFlags(o);drawHM();

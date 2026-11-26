@@ -5,6 +5,8 @@ touching code. Add only publicly adjudicated series (conviction, guilty plea or
 official attribution), with a note citing the basis.
 
 evaluate()  did each detector (and the ensemble) flag each series, using all data?
+            'full' = the finding covers most of the series' years and isn't much longer;
+            'partial' = it touches the series but mostly describes something else.
 backtest()  using only data available at the time, when would it first have flagged it?
 """
 
@@ -57,6 +59,23 @@ def hit(series: KnownSeries, findings: list[Finding]) -> list[Finding]:
             and f.start <= series.end and f.end >= series.start and f.kind in (None, "serial-pattern")]
 
 
+def grade(series: KnownSeries, f: Finding) -> str:
+    """'full' if the finding covers at least half the series' years without being much longer than
+    the series; otherwise 'partial' (it touches the series but mostly describes something else)."""
+    s_span = series.end - series.start + 1
+    overlap = min(f.end, series.end) - max(f.start, series.start) + 1
+    tight = f.span <= max(2 * s_span, s_span + 6)
+    return "full" if overlap / s_span >= 0.5 and tight else "partial"
+
+
+def best_hit(series: KnownSeries, findings: list[Finding]):
+    hits = hit(series, findings)
+    if not hits:
+        return None, None
+    best = max(hits, key=lambda f: (grade(series, f) == "full", f.unsolved))
+    return best, grade(series, best)
+
+
 def _runner(name: str, params: dict):
     if name == "ensemble":
         ens = Ensemble.from_names(params.get("detectors", DEFAULT_DETECTORS), params.get("params"))
@@ -76,13 +95,15 @@ def evaluate(data: Dataset, detectors=(*DEFAULT_DETECTORS, "ensemble"), params: 
             key = (name, s.state)
             if key not in cache:
                 cache[key] = _runner(name, params.get(name, {}))(data, Query(state=s.state, victim_sex=s.victim_sex))
-            hits = hit(s, cache[key])
-            best = max(hits, key=lambda f: f.unsolved) if hits else None
+            best, g = best_hit(s, cache[key])
             row[name] = ("missed" if best is None else
-                         f"{best.place}: {best.weapon} {best.start}-{best.end}, {best.solved}/{best.total} solved"
+                         f"{g}: {best.place}, {best.weapon} {best.start}-{best.end}, {best.solved}/{best.total} solved"
                          + (f" [{best.confidence}]" if best.confidence else ""))
         rows.append(row)
-    return pd.DataFrame(rows)
+    out = pd.DataFrame(rows)
+    caught = {d: f"{out[d].str.startswith('full').sum()} full, {out[d].str.startswith('partial').sum()} partial "
+                 f"of {len(out)}" for d in detectors}
+    return pd.concat([out, pd.DataFrame([{"series": "RECOVERED", "years": "", **caught}])], ignore_index=True)
 
 
 def backtest(data: Dataset, s: KnownSeries, detector: str = "ensemble", params: dict | None = None,

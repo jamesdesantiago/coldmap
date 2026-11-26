@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from scipy.stats import binom
 
+from ..core.profile import add_profile
 from ..core.types import Finding
 from . import DETECTORS
 from .base import Detector
@@ -31,18 +32,25 @@ class SlidingWindow(Detector):
         threshold: float = field(default=0.40, metadata={"help": "Flag at or below this solve rate"})
         min_cases: int = field(default=8, metadata={"help": "Minimum killings in a window"})
         max_p: float | None = field(default=None, metadata={"help": "Optional binomial p cutoff"})
+        min_unsolved: int = field(default=0, metadata={"help": "Minimum unsolved killings in a window"})
+        split_by: tuple[str, ...] = field(default=(), metadata={
+            "help": "Victim-profile splits: age_band (see core/profile.py for why others are not offered)"})
 
     def detect(self, data, query):
         p = self.params
-        d = data.select(query)
+        split = tuple(p.split_by)
+        d = add_profile(data.select(query), split)
         d = d[d[p.place].notna()]
         if d.empty:
             return []
         years = range(d.year.min(), d.year.max() + 1)
         out = []
-        yearly = d.groupby([p.place, "weapon_group", "year"]).solved.agg(["size", "sum"])
-        for (place, w), grp in yearly.groupby(level=[0, 1]):
-            grp = grp.droplevel([0, 1]).reindex(years, fill_value=0)
+        keys = [p.place, "weapon_group", *split]
+        yearly = d.groupby(keys + ["year"]).solved.agg(["size", "sum"])
+        lv = list(range(len(keys)))
+        for key, grp in yearly.groupby(level=lv):
+            place, w, prof = key[0], key[1], dict(zip(split, key[2:]))
+            grp = grp.droplevel(lv).reindex(years, fill_value=0)
             bt, bs = grp["size"].sum(), grp["sum"].sum()
             if bt < p.min_cases:
                 continue
@@ -52,17 +60,18 @@ class SlidingWindow(Detector):
             cands = []
             for end in tot.index:
                 t, s = int(tot[end]), int(sol[end])
-                if t >= p.min_cases and s / t <= p.threshold:
+                if t >= p.min_cases and s / t <= p.threshold and t - s >= p.min_unsolved:
                     pv = float(binom.cdf(s, t, base))
                     if p.max_p is None or pv <= p.max_p:
                         cands.append(Finding(self.name, place, p.place, query.victim_sex, w,
                                              end - p.window + 1, end, t, s, expected=round(base, 3),
                                              p_value=pv, score=float(t - s),
-                                             county=place if p.place == "county" else None))
+                                             county=place if p.place == "county" else None,
+                                             extras={"profile": prof} if prof else {}))
             cands.sort(key=lambda f: f.unsolved, reverse=True)
             kept = []
             for f in cands:
-                if not any(abs(k.start - f.start) < p.window for k in kept):
+                if not any(abs(k.start - f.start) < p.window for k in kept):  # same group, so same profile
                     kept.append(f)
             out.extend(kept)
         return sorted(out, key=lambda f: f.unsolved, reverse=True)

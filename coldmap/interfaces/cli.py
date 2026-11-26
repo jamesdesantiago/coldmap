@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 import pandas as pd
 
-from .. import DETECTORS, ENRICHERS, FIXES, SOURCES, Query, findings_frame, load
+from .. import DETECTORS, ENRICHERS, FIXES, PRESETS, SOURCES, Query, findings_frame, load
 from ..ensemble import DEFAULT_DETECTORS, Ensemble
 from .params import parse_overrides
 
@@ -52,11 +52,12 @@ def plugins(as_json):
         "detectors": [c.describe() for _, c in DETECTORS],
         "enrichers": {n: c.summary for n, c in ENRICHERS},
         "checks": {n: c.summary for n, c in __import__("coldmap.quality", fromlist=["CHECKS"]).CHECKS},
+        "presets": {n: f"{p.summary} [{', '.join(p.detectors)}]" for n, p in PRESETS},
     }
     if as_json:
         click.echo(json.dumps(info, indent=2, default=str))
         return
-    for kind in ("sources", "fixes", "enrichers", "checks"):
+    for kind in ("presets", "sources", "fixes", "enrichers", "checks"):
         click.echo(f"{kind}:")
         for n, s in info[kind].items():
             click.echo(f"  {n:28} {s}")
@@ -74,14 +75,19 @@ def plugins(as_json):
 @click.option("-d", "--detector", "detectors", multiple=True,
               help=f"Detector to run (repeatable). Default: {', '.join(DEFAULT_DETECTORS)}")
 @click.option("-p", "--param", "params", multiple=True, help="detector.param=value (repeatable)")
+@click.option("--preset", help="strict, balanced, profiles, exploratory (see `coldmap plugins`)")
 @click.option("--kind", type=click.Choice(["serial-pattern", "accountability"]))
 @click.option("--min-age", default=12, show_default=True)
 @click.option("--top", default=25, show_default=True)
+@click.option("--explain", "n_explain", default=0, help="Explain the top N findings in plain language")
 @click.option("--out", type=click.Path(), help="Write all findings to CSV or JSON")
-def scan(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, state, victim_sex, detectors, params, kind, min_age, top, out):
+def scan(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, state, victim_sex, detectors,
+         params, preset, kind, min_age, top, n_explain, out):
     """Run one or more detectors as an ensemble."""
+    from ..presets import resolve
     data = _load(cases, source, clearance, skip_fix, namus_missing, namus_unidentified)
-    ens = Ensemble.from_names(detectors or DEFAULT_DETECTORS, parse_overrides(params))
+    dets, prm = resolve(preset, detectors, parse_overrides(params))
+    ens = Ensemble.from_names(dets or DEFAULT_DETECTORS, prm)
     findings = ens.run(data, Query(state=state, victim_sex=victim_sex, min_age=min_age), kind=kind)
     if not findings:
         click.echo("No findings at these settings.")
@@ -90,6 +96,10 @@ def scan(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, 
     click.echo(fr.head(top).to_string(index=False))
     click.echo(f"\n{len(fr)} findings from {', '.join(d.name for d in ens.detectors)}. "
                f"Data fixes: {', '.join(data.fixes) or 'none'}.\n{NOTICE}")
+    if n_explain:
+        from ..explain import explain
+        for f in findings[:n_explain]:
+            click.echo("\n" + "-" * 70 + "\n" + explain(f, data)["text"])
     if out:
         (fr.to_json(out, orient="records", indent=1) if out.endswith(".json") else fr.to_csv(out, index=False))
 
@@ -99,15 +109,18 @@ def scan(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, 
 @click.option("-d", "--detector", "detectors", multiple=True,
               help="Detectors to score (repeatable); 'ensemble' scores the default ensemble")
 @click.option("-p", "--param", "params", multiple=True, help="detector.param=value")
+@click.option("--preset", help="Score a preset's ensemble as 'ensemble'")
 @click.option("--series-file", type=click.Path(exists=True), help="Custom known-series JSON")
 @click.option("--backtest", is_flag=True, help="Also compute first year flagged (slower)")
-def benchmark(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, detectors, params, series_file, backtest):
+def benchmark(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, detectors, params, preset,
+              series_file, backtest):
     """Score detectors against known, adjudicated serial cases."""
     from ..benchmarks import backtest_all, evaluate, load_series
     data = _load(cases, source, clearance, skip_fix, namus_missing, namus_unidentified)
     dets = detectors or (*DEFAULT_DETECTORS, "ensemble")
-    p = parse_overrides(params)
-    p["ensemble"] = {"params": dict(p)}
+    from ..presets import resolve
+    pdets, p = resolve(preset, None, parse_overrides(params))
+    p["ensemble"] = {"params": dict(p), **({"detectors": pdets} if pdets else {})}
     series = load_series(series_file)
     click.echo(evaluate(data, dets, p, series).to_string(index=False))
     if backtest:
@@ -173,12 +186,16 @@ def quality(cases, source, clearance, skip_fix, namus_missing, namus_unidentifie
 @click.option("--state", required=True)
 @click.option("-d", "--detector", "detectors", multiple=True, help="Detectors to include (repeatable)")
 @click.option("-p", "--param", "params", multiple=True, help="detector.param=value")
+@click.option("--preset", help="Build from a preset")
 @click.option("--out-dir", default="explorer_site", show_default=True)
-def explorer(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, state, detectors, params, out_dir):
+def explorer(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, state, detectors, params,
+             preset, out_dir):
     """Build the interactive explorer for one state."""
+    from ..presets import resolve
     from .explorer.build import build_site
-    path = build_site(_load(cases, source, clearance, skip_fix, namus_missing, namus_unidentified), state, Path(out_dir),
-                      detectors or DEFAULT_DETECTORS, parse_overrides(params))
+    dets, prm = resolve(preset, detectors, parse_overrides(params))
+    path = build_site(_load(cases, source, clearance, skip_fix, namus_missing, namus_unidentified), state,
+                      Path(out_dir), dets or DEFAULT_DETECTORS, prm)
     click.echo(f"Explorer written to {path}. Serve the folder (python -m http.server) and open index.html.")
 
 

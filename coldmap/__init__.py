@@ -24,11 +24,14 @@ from .detectors import DETECTORS, Detector
 from .enrichers import ENRICHERS, Enricher
 from .ensemble import DEFAULT_DETECTORS, Ensemble, Matcher, run
 from .fixes import FIXES, Fix
+from .presets import PRESETS, Preset
 from .sources import SOURCES, Source, load
 
 __all__ = [
     "Dataset", "Finding", "Query", "Registry", "findings_frame",
     "DETECTORS", "Detector", "ENRICHERS", "Enricher", "FIXES", "Fix", "SOURCES", "Source",
-    "Ensemble", "Matcher", "DEFAULT_DETECTORS", "load", "run",
+    "Ensemble", "Matcher", "DEFAULT_DETECTORS", "PRESETS", "Preset", "load", "run", "explain",
 ]
-__version__ = "0.2.0"
+__version__ = "0.3.0"
+
+from .explain import explain  # noqa: E402

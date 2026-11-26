@@ -50,9 +50,13 @@ Subclass `coldmap.quality.Check`, implement `run(data, state=None)` returning a 
 
 Subclass `coldmap.enrichers.Enricher`, implement `enrich(findings, data)`, register it. Enrichers must not drop findings.
 
+## Add a preset
+
+Register a `coldmap.presets.Preset(name, summary, detectors, params)`. Say who it's for and benchmark it.
+
 ## Add a known series
 
-Append to `coldmap/benchmarks/known_series.json`. Only publicly adjudicated series (conviction, guilty plea or official attribution), with a `note` stating the basis.
+Append to `coldmap/benchmarks/known_series.json`. Only publicly adjudicated series (conviction, guilty plea or official attribution), with a `note` stating the basis. Series that detectors miss are as valuable as ones they catch: they show where the blind spots are.
 
 ## Package a plugin
 
