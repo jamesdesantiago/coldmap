@@ -547,11 +547,12 @@ function renderPlugins(){
 /* state menu: only when served by `coldmap open`, which can build any state on request */
 function statePicker(){
  fetch('../states.json').then(r=>r.ok?r.json():null).then(j=>{
-  if(!j||!j.states||j.states.length<2)return;
+  if(!j||!j.states||!j.states.length)return;
   const sel=document.createElement('select');
   sel.className='statechip statepick';sel.id='stateChip';sel.setAttribute('aria-label','State');
-  sel.innerHTML=j.states.map(s=>`<option value="${esc(s.slug)}"${s.name===M.state?' selected':''}>${esc(s.name)}</option>`).join('');
-  sel.addEventListener('change',()=>{location.href='../'+encodeURIComponent(sel.value)+'/'+location.hash});
+  sel.innerHTML=j.states.map(s=>`<option value="${esc(s.slug)}"${s.name===M.state?' selected':''}>${esc(s.name)}${s.built===false?' (not built yet)':''}</option>`).join('')
+   +'<option value="">Home: data and all states</option>';
+  sel.addEventListener('change',()=>{location.href=sel.value?'../'+encodeURIComponent(sel.value)+'/'+location.hash:'../'});
   $('stateChip').replaceWith(sel);
  }).catch(()=>{});
 }

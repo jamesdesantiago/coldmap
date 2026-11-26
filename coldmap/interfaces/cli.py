@@ -227,35 +227,39 @@ def explorer(cases, source, clearance, skip_fix, namus_missing, namus_unidentifi
 @click.option("--cases", type=click.Path(exists=True, dir_okay=False), help="Use this case file instead of downloading")
 @click.option("--clearance", type=click.Path(exists=True, dir_okay=False), help="Use this clearance file")
 @click.option("--sample", is_flag=True, help="Open the synthetic sample (fictional 'Samplestate'), no download")
-@click.option("--refresh", is_flag=True, help="Download MAP's files again (after MAP publishes an update)")
-@click.option("--rebuild", is_flag=True, help="Rebuild the explorer even if a current one exists")
+@click.option("--refresh", is_flag=True, help="Download MAP's files again as soon as the app opens")
+@click.option("--rebuild", is_flag=True, help="Rebuild each state's explorer even if a current one exists")
 @click.option("--port", default=8765, show_default=True)
 @click.option("--no-browser", is_flag=True, help="Don't open a browser window")
 def open_cmd(state, cases, clearance, sample, refresh, rebuild, port, no_browser):
-    """The easy way in: get the data, build the explorer and open it in your browser.
+    """The easy way in: opens the coldmap app in your browser.
 
-    Opens STATE first; every other state in the file is a menu choice away in the page.
+    The app walks you through getting the data, picking a state and building its
+    explorer, with progress for each step. Give STATE to start building it right away.
 
     
+    coldmap open
     coldmap open California
     coldmap open --sample
     """
+    from urllib.parse import urlencode
+
     from . import launch
     click.echo(NOTICE)
     if sample:
         from ..sample import make_sample
         cases, clearance = make_sample(launch.home() / "sample")
-        state = "Samplestate"
-    elif cases:
-        cases, clearance = Path(cases), Path(clearance) if clearance else None
+        mode, state = "sample", state or "Samplestate"
     else:
-        cases, clearance = launch.ensure_data(refresh)
-    lib = launch.Library(Path(cases), Path(clearance) if clearance else None, rebuild=rebuild or refresh)
-    if not state:
-        state = click.prompt("Which state first? (switch to any other in the browser)", default="California")
-    state = lib.resolve(state.strip())
-    lib.build(state)
-    launch.serve(lib, state, port, open_browser=not no_browser)
+        mode = "files" if cases else "map"
+    app = launch.App(mode, Path(cases) if cases else None, Path(clearance) if clearance else None,
+                     rebuild=rebuild)
+    query = {}
+    if refresh and mode == "map":
+        query["download"] = "refresh"
+    if state:
+        query["build"] = state.strip()
+    launch.serve(app, port, open_browser=not no_browser, path="/" + (f"?{urlencode(query)}" if query else ""))
 
 
 @main.command()

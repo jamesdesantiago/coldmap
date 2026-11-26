@@ -20,19 +20,24 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 Close and reopen the terminal, then run:
 
 ```bash
-uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip coldmap open California
+uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip coldmap open
 ```
 
-The first time, coldmap downloads the Murder Accountability Project's public files (about 365 MB), searches the state and opens the explorer in your browser. **Every state in the file is in the menu at the top of the page**; one you haven't opened before takes a few seconds to build, then it's saved. After the first run everything opens in seconds. Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
+Your browser opens on the coldmap app straight away. It explains what coldmap does and walks you through three steps, with progress for each:
+
+1. **Get the data.** One click downloads the Murder Accountability Project's public files (about 365 MB, under a minute on a fast connection). Later, **Check for updates** compares your copy with MAP's latest without downloading it again.
+2. **Choose a state.** All of them are listed, with their case counts.
+3. **Build and explore.** coldmap searches the state (a few seconds for most, a minute or two for the largest), then opens the explorer. Each build is saved, so it opens instantly next time. The explorer's state menu switches states or goes back home.
+
+Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
 
 Change what comes after `coldmap open` to do more (keep the `uvx --from ...` part in front):
 
-- Start on another state: `coldmap open Texas`. Leave the state off and it asks.
+- Start building a state right away: `coldmap open Texas`.
 - Just looking? `coldmap open --sample` opens a synthetic example (invented data, no download).
-- MAP released new data? `coldmap open California --refresh`.
-- Already have the files? `coldmap open California --cases SHR76_25a.csv --clearance UCR65_25.csv`.
+- Already have the files? `coldmap open --cases SHR76_25a.csv --clearance UCR65_25.csv`.
 
-To type just `coldmap open California` from then on, install it once with `uv tool install https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip`. Data and built explorers live in `~/.coldmap` (change it with the `COLDMAP_HOME` environment variable).
+To type just `coldmap open` from then on, install it once with `uv tool install https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip`. Data and built explorers live in `~/.coldmap` (change it with the `COLDMAP_HOME` environment variable).
 
 ## The pipeline
 

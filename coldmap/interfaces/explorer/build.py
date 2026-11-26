@@ -20,6 +20,13 @@ from ...sources.map_files import WEAPON_GROUPS
 
 WEAPONS = ["Gun", "Knife", "Beating/blunt", "Strangle/asphyxia", "Fire", "Other/unknown", "Not reported"]
 CONF = ["high", "strong", "possible"]
+# What build_site reports to its `progress` callback, in order (key, plain-language label).
+BUILD_STEPS = [("count", "Count cases by county and year"),
+               ("women", "Search for clusters among women"),
+               ("men", "Search for clusters among men"),
+               ("explain", "Write plain-language explanations"),
+               ("quality", "Check data quality"),
+               ("save", "Save the explorer")]
 
 
 def _group(w: str) -> str:
@@ -59,10 +66,14 @@ def _json_or_none(path):
 
 def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETECTORS,
                params: dict | None = None, profiles: bool = True,
-               benchmark_file: str | Path | None = None, controls_file: str | Path | None = None) -> Path:
+               benchmark_file: str | Path | None = None, controls_file: str | Path | None = None,
+               progress=None) -> Path:
     """Build the app. benchmark_file / controls_file are JSON written by
-    `coldmap benchmark --json` and `coldmap controls --json` (optional; shown if given)."""
+    `coldmap benchmark --json` and `coldmap controls --json` (optional; shown if given).
+    progress, if given, is called with each BUILD_STEPS key as that step starts."""
     params = params or {}
+    step = progress or (lambda key: None)
+    step("count")
     d = data.cases[(data.cases.state == state) & data.cases.county.notna()].copy()
     if d.empty:
         raise ValueError(f"No cases for state {state!r}. Use the full name, e.g. 'California'.")
@@ -96,6 +107,7 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
         prof = Ensemble.from_names(pd_, pp_)
         views["profiles"] = {}
     for sx, sex in ((0, "Female"), (1, "Male")):
+        step("women" if sx == 0 else "men")
         q = Query(state=state, victim_sex=sex)
         found = {det.name: enrich(det.detect(data, q), data, ens.enrichers) for det in ens.detectors}
         views["ensemble"][sx] = ens.combine(copy.deepcopy(found))
@@ -123,6 +135,11 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
                 {k: v for k, v in explain(fd, data).items() if k in ("what", "agreement", "statistics", "data", "cases", "namus")},
                 fd.extras.get("profile", {}).get("age_band"), cs or None]
 
+    step("explain")
+    findings = {v: {sx: [r for r in map(row, fl) if r] for sx, fl in by.items()} for v, by in views.items()}
+    step("quality")
+    quality = _quality(data, state)
+    step("save")
     strip = counties[0][counties[0].rfind(","):] if "," in counties[0] else ""
     busiest = d.county.value_counts().index[0]
     meta = {
@@ -136,9 +153,9 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
                        "summary": "Combined, split by victim age band"}] if prof else [])
                   + [{"id": x.name, "label": x.name, "kind": "detector", "tier": x.tier, "summary": x.summary}
                      for x in ens.detectors]),
-        "findings": {v: {sx: [r for r in map(row, fl) if r] for sx, fl in by.items()} for v, by in views.items()},
+        "findings": findings,
         "plugins": plugin_catalog(),
-        "quality": _quality(data, state),
+        "quality": quality,
         "benchmark": _json_or_none(benchmark_file),
         "controls": _json_or_none(controls_file),
         "namus": {k: len(v) for k, v in getattr(data, "aux", {}).items()},

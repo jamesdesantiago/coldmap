@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>coldmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* The coldmap app's home: the same console as the explorer, one guided column.
+   Three steps (data, state, build) with live progress; numbers carry the order. */
+:root{color-scheme:light dark;
+--bg:light-dark(#eef1f4,#0b0f13);--surf:light-dark(#ffffff,#131920);--surf2:light-dark(#f5f7f9,#19212a);
+--line:light-dark(#dde2e7,#242e38);--ink:light-dark(#111820,#e6ebef);--mute:light-dark(#5b6773,#8694a1);
+--red:light-dark(#d4231b,#ff5d52);--blue:light-dark(#276887,#5fb0d6);--green:light-dark(#1f7a4d,#4cc38a);
+--amber:light-dark(#a86200,#f0a440);--pale:light-dark(#edf1f4,#223040)}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif;min-height:100vh}
+button,input{font:inherit;color:inherit}
+a{color:var(--blue);text-underline-offset:2px}
+code{font-family:"JetBrains Mono",monospace;font-size:.9em;overflow-wrap:anywhere}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+::selection{background:color-mix(in oklab,var(--blue) 30%,transparent)}
+.num,.elapsed{font-variant-numeric:tabular-nums}
+
+.bar{display:flex;align-items:center;gap:14px;height:56px;padding:0 16px;background:var(--surf);border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.02em}
+.grow{flex:1}
+.chip{font-size:12px;font-weight:600;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:4px 10px;white-space:nowrap}
+
+main{max-width:820px;margin:0 auto;padding:40px 20px 64px}
+h1{font-size:28px;line-height:1.2;letter-spacing:-.025em;margin:0 0 10px;text-wrap:balance}
+.lede{color:var(--mute);margin:0 0 32px;max-width:64ch}
+
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:14px}
+.step{display:grid;grid-template-columns:32px minmax(0,1fr);gap:16px;background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+.step[data-state=waiting]{background:transparent}
+.step[data-state=waiting] h2,.step[data-state=waiting] .badge{color:var(--mute)}
+.badge{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:14px;border:1.5px solid var(--line);background:var(--surf2)}
+.step[data-state=current] .badge{border-color:var(--ink);background:var(--ink);color:var(--surf)}
+.step[data-state=done] .badge{border-color:var(--green);background:var(--green);color:var(--surf)}
+.badge svg{width:15px;height:15px}
+h2{font-size:17px;letter-spacing:-.01em;margin:4px 0 6px}
+.step p{margin:0 0 12px;max-width:68ch}
+.step p:last-child{margin-bottom:0}
+.muted{color:var(--mute)}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px}
+
+.btn{border:1px solid var(--line);background:var(--surf2);border-radius:9px;min-height:38px;padding:0 14px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn:hover{border-color:var(--mute)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--surf)}
+.btn.primary:hover{background:color-mix(in oklab,var(--ink) 86%,var(--surf))}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn svg{width:14px;height:14px}
+
+.msg{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:12px 0 0;font-size:13px;max-width:68ch}
+.msg.ok{border-color:color-mix(in oklab,var(--green) 45%,var(--line));background:color-mix(in oklab,var(--green) 8%,var(--surf))}
+.msg.warn{border-color:color-mix(in oklab,var(--amber) 50%,var(--line));background:color-mix(in oklab,var(--amber) 9%,var(--surf))}
+.msg.err{border-color:color-mix(in oklab,var(--red) 50%,var(--line));background:color-mix(in oklab,var(--red) 8%,var(--surf))}
+.files{margin:0;padding:0;list-style:none;font-size:13px;display:grid;gap:4px}
+.files b{font-weight:600}
+
+/* live job: a checklist whose current line carries the detail */
+.job{margin-top:4px}
+.jobhead{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.jobhead strong{font-size:14px}
+.elapsed{color:var(--mute);font-size:12px}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.checks li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:10px;align-items:start;font-size:13px}
+.checks li[data-state=pending]{color:var(--mute)}
+.checks li[data-state=active]{font-weight:600}
+.ind{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;margin-top:1px}
+.ind svg{width:11px;height:11px}
+[data-state=active]>.ind{border-color:color-mix(in oklab,var(--blue) 25%,var(--line));border-top-color:var(--blue);animation:spin .8s linear infinite}
+[data-state=done]>.ind{border-color:var(--green);background:var(--green);color:var(--surf)}
+[data-state=error]>.ind{border-color:var(--red);background:var(--red);color:var(--surf)}
+@keyframes spin{to{transform:rotate(1turn)}}
+@media (prefers-reduced-motion:reduce){[data-state=active]>.ind{animation:none;border-color:var(--blue)}}
+.meter{height:6px;border-radius:99px;background:var(--pale);overflow:hidden;margin:8px 0 4px;max-width:420px}
+.meter>i{display:block;height:100%;background:var(--blue);border-radius:inherit;transition:width .4s cubic-bezier(.16,1,.3,1)}
+.meter.indet>i{width:30%;animation:slide 1.4s cubic-bezier(.65,0,.35,1) infinite}
+@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(340%)}}
+@media (prefers-reduced-motion:reduce){.meter.indet>i{animation:none;width:100%;opacity:.35}}
+.bytes{font-weight:400;color:var(--mute);font-size:12px}
+
+/* states: a dense list, not cards */
+.tools{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:4px 0 12px}
+.search{position:relative;flex:1 1 220px;max-width:320px}
+.search input{width:100%;height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surf2);padding:0 12px 0 34px}
+.search input::placeholder{color:var(--mute)}
+.search svg{position:absolute;left:11px;top:50%;width:14px;height:14px;transform:translateY(-50%);color:var(--mute);pointer-events:none}
+.count{font-size:12px;color:var(--mute)}
+.states{list-style:none;margin:0;padding:0 6px 0 0;max-height:min(50vh,430px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) transparent;align-content:start;border-bottom:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:20px;border-top:1px solid var(--line)}
+.states li{border-bottom:1px solid var(--line)}
+.st{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 10px;padding:9px 8px;cursor:pointer;border-radius:8px}
+.st:hover{background:var(--surf2)}
+.st:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.st[aria-disabled=true]{cursor:not-allowed;opacity:.55}
+.st .n{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st .c{grid-column:1;font-size:12px;color:var(--mute)}
+.st .s{grid-row:1/3;grid-column:2;font-size:11px;font-weight:700;color:var(--mute)}
+.st .s.ready{color:var(--green)}
+.st.current{background:color-mix(in oklab,var(--blue) 10%,transparent)}
+.quick{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:2px 0 16px;font-size:13px}
+.quick .btn{text-decoration:none}
+.empty{padding:14px 8px;color:var(--mute);font-size:13px}
+
+.about{margin:0 0 28px;border:1px solid var(--line);border-radius:14px;background:var(--surf)}
+.about>summary{list-style:none;cursor:pointer;padding:14px 22px;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;border-radius:14px}
+.about>summary::-webkit-details-marker{display:none}
+.about>summary::after{content:"";width:7px;height:7px;border:solid var(--mute);border-width:0 1.6px 1.6px 0;transform:rotate(45deg);margin:-3px 0 0 2px;transition:transform .2s}
+.about[open]>summary::after{transform:rotate(-135deg);margin-top:3px}
+.about>summary:hover{background:var(--surf2)}
+.how{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 28px;margin:0;padding:4px 22px 20px}
+.how dt{font-weight:700;font-size:13.5px;margin:0 0 3px}
+.how dd{margin:0;color:var(--mute);font-size:13.5px;max-width:52ch}
+.how dd b{color:var(--ink);font-weight:600}
+.caveat{grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px;font-size:13px;color:var(--mute)}
+.caveat b{color:var(--ink)}
+footer{max-width:820px;margin:0 auto;padding:0 20px 40px;color:var(--mute);font-size:12px}
+@media (max-width:640px){
+ main{padding:24px 14px 48px}
+ h1{font-size:23px}
+ .step{grid-template-columns:28px minmax(0,1fr);gap:12px;padding:16px 14px}
+ .badge{width:28px;height:28px;font-size:13px}
+ h2{margin-top:2px}
+ .how{grid-template-columns:1fr;padding:4px 16px 16px}
+ .about>summary{padding:14px 16px}
+ .bar .chip{display:none}
+ .search{max-width:none}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+ <div class="logo"><svg width="24" height="24" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="5" fill="var(--ink)"/><rect x="5" y="5" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="5" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="5" width="4" height="4" fill="var(--red)"/><rect x="5" y="9" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="9" y="9" width="4" height="4" fill="var(--red)"/><rect x="13" y="9" width="4" height="4" fill="var(--red)"/><rect x="5" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="13" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/></svg><span>coldmap</span></div>
+ <div class="grow"></div>
+ <span class="chip">Runs on this computer only</span>
+</header>
+<main>
+ <h1 id="title">Getting coldmap ready</h1>
+ <p class="lede" id="lede">Loading…</p>
+ <details class="about" id="about" open>
+  <summary>What does coldmap do?</summary>
+  <dl class="how">
+   <div><dt>The data</dt><dd>Homicides that police reported to the FBI since 1976, and whether they identified who did it. Some agencies report incompletely, and coldmap shows where. The Murder Accountability Project (MAP), a nonprofit, publishes it.</dd></div>
+   <div><dt>What coldmap looks for</dt><dd>In each county it compares how often similar killings were solved, for example <b>women killed by strangulation</b>. It flags groups of years where they were solved <b>far less often than expected</b>.</dd></div>
+   <div><dt>Why that helps</dt><dd>Each police agency only sees its own cases. A run of similar unsolved killings across nearby towns or many years can go unnoticed. It may mean the cases are connected, or that an agency struggles to solve them. Either way, it deserves a closer look.</dd></div>
+   <div><dt>What you do with a flag</dt><dd>The explorer shows why each place was flagged, how often flags like it turn out to be false alarms, and known problems in the data. If one still looks real, a second person reviews it before it goes to MAP or the police tip line.</dd></div>
+   <p class="caveat"><b>A flag is a pattern worth review, not evidence that cases are linked.</b> Never contact families, witnesses or possible suspects. Read the <a href="https://github.com/jamesdesantiago/coldmap/blob/main/ETHICS.md" target="_blank" rel="noopener">ethics rules</a> before sharing anything.</p>
+  </dl>
+ </details>
+ <ol class="steps">
+  <li class="step" id="s1" data-state="current" aria-labelledby="h1x">
+   <div class="badge" aria-hidden="true">1</div>
+   <div><h2 id="h1x">Get the data</h2><div id="b1"></div></div>
+  </li>
+  <li class="step" id="s2" data-state="waiting" aria-labelledby="h2x">
+   <div class="badge" aria-hidden="true">2</div>
+   <div><h2 id="h2x">Choose a state</h2><div id="b2"></div></div>
+  </li>
+  <li class="step" id="s3" data-state="waiting" aria-labelledby="h3x">
+   <div class="badge" aria-hidden="true">3</div>
+   <div><h2 id="h3x">Build and explore</h2><div id="b3" aria-live="polite"></div></div>
+  </li>
+ </ol>
+</main>
+<footer id="foot"></footer>
+<script>
+const $=id=>document.getElementById(id);
+const put=(id,html)=>{const el=$(id);if(el._h!==html){el.innerHTML=html;el._h=html;return true}return false};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ICON={
+ check:'<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.4l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+ x:'<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 3.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+ down:'<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2v7m-3-3l3 3 3-3M2.5 12h9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+ refresh:'<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M11.5 6.5A4.5 4.5 0 1 1 10 3.2M11.5 1.8v2.7H8.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+ search:'<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.2 9.2L12.5 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+};
+const S={st:null,filter:'',follow:null,pendingBuild:null,pendingDownload:null,checking:false,err:null,timer:null};
+const q=new URLSearchParams(location.search);
+if(q.get('build'))S.pendingBuild=q.get('build');
+if(q.get('download'))S.pendingDownload=q.get('download');
+if(q.toString())history.replaceState(null,'','/');
+
+const mb=n=>n==null?'':n>=1e9?(n/1e9).toFixed(1)+' GB':n>=1e7?Math.round(n/1e6)+' MB':(n/1e6).toFixed(1)+' MB';
+const clock=s=>{s=Math.round(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const day=iso=>iso?new Date(iso).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}):'';
+const nf=new Intl.NumberFormat();
+
+async function post(path){
+ const r=await fetch(path,{method:'POST',headers:{'X-Coldmap':'1'}});
+ const j=await r.json().catch(()=>({error:'The app stopped responding. Is the terminal window still open?'}));
+ if(!r.ok)throw new Error(j.error||'Something went wrong.');
+ return j;
+}
+async function refresh(){
+ clearTimeout(S.timer);
+ try{
+  const r=await fetch('/api/status',{cache:'no-store'});
+  S.st=await r.json();S.err=null;
+ }catch(e){S.err="Can't reach coldmap. It may have been stopped: run coldmap open again in your terminal, then reload this page."}
+ const job=S.st&&S.st.job;
+ if(job&&!job.running&&job.id===S.follow){
+  S.follow=null;
+  if(job.kind==='build'&&!job.error&&job.result){location.href='/'+job.result.slug+'/';return}
+ }
+ autostart();
+ render();
+ if(job&&job.running&&job.kind==='build'&&job.id===S.follow&&S.shown!==job.id){
+  S.shown=job.id;
+  $('s3').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'});
+ }
+ const busy=!S.err&&(job&&job.running||S.st&&S.st.data.ready&&!S.st.states);
+ S.timer=setTimeout(refresh,S.err?3000:busy?500:15000);
+}
+function autostart(){
+ const st=S.st;if(!st||st.job&&st.job.running)return;
+ if(S.pendingDownload&&st.mode==='map'){const r=S.pendingDownload==='refresh';S.pendingDownload=null;act(()=>post('/api/download'+(r?'?refresh=1':'')));return}
+ if(S.pendingBuild&&st.states){const s=S.pendingBuild;S.pendingBuild=null;build(s)}
+}
+async function act(fn){
+ try{const j=await fn();if(j&&j.id)S.follow=j.id}catch(e){S.actionErr=e.message}
+ refresh();
+}
+function build(state){
+ const hit=S.st.states.find(s=>s.slug===state||s.name.toLowerCase()===String(state).toLowerCase());
+ if(hit&&hit.built){location.href='/'+hit.slug+'/';return}
+ S.actionErr=null;
+ act(()=>post('/api/build?state='+encodeURIComponent(state)));
+}
+async function checkUpdates(){
+ S.checking=true;render();
+ try{await post('/api/check')}catch(e){S.actionErr=e.message}
+ S.checking=false;refresh();
+}
+
+function jobView(job,{retry}={}){
+ const steps=job.steps.map(s=>{
+  const ind=s.state==='done'?ICON.check:s.state==='error'?ICON.x:'';
+  let extra='';
+  if(s.state==='active'&&job.bytes){
+   const [d,t]=job.bytes,pct=t?Math.min(100,d/t*100):null;
+   extra=`<div class="meter${pct==null?' indet':''}" role="progressbar" aria-label="${esc(s.label)}" ${pct==null?'':`aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"`}><i style="${pct==null?'':`width:${pct.toFixed(1)}%`}"></i></div>`+
+         `<span class="bytes num">${mb(d)}${t?' of '+mb(t):''}</span>`;
+  }
+  const when=s.state==='active'&&!job.bytes&&job.running?' <span class="bytes">working…</span>':'';
+  return `<li data-state="${s.state}"><span class="ind">${ind}</span><span>${esc(s.label)}${when}${extra}</span></li>`;
+ }).join('');
+ const notes=job.notes.map(n=>`<p class="msg warn">${esc(n)}</p>`).join('');
+ const err=job.error?`<div class="msg err" role="alert"><b>That didn't work.</b> ${esc(job.error)}${retry?`<div class="row"><button class="btn" id="${retry}">Try again</button></div>`:''}</div>`:'';
+ return `<div class="job"><div class="jobhead"><strong>${esc(job.title)}</strong><span class="elapsed">${job.running?'':'took '}${clock(job.elapsed)}</span></div><ol class="checks">${steps}</ol>${notes}${err}</div>`;
+}
+
+function stepState(el,state){$(el).dataset.state=state;const b=$(el).querySelector('.badge');b.innerHTML=state==='done'?ICON.check:String(el.slice(1))}
+
+function render(){
+ const st=S.st;
+ if(S.err||!st){$('lede').textContent=S.err||'Loading…';return}
+ const job=st.job,run=job&&job.running;
+ const ready=st.data.ready,states=st.states;
+ const built=states?states.filter(s=>s.built).length:0;
+
+ $('title').textContent=built?'Pick up where you left off':'Find unsolved killings that may deserve a second look';
+ $('lede').textContent=built?'Open a state you’ve built, build another, or check MAP for newer data.'
+  :'coldmap scans public homicide records for places where similar killings went unsolved far more often than they should. It runs on your computer. Setting it up takes three steps.';
+ if(!S.aboutSet){S.aboutSet=true;$('about').open=!built}
+ $('foot').innerHTML=`coldmap ${esc(st.version)} · data and builds are kept in <code>${esc(st.home)}</code>`;
+
+ // 1 · data
+ stepState('s1',ready?'done':'current');
+ let b1='';
+ const dataJob=job&&(job.kind==='download'||job.kind==='index')?job:null;
+ if(st.mode==='sample'){
+  b1=`<p>Using the synthetic sample: a fictional state, Samplestate, with one planted series, for trying coldmap out. No download needed.</p>`;
+ }else if(st.mode==='files'){
+  b1=`<p>Using your own files:</p><ul class="files">${st.data.files.filter(f=>f.path).map(f=>`<li><b>${esc(f.label)}</b> <code>${esc(f.path)}</code></li>`).join('')}</ul>`;
+ }else if(dataJob&&dataJob.kind==='download'&&(dataJob.running||dataJob.error||!ready)){
+  b1=jobView(dataJob,{retry:'retryDl'});
+ }else if(!ready){
+  b1=`<p>coldmap reads the Murder Accountability Project's public files: a case file of homicides since 1976 and a clearance file of how many each police agency solved. About 365 MB in all, downloaded once to <code>${esc(st.home)}</code>. Nothing is uploaded anywhere.</p>
+   <div class="row"><button class="btn primary" id="dl"${run?' disabled':''}>${ICON.down}Download the data</button></div>`;
+ }else{
+  const [c,cl]=st.data.files;
+  const when=c.downloaded?`Downloaded ${day(c.downloaded)}. `:'';
+  b1=`<p>${when}<span class="num">${mb(c.size)}</span> case file${cl.present?`, <span class="num">${mb(cl.size)}</span> clearance file`:''}.</p>`;
+  if(!cl.present)b1+=`<p class="msg warn">The clearance file is missing, so coverage figures will be blank. <button class="btn" id="dlMissing"${run?' disabled':''}>${ICON.down}Download it</button></p>`;
+  const ck=st.data.check;
+  let note='';
+  if(S.checking)note=`<p class="msg">Checking with MAP…</p>`;
+  else if(ck&&ck.error)note=`<p class="msg err" role="alert">${esc(ck.error)}</p>`;
+  else if(ck&&ck.updates)note=`<div class="msg warn"><b>MAP has published newer files.</b> Updating downloads them again and rebuilds each state the next time you open it.<div class="row"><button class="btn primary" id="update"${run?' disabled':''}>${ICON.down}Download the update</button></div></div>`;
+  else if(ck)note=`<p class="msg ok">Up to date with MAP's latest files.</p>`;
+  b1+=`<div class="row"><button class="btn" id="check"${run||S.checking?' disabled':''}>${ICON.refresh}Check for updates</button></div>${note}`;
+  if(dataJob&&dataJob.kind==='download'&&!dataJob.running&&!dataJob.error&&dataJob.notes.length)b1+=dataJob.notes.map(n=>`<p class="msg warn">${esc(n)}</p>`).join('');
+ }
+ put('b1',b1);
+
+ // 2 · state
+ const building=job&&job.kind==='build'&&run;
+ stepState('s2',!ready?'waiting':building?'done':'current');
+ let b2='';
+ if(!ready)b2=`<p class="muted">Every state in the data, once it's downloaded.</p>`;
+ else if(!states)b2=dataJob&&dataJob.kind==='index'?jobView(dataJob):`<p class="muted">Reading the case file…</p>`;
+ else if(building)b2=`<p>You picked <b>${esc(job.title.replace(/^Building /,''))}</b>. Its progress is below.</p>`;
+ else{
+  const f=S.filter.trim().toLowerCase();
+  const shown=states.filter(s=>!f||s.name.toLowerCase().includes(f));
+  const cur=job&&job.kind==='build'&&run?job.result?.slug||job.title.replace(/^Building /,''):null;
+  const ready_=states.filter(s=>s.built);
+  b2=(ready_.length?`<div class="quick"><span class="muted">Ready to open:</span>${ready_.slice(0,6).map(s=>`<a class="btn primary" href="/${esc(s.slug)}/">Open ${esc(s.name)}</a>`).join('')}</div>`:'')+`<div class="tools"><label class="search">${ICON.search}<input id="filter" type="search" placeholder="Find a state" aria-label="Find a state" value="${esc(S.filter)}" autocomplete="off"></label>
+   <span class="count num">${states.length} ${states.length===1?"state":"states"} · ${built} built</span></div>
+   <ul class="states" id="list">${shown.map(s=>{
+     const isCur=cur===s.name;
+     return `<li><button class="st${isCur?' current':''}" data-slug="${esc(s.slug)}" ${run&&!s.built?'aria-disabled="true"':''}>
+      <span class="n">${esc(s.name)}</span>${s.cases!=null?`<span class="c num">${nf.format(s.cases)} cases</span>`:''}
+      <span class="s${s.built?' ready':''}">${isCur?'Building…':s.built?'Open':'Build'}</span></button></li>`}).join('')||`<li class="empty">No state matches “${esc(S.filter)}”.</li>`}</ul>`;
+ }
+ const focusFilter=document.activeElement&&document.activeElement.id==='filter';
+ const caret=focusFilter?document.activeElement.selectionStart:null;
+ if(put('b2',b2)&&focusFilter){const i=$('filter');i.focus();i.setSelectionRange(caret,caret)}
+
+ // 3 · build
+ const bj=job&&job.kind==='build'?job:null;
+ stepState('s3',bj&&bj.running?'current':!states?'waiting':'current');
+ let b3='';
+ if(S.actionErr)b3+=`<p class="msg err" role="alert">${esc(S.actionErr)}</p>`;
+ if(bj&&(bj.running||bj.error))b3+=jobView(bj,{retry:'retryBuild'})+(bj.running?`<p class="muted" style="margin-top:12px">The explorer opens by itself when it's done. The largest states take a minute or two the first time; after that they open instantly.</p>`:'');
+ else if(bj&&bj.result)b3+=`<p class="msg ok">${esc(bj.result.state)} is ready. <a href="/${esc(bj.result.slug)}/">Open the ${esc(bj.result.state)} explorer</a></p>`;
+ else if(states)b3+=`<p class="muted">Pick a state above. coldmap searches its counties, which takes from a few seconds to a couple of minutes, then opens the explorer: a list of flagged places, strongest first, each with a chart of solved and unsolved killings by year and a plain-language reason it was flagged. States marked Ready open straight away.</p>`;
+ else b3+=`<p class="muted">Once you pick a state, coldmap searches it and opens the explorer: a list of flagged places, strongest first, each with the reason it was flagged.</p>`;
+ put('b3',b3);
+}
+
+document.addEventListener('click',e=>{
+ const t=e.target.closest('button');if(!t)return;
+ if(t.id==='dl'||t.id==='retryDl'||t.id==='dlMissing'){S.actionErr=null;act(()=>post('/api/download'))}
+ else if(t.id==='update'){S.actionErr=null;act(()=>post('/api/download?refresh=1'))}
+ else if(t.id==='check')checkUpdates();
+ else if(t.id==='retryBuild'){const j=S.st.job;S.actionErr=null;build(j.title.replace(/^Building /,''))}
+ else if(t.classList.contains('st')){
+  if(t.getAttribute('aria-disabled')==='true'){S.actionErr='Wait for the current step to finish, then pick another state.';render();return}
+  build(t.dataset.slug);
+ }
+});
+document.addEventListener('input',e=>{if(e.target.id==='filter'){S.filter=e.target.value;render()}});
+document.addEventListener('keydown',e=>{
+ if(e.target.id==='filter'&&e.key==='Enter'){const b=document.querySelector('#list .st');if(b)b.click()}
+});
+refresh();
+</script>
+</body>
+</html>
