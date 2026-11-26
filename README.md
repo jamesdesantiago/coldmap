@@ -33,10 +33,20 @@ Every box marked *plugin* is a registry. Built-ins register themselves; third-pa
 
 An example third-party detector lives in [`examples/coldmap-streak`](examples/coldmap-streak).
 
-## Quick start
+## Try it in a minute
 
 ```bash
 pip install -e ".[mcp,dev]"
+coldmap sample                     # synthetic data: a fictional state with a planted series
+coldmap scan sample_cases.csv --state Samplestate --clearance sample_clearance.csv --explain 1
+coldmap quality sample_cases.csv --clearance sample_clearance.csv
+```
+
+The sample is entirely invented (no real victims, places or agencies). It contains a planted series of strangulations in "Harbor County", the 2021 coding problem and a reporting gap, and coldmap should find all three.
+
+## Quick start with real data
+
+```bash
 # Data: download SHR76_25a.csv (and optionally UCR65_25.csv) from https://www.murderdata.org/p/data-docs.html
 
 coldmap plugins                                               # what's installed, with every parameter
@@ -77,6 +87,13 @@ Explicit `-d` and `-p` options override a preset. Presets are a registry too, so
 ## Why was this flagged?
 
 `coldmap.explain(finding, data)`, `coldmap scan --explain N`, the MCP `triage_finding` tool and the explorer's panel all give the same plain-language triage: the numbers against what was expected, which detectors agree and how much that level of confidence is worth, statistics, data problems that touch that state and period, coverage, NamUs context, who the victims were in aggregate, and next steps.
+
+## Data conventions
+
+- **Unknown age** (999 in the source) is kept when filtering by minimum age, because those victims are often unidentified adults found long after death. Use `Query(keep_unknown_age=False)` to drop them, or `min_age=None` to include all ages.
+- **Unknown month** is stored as 0 and never guessed.
+- **Solved** means an offender was identified when the report was filed (see DATA_ISSUES.md).
+- **Case lists** in the explorer cover women only, matching MAP's focus; detectors run for both sexes.
 
 ## Ensembles and confidence
 

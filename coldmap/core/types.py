@@ -20,7 +20,7 @@ CASE_COLUMNS = {
     "agency": "Reporting agency name",
     "msa": "Metropolitan area label (may be empty)",
     "year": "Year of death or discovery (int)",
-    "month": "1-12, 0 if unknown",
+    "month": "1-12; 0 if the source didn't record a month (kept, never guessed)",
     "solved_raw": "Offender identified when reported, as the source recorded it (bool)",
     "vic_age": "Victim age; 999 = unknown (int)",
     "vic_sex": "Female, Male or Unknown",
@@ -41,7 +41,9 @@ class Query:
     """What to analyze. Detectors must respect every field they can."""
     state: str | None = None
     victim_sex: str = "Female"
-    min_age: int | None = 12            # unknown ages (999) are kept
+    min_age: int | None = 12            # None = all ages
+    keep_unknown_age: bool = True       # keep victims of unknown age (999) when min_age is set;
+                                        # they are often unidentified adults found long after death
     as_of: int | None = None            # only use years <= as_of (backtesting)
     exclude_weapons: tuple[str, ...] = ("Not reported",)
 
@@ -77,7 +79,8 @@ class Dataset:
         if use_exclusions and q.exclude_weapons:
             d = d[~d.weapon_group.isin(q.exclude_weapons)]
         if use_query_age and q.min_age is not None:
-            d = d[d.vic_age >= q.min_age]
+            unknown = d.vic_age >= 999
+            d = d[(d.vic_age >= q.min_age) & (~unknown | q.keep_unknown_age)]
         return d
 
     def __len__(self) -> int:

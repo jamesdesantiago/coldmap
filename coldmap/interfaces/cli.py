@@ -199,5 +199,16 @@ def explorer(cases, source, clearance, skip_fix, namus_missing, namus_unidentifi
     click.echo(f"Explorer written to {path}. Serve the folder (python -m http.server) and open index.html.")
 
 
+@main.command()
+@click.option("--out-dir", default=".", show_default=True)
+def sample(out_dir):
+    """Write synthetic sample data (a fictional state with a planted series) to try coldmap."""
+    from ..sample import make_sample
+    cases, clearance = make_sample(out_dir)
+    click.echo(f"Wrote {cases} and {clearance} (synthetic: fictional state 'Samplestate').\nTry:\n"
+               f"  coldmap scan {cases} --state Samplestate --clearance {clearance} --explain 1\n"
+               f"  coldmap quality {cases} --clearance {clearance}")
+
+
 if __name__ == "__main__":
     main()
