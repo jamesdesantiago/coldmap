@@ -1,6 +1,7 @@
 """MCP server: any MCP client (Claude, etc.) can use coldmap as tools.
 
-    COLDMAP_CASES=/path/SHR76_25a.csv [COLDMAP_CLEARANCE=/path/UCR65_25.csv] coldmap-mcp
+    COLDMAP_CASES=/path/SHR76_25a.csv [COLDMAP_CLEARANCE=/path/UCR65_25.csv]
+    [COLDMAP_NAMUS_MISSING=/path/missing.csv] [COLDMAP_NAMUS_UNIDENTIFIED=/path/uid.csv] coldmap-mcp
 
 Tools are registry-driven: list_plugins shows whatever detectors are installed,
 and scan_clusters runs any combination of them. Results never say cases are
@@ -32,8 +33,10 @@ def _data():
     path = os.environ.get("COLDMAP_CASES") or os.environ.get("COLDMAP_SHR")
     if not path:
         raise RuntimeError("Set COLDMAP_CASES to MAP's SHR76_25a.csv (or .zip).")
+    aux = {k: os.environ[v] for k, v in (("namus-missing", "COLDMAP_NAMUS_MISSING"),
+                                          ("namus-unidentified", "COLDMAP_NAMUS_UNIDENTIFIED")) if os.environ.get(v)}
     return load(path, source=os.environ.get("COLDMAP_SOURCE", "map-shr"),
-                clearance_path=os.environ.get("COLDMAP_CLEARANCE"))
+                clearance_path=os.environ.get("COLDMAP_CLEARANCE"), aux=aux)
 
 
 @mcp.tool()
@@ -85,6 +88,23 @@ def coverage_gaps(state: str, below: float = 0.8) -> list[dict]:
     if _data().clearance is None:
         return [{"error": "Set COLDMAP_CLEARANCE to MAP's UCR65_25.csv to use this tool."}]
     return low_coverage_places(_data(), state, below=below).to_dict(orient="records")
+
+
+@mcp.tool()
+def false_alarms(state: str, detectors: list[str] | None = None, runs: int = 3) -> list[dict]:
+    """Estimate how many findings each detector produces by chance, by running it on data where
+    unsolved cases are shuffled across places. Use it to judge how much to trust findings."""
+    from ..benchmarks.controls import false_alarms as fa
+    dets = tuple(detectors or (*DEFAULT_DETECTORS, "ensemble"))
+    return fa(_data(), Query(state=state), dets, runs=runs).to_dict(orient="records")
+
+
+@mcp.tool()
+def data_quality(state: str | None = None, top: int = 10) -> dict:
+    """Reporting anomalies and gaps that can create or hide findings. Check before trusting a finding."""
+    from ..quality import CHECKS, report
+    return {name: {"summary": CHECKS.get(name).summary, "rows": t.to_dict(orient="records")}
+            for name, t in report(_data(), state, top=top).items()}
 
 
 @mcp.tool()

@@ -31,6 +31,7 @@ Checklist:
 - Use `weapon_group` values for `Finding.weapon` so the ensemble can match you with other detectors.
 - Set `county` for agency- or metro-level findings, or let the `county` enricher do it.
 - Run `coldmap benchmark CASES -d yourname -d ensemble --backtest` and include the table in your pull request, misses included.
+- Run `coldmap controls CASES --state <a few states> -d yourname` and include the false-alarm numbers. A detector that catches more but invents more isn't an improvement.
 - Add a synthetic test that plants a cluster your detector should find and checks it stays quiet on null data.
 
 ## Add a source
@@ -40,6 +41,10 @@ Subclass `coldmap.sources.Source`, implement `load_cases(path)` returning every 
 ## Add a data fix
 
 Register a `coldmap.fixes.Fix` with an `apply(df) -> df` function that changes `solved` (or other columns) only where the problem is. Document it in [DATA_ISSUES.md](DATA_ISSUES.md): what, where found, size, likely cause, fix. Add a test that fails if the problem's signature disappears from the data.
+
+## Add a data-quality check
+
+Subclass `coldmap.quality.Check`, implement `run(data, state=None)` returning a frame with `where`, `when`, `detail` and `size`, and register it with `CHECKS`. Set `needs_clearance = True` if it uses the clearance file.
 
 ## Add an enricher
 

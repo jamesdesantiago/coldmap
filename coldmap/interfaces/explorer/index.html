@@ -110,7 +110,7 @@ a{color:var(--slate)}
 <section class="band"><div class="wrap notes">
 <h2>How to read this</h2>
 <p>A case counts as solved if police had identified an offender when they filed the report. Cases solved later still show as unsolved, which is why known serial killings, such as William Suff's in Riverside County, California (1986–1991), still light up red. A finding is a pattern worth asking about, not evidence that cases are linked. Only investigators can link cases, through DNA, ballistics or other evidence.</p>
-<p><b>Confidence.</b> Detectors are plug-ins and each is either strict (it controls false alarms) or sensitive (it catches more and is noisier). In the combined view a finding is <b>high</b> when two or more detectors agree, <b>strong</b> when only a strict detector found it, and <b>possible</b> when only a sensitive one did. The list of detectors comes from whatever was installed when this page was built.</p>
+<p><b>Confidence.</b> Detectors are plug-ins and each is either strict (it controls false alarms) or sensitive (it catches more and is noisier). In the combined view a finding is <b>high</b> when two or more detectors agree, <b>strong</b> when only a strict detector found it, and <b>possible</b> when only a sensitive one did. Tests on shuffled data, where any finding is false by construction, show most <b>possible</b> findings would appear by chance; treat them as weak leads. The list of detectors comes from whatever was installed when this page was built.</p>
 <p id="fixnote"></p>
 <p>Methods are grouped (all firearms together; beating includes blunt objects and hands; strangulation includes asphyxiation). The case list covers women only. The data has no names or addresses.</p>
 <p>Source: <a href="https://www.murderdata.org/p/data-docs.html">Murder Accountability Project</a> Supplementary Homicide Report file, murders and non-negligent manslaughter only. Built with coldmap. Leads should go to MAP or the investigating agency, never to families or suspects.</p>
@@ -121,7 +121,7 @@ a{color:var(--slate)}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const MON=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const CONFLABEL={high:'Detectors agree',strong:'Strict',possible:'Sensitive'};
+const CONFLABEL={high:'Detectors agree',strong:'Strict',possible:'Sensitive only'};
 let M=null,AGG=null,CASES=null,cube=null,FLAGS=[],Y0=1976,Y1=2025,NY=50,state={sel:null};
 const opt=()=>({c:+$('county').value,sex:+$('sex').value,view:$('det').value,serial:$('serial').checked,adult:$('adult').checked});
 const same=(a,b)=>a&&b&&a.c===b.c&&a.w===b.w&&a.y0===b.y0&&a.y1===b.y1&&(a.agency||null)===(b.agency||null);
@@ -135,7 +135,7 @@ const at=(c,w,y)=>(c*cube.NW+w)*NY+(y-Y0);
 
 function flagsFor(o){
  const rows=((M.findings[o.view]||{})[o.sex])||[];
- let out=rows.map(r=>({c:r[0],agency:r[1],w:r[2],y0:r[3],y1:r[4],t:r[5],s:r[6],exp:r[7],q:r[8],by:r[9].map(i=>M.detectors[i].name),conf:M.confidence[r[10]],kind:r[11]}));
+ let out=rows.map(r=>({c:r[0],agency:r[1],w:r[2],y0:r[3],y1:r[4],t:r[5],s:r[6],exp:r[7],q:r[8],by:r[9].map(i=>M.detectors[i].name),conf:M.confidence[r[10]],kind:r[11],namus:r[12]||null}));
  if(o.serial)out=out.filter(f=>f.kind==='serial-pattern');
  return out;
 }
@@ -186,7 +186,8 @@ function listFlags(o){
   const by=f.by.join(' + ');
   const exp=f.exp==null?'':`, against ${Math.round(f.exp*100)}% expected`;
   const q=f.q==null?'':`; q = ${f.q<0.001?'<0.001':f.q.toFixed(3)}`;
-  return `<li><button data-i="${i}" aria-pressed="${same(state.sel,f)}"><span class="t"><span class="badge b-${f.conf}">${esc(CONFLABEL[f.conf])}</span>${esc(where)} · ${esc(M.weapons[f.w])} · ${f.y0}–${f.y1}</span><span class="n">${f.t-f.s} unsolved</span><span class="s">${f.s} of ${f.t} solved (${Math.round(f.s/f.t*100)}%)${esc(exp)}${esc(q)}. Found by ${esc(by)}.</span></button></li>`}).join('');
+  const nm=f.namus?' NamUs: '+Object.entries(f.namus).map(([k,[c,t]])=>`${c} ${k==='missing'?'missing':'unidentified'} (typical ${t})`).join(', ')+'.':'';
+  return `<li><button data-i="${i}" aria-pressed="${same(state.sel,f)}"><span class="t"><span class="badge b-${f.conf}">${esc(CONFLABEL[f.conf])}</span>${esc(where)} · ${esc(M.weapons[f.w])} · ${f.y0}–${f.y1}</span><span class="n">${f.t-f.s} unsolved</span><span class="s">${f.s} of ${f.t} solved (${Math.round(f.s/f.t*100)}%)${esc(exp)}${esc(q)}. Found by ${esc(by)}.${esc(nm)}</span></button></li>`}).join('');
 }
 
 function showCases(sel){

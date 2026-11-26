@@ -11,9 +11,10 @@ coldmap/
   fixes/           Fix plugins: known data problems, applied on load    registry: FIXES
   detectors/       Detector plugins: the models                         registry: DETECTORS
   enrichers/       Enricher plugins: add info to findings               registry: ENRICHERS
+  quality/         Check plugins: data-quality report                   registry: CHECKS
   stats/           shared statistics (scan likelihood, Monte Carlo, FDR)
   ensemble.py      run detectors together; Matcher decides agreement
-  benchmarks/      known series (JSON) + evaluate/backtest any detector
+  benchmarks/      known series (JSON), evaluate/backtest, negative controls
   interfaces/      cli.py, mcp_server.py, explorer/ (use only the public API)
 examples/
   coldmap-streak/  a third-party detector packaged as a plugin
@@ -29,6 +30,8 @@ examples/
 
 **Finding** is the common output: place, level, method, years, totals, plus optional `expected`, `p_value`, `q_value`, `score`. Enrichers fill `county`, `kind` and `coverage`; the ensemble fills `found_by` and `confidence`. Anything detector-specific goes in `extras`.
 
+**Auxiliary tables** (`Dataset.aux`) hold other record types keyed by source name, such as NamUs missing persons. Sources provide them through `load_aux`; enrichers and detectors read them.
+
 **Enricher** takes findings and the dataset and returns findings. Order matters: `county` runs first because matching uses it.
 
 **Matcher** decides when two findings agree (`agree`) and when they're duplicates (`duplicate`). The default compares county, sex, method and overlapping years, and treats findings as duplicates only when their spans are within 2x, so a short burst is never absorbed into a long trend.
@@ -43,6 +46,7 @@ Each registry has an entry-point group:
 | FIXES | `coldmap.fixes` |
 | DETECTORS | `coldmap.detectors` |
 | ENRICHERS | `coldmap.enrichers` |
+| CHECKS | `coldmap.checks` |
 
 Built-ins register on import. Entry points load the first time a registry is queried.
 
@@ -50,5 +54,5 @@ Built-ins register on import. Entry points load the first time a registry is que
 
 1. Interfaces only use the public API, so a plugin shows up everywhere at once.
 2. Data corrections live in fixes, never inside detectors, and every fix is documented and tested.
-3. Every detector is scored by the same benchmark. A claim that a model is better needs benchmark results, including what it misses.
+3. Every detector is scored by the same benchmark and the same negative controls. A claim that a model is better needs both: what it catches and what it invents.
 4. No finding is ever described as a link between cases. The ethics notice travels with results.

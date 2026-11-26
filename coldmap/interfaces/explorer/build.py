@@ -68,7 +68,9 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
         return [c, fd.place if fd.level != "county" else None, WEAPONS.index(_group(fd.weapon)),
                 fd.start, fd.end, fd.total, fd.solved, fd.expected,
                 None if fd.q_value is None else round(fd.q_value, 4),
-                [names.index(x) for x in fd.found_by if x in names], CONF.index(fd.confidence), fd.kind]
+                [names.index(x) for x in fd.found_by if x in names], CONF.index(fd.confidence), fd.kind,
+                {k.split("-")[1]: [v["count"], v["typical"]] for k, v in fd.extras.items()
+                 if k.startswith("namus-") and isinstance(v, dict)} or None]
 
     strip = counties[0][counties[0].rfind(","):] if "," in counties[0] else ""
     busiest = d.county.value_counts().index[0]

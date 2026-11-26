@@ -30,17 +30,24 @@ class Source(ABC):
     def load_clearance(self, path: str | Path) -> pd.DataFrame | None:
         return None
 
+    def load_aux(self, path: str | Path) -> pd.DataFrame | None:
+        """Auxiliary records (missing persons, unidentified remains, ...) attached to Dataset.aux."""
+        return None
+
 
 SOURCES: Registry[type[Source]] = Registry("source", "coldmap.sources")
 
 
 def load(cases_path: str | Path, source: str = "map-shr", clearance_path: str | Path | None = None,
-         clearance_source: str = "map-clearance", skip_fixes: tuple[str, ...] = ()) -> Dataset:
-    """Load a Dataset: read the cases, apply data fixes, optionally attach clearance counts."""
+         clearance_source: str = "map-clearance", skip_fixes: tuple[str, ...] = (),
+         aux: dict[str, str | Path] | None = None) -> Dataset:
+    """Load a Dataset: read the cases, apply data fixes, optionally attach clearance counts and
+    auxiliary tables, e.g. aux={"namus-missing": "missing.csv", "namus-unidentified": "uid.csv"}."""
     src = SOURCES.get(source)()
     cases, applied = apply_fixes(src.load_cases(cases_path), source, skip_fixes)
     clearance = SOURCES.get(clearance_source)().load_clearance(clearance_path) if clearance_path else None
-    return Dataset(cases, source=source, clearance=clearance, fixes=applied)
+    tables = {name: SOURCES.get(name)().load_aux(path) for name, path in (aux or {}).items()}
+    return Dataset(cases, source=source, clearance=clearance, fixes=applied, aux=tables)
 
 
-from . import map_files  # noqa: E402,F401  (registers built-in sources)
+from . import map_files, namus  # noqa: E402,F401  (registers built-in sources)

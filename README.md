@@ -23,11 +23,13 @@ Every box marked *plugin* is a registry. Built-ins register themselves; third-pa
 |---|---|---|
 | source | `map-shr` | MAP's case file (`SHR76_25a.csv` or `.zip`) |
 | source | `map-clearance` | MAP's agency clearance file (`UCR65_25.csv`) |
-| fix | `2021-relationship-coding` | Corrects ~1,100 California 2021 cases wrongly read as unsolved ([DATA_ISSUES.md](DATA_ISSUES.md)) |
+| source | `namus-missing`, `namus-unidentified` | NamUs Missing and Unidentified Persons CSV exports (names dropped on load) |
+| fix | `2021-relationship-coding` | Corrects ~630 California 2021 cases wrongly read as unsolved ([DATA_ISSUES.md](DATA_ISSUES.md)) |
 | detector | `scan` (strict) | Every window length at county and agency level vs the rest of the state; Monte Carlo p-values, false-discovery-rate q-values |
 | detector | `window` (sensitive) | Fixed rolling windows below a solve-rate threshold |
 | detector | `map` (sensitive) | Faithful port of MAP's original algorithm |
-| enricher | `county`, `kind`, `coverage` | County for agency findings; serial-pattern vs accountability; share of murders present in the case file |
+| enricher | `county`, `kind`, `coverage`, `namus` | County for agency findings; serial-pattern vs accountability; share of murders present in the case file; NamUs missing and unidentified counts vs typical |
+| check | 5 data-quality checks | Reporting anomalies, gaps and suspicious years (`coldmap quality`) |
 
 An example third-party detector lives in [`examples/coldmap-streak`](examples/coldmap-streak).
 
@@ -42,7 +44,9 @@ coldmap scan SHR76_25a.csv --state California --kind serial-pattern
 coldmap scan SHR76_25a.csv --state Indiana -d scan -p scan.levels=agency
 coldmap scan SHR76_25a.csv --state California -d scan -d window -d map   # any combination
 coldmap benchmark SHR76_25a.csv --backtest
-coldmap coverage SHR76_25a.csv --clearance UCR65_25.csv --state Illinois
+coldmap controls SHR76_25a.csv --state California                       # false-alarm estimate
+coldmap quality SHR76_25a.csv --clearance UCR65_25.csv                   # data-quality report
+coldmap scan SHR76_25a.csv --state California --namus-missing missing.csv --namus-unidentified uid.csv
 coldmap explorer SHR76_25a.csv --state California --out-dir site
 ```
 
@@ -86,15 +90,45 @@ MAP's original method pools all 50 years for a county, which dilutes these short
 
 A new detector earns its place by catching what others miss without adding noise. The benchmark is how you show that.
 
+## How often is it wrong?
+
+Benchmarks measure what a detector catches; **negative controls** measure what it invents. `coldmap controls` shuffles solved and unsolved labels across places within each state, victim sex, method and year. That keeps every statewide trend but destroys real clusters, so any finding on the shuffled data is a false alarm. Serial-pattern findings for women, MAP file August 2026, average of 5 shuffles:
+
+| Confidence | California real / by chance | Indiana | Illinois | Washington |
+|---|---|---|---|---|
+| high (detectors agree) | 12 / 0.0 | 3 / 0.6 | 6 / 3.8 | 7 / 4.4 |
+| strong (strict only) | 1 / 0.0 | 3 / 0.2 | 4 / 0.4 | 2 / 0.6 |
+| possible (sensitive only) | 38 / 25.4 | 3 / 5.0 | 3 / 2.2 | 4 / 4.2 |
+
+What this says:
+- **"Possible" findings are mostly noise.** Treat them as weak leads at best.
+- **"Strong" findings hold up** across all four states.
+- **"High" is clean in California and Indiana but not in Illinois or Washington,** where one county (Cook, King) holds most of the state's cases. Comparing that county with "the rest of the state" leaves a thin baseline, and both detectors fire on it by chance. Fixing that (for example, comparing with similar counties in other states) is on the roadmap.
+- **Always run `coldmap controls` for the state you're studying** before trusting its findings.
+
+## Data quality
+
+`coldmap quality` runs pluggable checks for problems that can create or hide findings. Highlights from the national file (details in [DATA_ISSUES.md](DATA_ISSUES.md)):
+
+- **California 1983–1995:** 12–33% of "unsolved" cases name a relationship that identifies the offender, against about 2% elsewhere (open question, not auto-fixed)
+- **Duval County, Florida (Jacksonville):** 4,429 murders reported since 1976 with no case records at all
+- **New York City, 2021:** all 488 cases have no weapon recorded
+- **Orleans Parish, Louisiana, 2020s:** the case file holds 49% of reported murders; **Hinds County, Mississippi**, 34%
+
+## NamUs: the victims homicide data can't see
+
+Serial victims are often never found (missing persons) or found but never named (unidentified remains). Neither appears in homicide data. NamUs data isn't openly downloadable, but any registered user (free) can export Advanced Search results to CSV. Pass the exports with `--namus-missing` and `--namus-unidentified`, and the `namus` enricher adds, for each finding, how many open missing and unidentified cases match the same county, years and sex, against that county's typical count. Names and contact fields are dropped on load. Counts are context, not evidence: NamUs coverage is uneven by state and era.
+
 ## AI assistants (MCP)
 
 ```json
 { "mcpServers": { "coldmap": {
     "command": "coldmap-mcp",
-    "env": { "COLDMAP_CASES": "/path/SHR76_25a.csv", "COLDMAP_CLEARANCE": "/path/UCR65_25.csv" } } } }
+    "env": { "COLDMAP_CASES": "/path/SHR76_25a.csv", "COLDMAP_CLEARANCE": "/path/UCR65_25.csv",
+             "COLDMAP_NAMUS_MISSING": "/path/missing.csv", "COLDMAP_NAMUS_UNIDENTIFIED": "/path/uid.csv" } } } }
 ```
 
-Tools: `list_plugins`, `scan_clusters` (any detectors, any parameters), `get_cases`, `coverage_gaps`, `benchmark`. Every result carries the ethics notice.
+Tools: `list_plugins`, `scan_clusters` (any detectors, any parameters), `get_cases`, `coverage_gaps`, `data_quality`, `false_alarms`, `benchmark`. Every result carries the ethics notice.
 
 ## Explorer
 
@@ -104,9 +138,11 @@ Tools: `list_plugins`, `scan_clusters` (any detectors, any parameters), `get_cas
 
 [CONTRIBUTING.md](CONTRIBUTING.md) walks through adding a detector, source, fix or enricher, and packaging it as a plugin. Ideas on the roadmap:
 
+- Better baselines for states dominated by one county (compare with similar counties nationally)
 - Spatial scan across neighboring counties (needs county centroids or adjacency)
 - Victim-profile detectors (age band, circumstance) and a matcher that compares profiles
-- Sources: Jacob Kaplan's FBI SHR files, NamUs missing and unidentified persons, city open-data portals
+- Sources: Jacob Kaplan's FBI SHR files, city open-data portals
+- A NamUs-based detector: clusters of missing women with no matching homicides
 - AI triage enricher: check each finding against public news and draft an evidence summary for human review
 
 ## Credits and license

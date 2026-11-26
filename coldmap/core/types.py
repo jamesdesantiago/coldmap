@@ -47,10 +47,11 @@ class Query:
 
 
 class Dataset:
-    """Normalized cases plus optional clearance counts, with the data fixes applied."""
+    """Normalized cases plus optional clearance counts and auxiliary tables, with fixes applied."""
 
     def __init__(self, cases: pd.DataFrame, source: str = "unknown",
-                 clearance: pd.DataFrame | None = None, fixes: tuple[str, ...] = ()):
+                 clearance: pd.DataFrame | None = None, fixes: tuple[str, ...] = (),
+                 aux: dict[str, pd.DataFrame] | None = None):
         missing = [c for c in CASE_COLUMNS if c not in cases.columns]
         if missing:
             raise ValueError(f"Dataset is missing required columns: {missing}")
@@ -64,6 +65,7 @@ class Dataset:
         self.clearance = clearance
         self.source = source
         self.fixes = fixes
+        self.aux = aux or {}   # auxiliary tables by source name, e.g. NamUs missing persons
 
     def select(self, q: Query, *, use_query_age: bool = True, use_exclusions: bool = True) -> pd.DataFrame:
         d = self.cases
@@ -82,7 +84,8 @@ class Dataset:
         return len(self.cases)
 
     def __repr__(self) -> str:
-        return f"Dataset(source={self.source!r}, cases={len(self.cases):,}, fixes={list(self.fixes)})"
+        aux = {k: len(v) for k, v in self.aux.items()}
+        return f"Dataset(source={self.source!r}, cases={len(self.cases):,}, fixes={list(self.fixes)}, aux={aux})"
 
 
 @dataclass
@@ -127,4 +130,14 @@ class Finding:
 
 
 def findings_frame(findings: list[Finding]) -> pd.DataFrame:
-    return pd.DataFrame([f.to_dict() for f in findings])
+    """Findings as a table; nested extras are flattened (namus-missing.count, ...)."""
+    rows = []
+    for f in findings:
+        d = f.to_dict()
+        for k, v in d.pop("extras").items():
+            if isinstance(v, dict):
+                d.update({f"{k}.{kk}": vv for kk, vv in v.items()})
+            else:
+                d[k] = v
+        rows.append(d)
+    return pd.DataFrame(rows)

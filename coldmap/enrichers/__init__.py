@@ -6,6 +6,7 @@ objects with fields filled in). Built-ins:
 county    sets `county` for agency- and metro-level findings (needed for matching)
 kind      labels each finding serial-pattern or accountability
 coverage  share of the place's reported murders present in the case file
+namus     missing people and unidentified remains in the same county and years (if loaded)
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ class Enricher(ABC):
 
 
 ENRICHERS: Registry[type[Enricher]] = Registry("enricher", "coldmap.enrichers")
-DEFAULT_ENRICHERS = ("county", "kind", "coverage")
+DEFAULT_ENRICHERS = ("county", "kind", "coverage", "namus")
 
 
 def enrich(findings: list[Finding], data: Dataset, names=DEFAULT_ENRICHERS) -> list[Finding]:
@@ -35,4 +36,4 @@ def enrich(findings: list[Finding], data: Dataset, names=DEFAULT_ENRICHERS) -> l
     return findings
 
 
-from . import builtin  # noqa: E402,F401
+from . import builtin, namus  # noqa: E402,F401
