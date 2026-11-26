@@ -979,7 +979,7 @@ function modelDetail(pl,busy){
   <div class="row" style="justify-content:space-between"><h1 style="font-family:var(--mono);font-size:19px">${esc(i.name)}</h1>
    ${i.on==null?'':i.locked?'<span class="tag">always on</span>':`<label class="row" style="gap:8px;font-weight:600">${i.on?'On':'Off'} <span class="sw" role="switch" tabindex="0" aria-checked="${i.on}" aria-label="Use ${esc(i.name)}" data-kind="${sel.kind}" data-name="${esc(i.name)}"></span></label>`}</div>
   <div class="row" style="margin:4px 0 10px"><span class="tag">${esc({detector:'finds flags',enricher:'adds context'}[sel.kind]||sel.kind)}</span>${i.tier?`<span class="tag">${esc(i.tier)}</span>`:''}<span class="tag${file?' kept':''}">${esc(file?'your file: '+file:i.origin)}</span></div>
-  <p><b>${esc(i.summary)}</b></p>${i.doc?`<div class="notes">${esc(i.doc).split(/\n\s*\n/).map(x=>`<p>${x}</p>`).join('')}</div>`:''}
+  <p><b>${esc(i.summary)}</b></p>${i.doc?`<div class="notes">${esc(i.doc).split(/\n\s*\n/).map(x=>`<p style="white-space:pre-line">${x}</p>`).join('')}</div>`:''}
   ${effect?`<h3>In your research</h3><p>${effect}</p>`:''}
   ${ptable}
   ${file?`<h3>Your file</h3><div class="row"><button class="btn primary" data-popen="${esc(file)}">Open in your editor</button><button class="btn" data-popen="">Open the folder</button><button class="btn" data-preplace="${esc(file)}"${dis}>Replace with a new version…</button><button class="btn" data-rm="${esc(file)}"${dis}>Remove</button></div><p class="muted" style="font-size:12px;margin-top:6px">After editing the file, press Replace and choose it, or restart coldmap, then re-scan.</p>`:''}
