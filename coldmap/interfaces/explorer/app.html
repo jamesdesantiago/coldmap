@@ -111,7 +111,7 @@ tr.click{cursor:pointer}tr.click:hover td{background:var(--surf2)}
 .lhead span:nth-child(n+3){text-align:right}
 .frow{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:60px minmax(0,1fr) 92px 54px 58px;gap:4px 10px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);cursor:pointer}
 .frow:hover{background:var(--surf2)}
-.frow[aria-selected=true]{background:color-mix(in oklab,var(--accent) 9%,var(--surf));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--accent) 45%,transparent)}
+.frow[aria-selected=true]{background:color-mix(in oklab,var(--accent) 9%,var(--surf));outline:1px solid color-mix(in oklab,var(--accent) 45%,transparent);outline-offset:-1px}
 .frow.kept .pl b,.frow.reviewed .pl b,.frow.sent .pl b{background:var(--hl);box-shadow:0 0 0 2px var(--hl);border-radius:1px}
 .frow.dismissed{opacity:.5}
 .frow .pl{display:grid;gap:1px}
