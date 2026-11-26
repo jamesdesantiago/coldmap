@@ -29,15 +29,22 @@ CONFIDENCE = {
 
 
 def _state_of(f: Finding, data: Dataset) -> str | None:
-    col = f.level if f.level in data.cases.columns else "county"
-    s = data.cases.loc[data.cases[col] == f.place, "state"]
+    if f.level == "region":
+        s = data.cases.loc[data.cases.county.isin(f.extras.get("counties", [])), "state"]
+    else:
+        col = f.level if f.level in data.cases.columns else "county"
+        s = data.cases.loc[data.cases[col] == f.place, "state"]
     return s.mode().iat[0] if len(s) else None
 
 
 def finding_cases(f: Finding, data: Dataset, min_age: int | None = 12):
-    col = f.level if f.level in data.cases.columns else "county"
     c = data.cases
-    m = (c[col] == f.place) & (c.vic_sex == f.victim_sex) & c.year.between(f.start, f.end)
+    if f.level == "region":
+        m = c.county.isin(f.extras.get("counties", []))
+    else:
+        col = f.level if f.level in c.columns else "county"
+        m = c[col] == f.place
+    m &= (c.vic_sex == f.victim_sex) & c.year.between(f.start, f.end)
     m &= (c.weapon_group == f.weapon) | (c.weapon == f.weapon)
     if min_age is not None:
         m &= c.vic_age >= min_age
@@ -50,7 +57,11 @@ def finding_cases(f: Finding, data: Dataset, min_age: int | None = 12):
 
 def explain(f: Finding, data: Dataset) -> dict:
     who = {"Female": "women", "Male": "men"}.get(f.victim_sex, "victims")
-    where = f"{f.place} ({f.county})" if f.county and f.county != f.place else f.place
+    if f.level == "region":
+        n = len(f.extras.get("counties", []))
+        where = f"{f.place} (region of {n} counties)"
+    else:
+        where = f"{f.place} ({f.county})" if f.county and f.county != f.place else f.place
     prof = f.extras.get("profile", {})
     prof_txt = f", aged {prof['age_band']}" if "age_band" in prof else ""
     rate = f.solve_rate
@@ -111,7 +122,8 @@ def explain(f: Finding, data: Dataset) -> dict:
         out["namus"] = " ".join(nm)
 
     out["next"] = [
-        f"Search public news and court records for {f.weapon.lower()} killings of {who} in {f.county or f.place}, "
+        f"Search public news and court records for {f.weapon.lower()} killings of {who} in "
+        f"{f.place if f.level == 'region' else (f.county or f.place)}, "
         f"{f.start}–{f.end}, to see whether a series is already known or solved.",
         "Read the case rows: do dates, ages and circumstances actually resemble each other?",
         "If it still looks unexplained, send it to the Murder Accountability Project with these numbers. "

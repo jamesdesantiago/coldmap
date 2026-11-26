@@ -7,8 +7,9 @@ smoothed toward the long-run rate). Monte Carlo simulation gives each window a
 p-value that accounts for trying every window (Kulldorff-style); the
 Benjamini-Hochberg procedure gives q-values across groups at each level.
 
-Runs at several levels (agency, county, msa): agency catches series inside one
-city (Gary, Indiana); msa catches series that cross county lines.
+Runs at several levels (agency, county, region, msa): agency catches series
+inside one city (Gary, Indiana); region catches series that cross county lines
+(Southern California's Freeway Killers), using region sets from coldmap.regions.
 """
 
 from __future__ import annotations
@@ -34,8 +35,12 @@ class TemporalScan(Detector):
 
     @dataclass
     class Params:
-        levels: tuple[str, ...] = field(default=("county", "agency"),
-                                        metadata={"help": "Places to scan: county, agency, msa"})
+        levels: tuple[str, ...] = field(default=("county", "agency", "region"),
+                                        metadata={"help": "Places to scan: county, agency, msa, region"})
+        region_max_len: int = field(default=12, metadata={
+            "help": "Longest window for regions; big regions otherwise favor decades-long trends"})
+        region_sets: tuple[str, ...] | None = field(default=None, metadata={
+            "help": "Region sets to use for the region level (default: all registered)"})
         min_cases: int = field(default=8, metadata={"help": "Minimum killings in a window"})
         min_len: int = field(default=1, metadata={"help": "Shortest window (years)"})
         max_len: int = field(default=25, metadata={"help": "Longest window (years)"})
@@ -52,8 +57,15 @@ class TemporalScan(Detector):
     def detect(self, data, query):
         out = []
         d = add_profile(data.select(query), tuple(self.params.split_by))
+        if "region" in self.params.levels:
+            from ..regions import add_region, members
+            d = add_region(d, list(self.params.region_sets) if self.params.region_sets else None)
         for level in self.params.levels:
-            out += self._detect_level(d, query, level)
+            found = self._detect_level(d, query, level)
+            if level == "region":
+                for f in found:
+                    f.extras["counties"] = members(f.place)
+            out += found
         return sorted(out, key=lambda f: (f.q_value, -f.score))
 
     def _detect_level(self, d: pd.DataFrame, query, level: str) -> list[Finding]:
@@ -64,7 +76,8 @@ class TemporalScan(Detector):
         if d.empty:
             return []
         years = np.arange(d.year.min(), d.year.max() + 1)
-        wi, wj = windows(len(years), p.min_len, p.max_len)
+        max_len = min(p.max_len, p.region_max_len) if level == "region" else p.max_len
+        wi, wj = windows(len(years), p.min_len, max_len)
         split = list(p.split_by)
         ref = d.groupby(["state", "weapon_group", *split, "year"]).solved.agg(["size", "sum"])
         keys = ["state", level, "weapon_group", *split]

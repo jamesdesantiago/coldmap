@@ -31,13 +31,17 @@ _RANK = {"high": 0, "strong": 1, "possible": 2}
 
 
 class Matcher:
-    """Same county, victim sex and method, overlapping years."""
+    """Same area (counties overlap; a region covers its member counties), victim sex and method,
+    overlapping years, compatible victim profiles."""
 
-    def key(self, f: Finding):
-        return (f.county or f.place, f.victim_sex, f.weapon)
+    def area(self, f: Finding) -> set[str]:
+        """Counties a finding covers: its county, or a region's member counties."""
+        return set(f.extras.get("counties") or [f.county or f.place])
 
     def agree(self, a: Finding, b: Finding) -> bool:
-        if self.key(a) != self.key(b) or a.start > b.end or b.start > a.end:
+        if (a.victim_sex, a.weapon) != (b.victim_sex, b.weapon) or a.start > b.end or b.start > a.end:
+            return False
+        if not self.area(a) & self.area(b):
             return False
         # Profiles must not contradict: a split finding agrees with an unsplit one,
         # but not with a finding for a different age band or circumstance.
@@ -45,6 +49,9 @@ class Matcher:
         return all(pa[k] == pb[k] for k in pa.keys() & pb.keys())
 
     def duplicate(self, a: Finding, b: Finding, span_ratio: float = 2.0) -> bool:
+        # A region finding and a county finding say different things; never merge them.
+        if (a.level == "region") != (b.level == "region"):
+            return False
         return self.agree(a, b) and max(a.span, b.span) <= span_ratio * min(a.span, b.span)
 
 
