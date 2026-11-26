@@ -940,13 +940,20 @@ function md(src){const lines=src.replace(/\r/g,'').split('\n');let out='',i=0;co
 
 // ---- AI assistants ---------------------------------------------------------------------------
 function renderAI(){
- if(!S.ai){if(!S.aiLoading){S.aiLoading=1;api('/api/ai').then(j=>{S.ai=j;render()})}setMain('ai-load',`<div class="view"><div class="page"><span class="spin"></span> Loading…</div></div>`);return}
- const a=S.ai,json=JSON.stringify(a.desktop,null,2);
- setMain('ai',`<div class="view"><div class="page">
-  <h1>AI assistants</h1><p class="lede">Connect Claude, or any assistant that speaks MCP, to coldmap. It can read the same flags and shortlist you see, explain why a place was flagged, pull the case rows, check the data's known problems and run models. Every answer carries the ethics notice, and it can't send anything or contact anyone; you stay the one who decides.</p>
-  ${a.sdk_installed?'':`<p class="msg warn">The MCP library isn't installed in this copy of coldmap, so the setup below installs coldmap with it (<code>coldmap[mcp]</code>) through uvx.</p>`}
-  <div class="box"><h2>Claude Desktop</h2><p class="muted">Settings › Developer › Edit Config. The file is one JSON object: add <code>"mcpServers"</code> as another key inside its outer braces (put a comma after the key before it), or merge it into an existing <code>"mcpServers"</code>. Don't paste a second <code>{ … }</code> below the first. Save, then quit Claude completely and reopen it.</p><pre id="cfgDesk">${esc(json)}</pre><button class="btn" data-copy="cfgDesk">Copy</button></div>
-  <div class="box"><h2>Claude Code</h2><p class="muted">Run this once in a terminal.</p><pre id="cfgCode">${esc(a.claude_code)}</pre><button class="btn" data-copy="cfgCode">Copy</button></div>
+ if(!S.ai){if(!S.aiLoading){S.aiLoading=1;api('/api/ai').then(j=>{S.ai=j;S.aiLoading=0;render()})}setMain('ai-load',`<div class="view"><div class="page"><span class="spin"></span> Loading…</div></div>`);return}
+ const a=S.ai,json=JSON.stringify(a.desktop,null,2),ds=a.desktop_status,T=S.aiTest,C=S.aiConn,K=S.aiCode;
+ const testMsg=T==='run'?'<p class="msg"><span class="spin"></span> Starting coldmap\'s AI server the way Claude will…</p>':T?(T.ok?`<p class="msg ok"><b>Working.</b> ${T.tools.length} tools answer${T.flags!=null?`, and it can read your ${nf.format(T.flags)} flags`:''}.</p>`:`<p class="msg err"><b>It didn't start.</b> <code style="white-space:pre-wrap">${esc(T.error)}</code></p>`):'';
+ const deskState=ds.problem?`<p class="msg warn">${esc(ds.problem)}</p>`:ds.current?`<p class="msg ok"><b>Connected.</b> coldmap is in Claude Desktop's settings. If you just connected, quit Claude Desktop completely and open it again.</p>`:ds.connected?`<p class="msg warn">Claude Desktop has an older coldmap setting. Connect again to update it.</p>`:'';
+ setMain('ai:'+JSON.stringify([ds,T,C,K]),`<div class="view"><div class="page">
+  <h1>AI assistants</h1><p class="lede">Connect Claude to coldmap. It can read the same flags, shortlist and datasets you see, explain why a place was flagged, pull the case rows, check the data's known problems and run models. Every answer carries the ethics notice, and it can't send anything or contact anyone; you stay the one who decides.</p>
+  ${a.sdk_installed?'':`<p class="msg warn">The MCP library isn't installed in this copy of coldmap, so the setup uses uvx to run coldmap with it (<code>coldmap[mcp]</code>).</p>`}
+  <div class="box"><h2>1. Check the connection</h2><p class="muted">Starts coldmap's AI server exactly as Claude will and asks it for your flags.</p>${testMsg}<button class="btn" id="aiTest"${T==='run'?' disabled':''}>Run the check</button></div>
+  <div class="box"><h2>2. Claude Desktop</h2><p class="muted">One click adds coldmap to Claude Desktop's settings. Your existing settings are kept, and the old file is saved as a backup first.</p>
+   ${deskState}${C&&C.error?`<p class="msg err">${esc(C.error)}</p>`:''}${C&&!C.error?`<p class="msg ok"><b>Done.</b> ${C.repaired?'The file had two JSON objects pasted one after the other; they are now one, so Claude can read it. ':''}Now quit Claude Desktop completely (in the taskbar's hidden icons, right-click Claude › Quit, or File › Exit) and open it again. Then ask: <i>“Use coldmap to list the strongest flags in Ohio.”</i>${C.backup?`<br><span class="muted" style="font-size:12px">Backup: <code>${esc(C.backup)}</code></span>`:''}</p>`:''}
+   <div class="row"><button class="btn primary" id="aiConnect"${C==='run'?' disabled':''}>${ds.connected?'Connect again':'Connect to Claude Desktop'}</button><span class="muted" style="font-size:12px">Settings file: <code>${esc(ds.path)}</code></span></div>
+   <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Set it up by hand instead</summary><p class="muted" style="margin-top:8px">In Claude Desktop: Settings › Developer › Edit Config. Add <code>"mcpServers"</code> as another key inside the file's outer braces (one JSON object, not a second <code>{ … }</code> below the first), save, then quit and reopen Claude.</p><pre id="cfgDesk">${esc(json)}</pre><button class="btn" data-copy="cfgDesk">Copy</button></details></div>
+  <div class="box"><h2>3. Claude Code</h2>${a.claude_code_installed?`<p class="muted">One click adds coldmap for every project.</p>${K==='run'?'<p class="msg"><span class="spin"></span> Adding…</p>':K?`<p class="msg ${K.ok?'ok':'err'}">${K.ok?'<b>Added.</b> Start a new Claude Code session to use it.':esc(K.error||K.output)}</p>`:''}<button class="btn" id="aiCode">Add to Claude Code</button>`:'<p class="muted">Claude Code isn\'t installed here. If you install it later, run this once in a terminal:</p>'}
+   <details style="margin-top:10px"${a.claude_code_installed?'':' open'}><summary class="muted" style="cursor:pointer">The command</summary><pre id="cfgCode" style="margin-top:8px">${esc(a.claude_code)}</pre><button class="btn" data-copy="cfgCode">Copy</button></details></div>
   <h3>Things to ask</h3><ul class="notes" style="padding-left:18px">
    <li>“Which high-confidence flags for women in Ohio have the largest gap? Explain each in two sentences.”</li>
    <li>“Read my coldmap shortlist and list what a second reviewer should check for each lead.”</li>
@@ -1057,6 +1064,9 @@ document.addEventListener('click',async e=>{
  if(t.dataset.fk&&S.sel){const w=wbOf(S.sel);if(w.sel[t.dataset.fk]===t.dataset.fv)delete w.sel[t.dataset.fk];else w.sel[t.dataset.fk]=t.dataset.fv;w.limit=300;renderWB(S.sel);return}
  if(t.dataset.fmore&&S.sel){wbOf(S.sel)['all_'+t.dataset.fmore]=1;renderWB(S.sel);return}
  if(t.dataset.wbmore&&S.sel){wbOf(S.sel).limit+=300;renderWB(S.sel);return}
+ if(t.id==='aiTest'){S.aiTest='run';render();try{S.aiTest=await post('/api/ai/test')}catch(err){S.aiTest={ok:false,error:err.message}}render();return}
+ if(t.id==='aiConnect'){S.aiConn='run';render();try{const r=await post('/api/ai/connect');S.aiConn=r;S.ai.desktop_status=r.status}catch(err){S.aiConn={error:err.message}}render();return}
+ if(t.id==='aiCode'){S.aiCode='run';render();try{S.aiCode=await post('/api/ai/claude-code')}catch(err){S.aiCode={ok:false,error:err.message}}render();return}
  if(t.dataset.copy){navigator.clipboard.writeText($(t.dataset.copy).textContent).then(()=>toast('Copied'));return}
  if(t.dataset.pa){plugin(t.dataset.pa);return}
  if(t.dataset.rm){if(confirm(`Remove ${t.dataset.rm}? This deletes the file from your models folder.`))plugin('remove',{file:t.dataset.rm});return}

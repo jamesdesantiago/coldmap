@@ -558,10 +558,13 @@ class App:
                                           "archive/refs/heads/main.zip", "coldmap-mcp"], "env": env}
         ready = importlib.util.find_spec("mcp") is not None
         server = local if ready else uvx
+        from . import connect
         cli = " ".join(["claude mcp add coldmap", *[f'-e {k}="{v}"' for k, v in env.items()], "--",
                         f'"{server["command"]}"' if " " in server["command"] else server["command"],
                         *[f'"{a}"' if " " in a else a for a in server["args"]]])
-        return {"sdk_installed": ready, "desktop": {"mcpServers": {"coldmap": server}}, "claude_code": cli,
+        return {"sdk_installed": ready, "server": server, "desktop": {"mcpServers": {"coldmap": server}},
+                "claude_code": cli, "desktop_status": connect.desktop_status(server),
+                "claude_code_installed": shutil.which("claude") is not None,
                 "tools": [
                     ["research_flags", "The ranked national list of flags this app shows, with filters"],
                     ["shortlist", "Your kept flags, notes and review status"],
@@ -746,6 +749,14 @@ def _handler(app: App):
                 if u.path == "/api/forget":
                     research.forget(q.get("id", ""))
                     return self._json(200, {"ok": True})
+                if u.path in ("/api/ai/test", "/api/ai/connect", "/api/ai/claude-code"):
+                    from . import connect
+                    server = app.ai_setup()["server"]
+                    if u.path.endswith("test"):
+                        return self._json(200, connect.test_server(server))
+                    if u.path.endswith("connect"):
+                        return self._json(200, {**connect.connect_desktop(server), "status": connect.desktop_status(server)})
+                    return self._json(200, connect.claude_code_add(server))
                 if u.path.startswith("/api/datasets/"):
                     return self._json(200, app.dataset_action(u.path.rsplit("/", 1)[1], q, self._body()))
                 if u.path.startswith("/api/plugins/"):

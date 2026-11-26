@@ -1,6 +1,8 @@
 """`coldmap open`: the local app (download, check for updates, list states, build with progress)."""
 
 import json
+import os
+import sys
 import shutil
 import threading
 import time
@@ -8,6 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 
 import click
 import pytest
@@ -384,3 +387,35 @@ def test_map_places_counties_and_ships_its_assets(chome, tmp_path, server):
         get("/vendor/../launch.py")
     m = json.loads(get("/api/map?sex=all")[1])
     assert set(m) == {"counties", "fips", "unmatched"}
+
+
+def test_one_click_ai_connection(chome, tmp_path, monkeypatch):
+    from coldmap.interfaces import connect
+    cfg = tmp_path / "Claude" / "claude_desktop_config.json"
+    cfg.parent.mkdir()
+    # The mistake people make: a second {...} pasted below the first.
+    cfg.write_text('{\n  "preferences": {"sidebarMode": "chat"}\n}\n\n{\n  "mcpServers": {"other": {"command": "x"}}\n}\n')
+    monkeypatch.setattr(connect, "desktop_path", lambda: cfg)
+    server = {"command": "coldmap-mcp", "args": [], "env": {"COLDMAP_HOME": "h"}}
+    assert "more than one JSON object" in connect.desktop_status(server)["problem"]
+    r = connect.connect_desktop(server)
+    assert r["repaired"] and Path(r["backup"]).exists()
+    fixed = json.loads(cfg.read_text())  # one valid object now
+    assert fixed["preferences"] == {"sidebarMode": "chat"}
+    assert fixed["mcpServers"] == {"other": {"command": "x"}, "coldmap": server}
+    st = connect.desktop_status(server)
+    assert st["connected"] and st["current"] and st["problem"] is None
+
+
+def test_ai_check_starts_the_real_server(chome, tmp_path):
+    import shutil as sh
+    from coldmap.interfaces import connect
+    exe = Path(sys.executable).with_name("coldmap-mcp.exe" if os.name == "nt" else "coldmap-mcp")
+    if not exe.exists() or sh.which(str(exe)) is None and not exe.exists():
+        pytest.skip("coldmap-mcp isn't installed in this environment")
+    pytest.importorskip("mcp")
+    cases, _ = make_sample(tmp_path)
+    r = connect.test_server({"command": str(exe), "args": [], "env": {"COLDMAP_CASES": str(cases),
+                                                                        "COLDMAP_HOME": str(chome)}})
+    assert r["ok"], r
+    assert {"research_flags", "shortlist", "local_datasets"} <= set(r["tools"])
