@@ -5,3 +5,5 @@ __pycache__/
 *.zip
 explorer_site/
 site/
+data/
+.venv/
