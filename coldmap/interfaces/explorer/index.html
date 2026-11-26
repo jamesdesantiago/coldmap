@@ -26,7 +26,8 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,sans-s
 button,select,input{font:inherit;color:inherit}
 a{color:var(--blue)}
 code{font-family:"JetBrains Mono",monospace;font-size:.92em}
-:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+:focus-visible,.rail button:focus-visible,.lead:focus-visible,.item:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+::selection{background:color-mix(in oklab,var(--blue) 30%,transparent)}
 .app{display:grid;grid-template-columns:76px minmax(0,1fr);grid-template-rows:56px minmax(0,1fr);height:100%}
 .bar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--surf);border-bottom:1px solid var(--line)}
 .logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.02em;white-space:nowrap}
@@ -61,6 +62,7 @@ h2{font-size:15px;margin:0;letter-spacing:-.01em}
 .stat .v{font-size:30px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.1;margin:6px 0 2px;white-space:nowrap}
 .stat .d{font-size:12px;color:var(--mute)}
 .v.red{color:var(--red)}.v.blue{color:var(--blue)}.v.green{color:var(--green)}
+.stat .v.na{font-size:15px;font-weight:600;letter-spacing:0;color:var(--mute);margin:12px 0 4px}
 .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;border:1px solid var(--line);background:var(--surf2);white-space:nowrap}
 .tag.high{color:var(--red);border-color:color-mix(in oklab,var(--red) 45%,var(--line))}
 .tag.strong{color:var(--ink)}.tag.possible{color:var(--mute)}
@@ -70,14 +72,14 @@ h2{font-size:15px;margin:0;letter-spacing:-.01em}
 .tag.partial{color:var(--amber);border-color:color-mix(in oklab,var(--amber) 45%,var(--line))}
 .tag.miss{color:var(--mute)}
 .pipe{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:stretch}
-.stage{position:relative;background:var(--surf2);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;text-align:left;border-top:3px solid var(--blue)}
+.stage{position:relative;background:var(--surf2);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;text-align:left}
 .stage:hover{border-color:var(--blue)}
 .stage .n{font-size:24px;font-weight:800;letter-spacing:-.02em}
 .stage .l{font-weight:700;font-size:13px}.stage .s{font-size:11.5px;color:var(--mute);margin-top:4px}
 .stage:not(:last-child)::after{content:"";position:absolute;right:-9px;top:50%;width:8px;height:2px;background:var(--line)}
-.stage.out{border-top-color:var(--red)}
+.stage.out{border-color:color-mix(in oklab,var(--red) 40%,var(--line))}.stage.out .n{color:var(--red)}.stage.out:hover{border-color:var(--red)}
 .leads{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
-.lead{all:unset;box-sizing:border-box;cursor:pointer;background:var(--surf);border:1px solid var(--line);border-left:4px solid var(--red);border-radius:10px;padding:12px;display:grid;gap:6px}
+.lead{all:unset;box-sizing:border-box;cursor:pointer;background:var(--surf);border:1px solid color-mix(in oklab,var(--red) 35%,var(--line));border-radius:10px;padding:12px;display:grid;gap:6px}
 .lead:hover{border-color:var(--red)}
 .lead .t{font-weight:700}.lead .m{font-size:12px;color:var(--mute)}
 .lead .big{font-size:20px;font-weight:800;color:var(--red);font-variant-numeric:tabular-nums}
@@ -89,13 +91,11 @@ h2{font-size:15px;margin:0;letter-spacing:-.01em}
 .chip[aria-pressed=true]{background:var(--ink);color:var(--surf);border-color:var(--ink)}
 .chip b{font-variant-numeric:tabular-nums;margin-left:3px;opacity:.75}
 .list{list-style:none;margin:0;padding:6px;overflow:auto;flex:1}
-.item{all:unset;box-sizing:border-box;display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:3px 10px;width:100%;padding:10px 10px 10px 0;border-radius:9px;cursor:pointer}
+.item{all:unset;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;width:100%;padding:10px 12px;border-radius:9px;cursor:pointer}
 .item:hover{background:var(--surf2)}.item[aria-current=true]{background:var(--sel)}
-.item .rail2{grid-row:1/4;border-radius:2px;background:var(--line)}
-.item.high .rail2{background:var(--red)}.item.strong .rail2{background:var(--ink)}
 .item .t{font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item .n{font-variant-numeric:tabular-nums;font-weight:800;color:var(--red);text-align:right}
-.item .m{grid-column:2/-1;font-size:12px;color:var(--mute);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.item .m{grid-column:1/-1;font-size:12px;color:var(--mute);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .empty{padding:24px 14px;color:var(--mute);font-size:13px}
 .work{overflow:auto;padding:16px 20px 30px;display:grid;gap:14px;align-content:start;height:100%}
 .workhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px}
@@ -155,7 +155,7 @@ td{border-bottom:1px solid var(--line);padding:8px 12px 8px 0;vertical-align:top
 pre.code{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto;font:12.5px/1.6 "JetBrains Mono",monospace;margin:0}
 details summary{cursor:pointer;font-weight:700;font-size:13px;list-style:none}
 details summary::-webkit-details-marker{display:none}
-details summary::before{content:"▸ ";color:var(--mute)}details[open] summary::before{content:"▾ "}
+details summary::before{content:"";display:inline-block;width:6px;height:6px;margin:0 8px 2px 2px;border-right:1.5px solid var(--mute);border-bottom:1.5px solid var(--mute);transform:rotate(-45deg);transition:transform .15s ease-out}details[open] summary::before{transform:rotate(45deg)}
 .sectionhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:26px 0 10px}
 .sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
 .sheet.open{display:flex}
@@ -169,7 +169,7 @@ details summary::before{content:"▸ ";color:var(--mute)}details[open] summary::
  .bar{gap:8px;padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top,0))}
  .bar .grow,.statechip{display:none}.logo{flex:1}
  .rail{grid-row:3;flex-direction:row;justify-content:space-around;border-right:0;border-top:1px solid var(--line);padding:4px 4px max(4px,env(safe-area-inset-bottom,0));overflow:visible}
- .rail button{padding:6px 2px;font-size:10px;flex:1}
+ .rail button{padding:6px 2px;font-size:11px;flex:1}
  .rail svg{width:20px;height:20px}
  .view{grid-row:2}
  .section{padding:14px 12px 30px}
@@ -227,8 +227,8 @@ details summary::before{content:"▸ ";color:var(--mute)}details[open] summary::
      <div class="key"><span><span class="ramp"></span> none solved → all solved</span><span><span class="sw" style="border:3px solid var(--red)"></span>detectors agree</span><span><span class="sw" style="border:2px dashed var(--ink)"></span>strict</span><span><span class="sw" style="border:1.5px solid var(--red)"></span>sensitive</span></div>
     </section>
     <section class="card" id="detail">
-     <div class="tabs" role="tablist"><button role="tab" id="tWhy" aria-selected="true">Why flagged</button><button role="tab" id="tCases" aria-selected="false">Cases</button></div>
-     <div class="panel" id="panel"></div>
+     <div class="tabs" role="tablist" aria-label="Finding detail"><button role="tab" id="tWhy" aria-selected="true" aria-controls="panel">Why flagged</button><button role="tab" id="tCases" aria-selected="false" aria-controls="panel">Cases</button></div>
+     <div class="panel" id="panel" role="tabpanel" aria-live="polite"></div>
     </section>
    </div>
   </section>
@@ -251,7 +251,7 @@ details summary::before{content:"▸ ";color:var(--mute)}details[open] summary::
   <p class="muted">Built with coldmap, an open-source framework (GPL-3.0). Not affiliated with the Murder Accountability Project.</p>
  </div>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 {
@@ -293,9 +293,9 @@ function renderOverview(){
  const ser=a=>a.filter(f=>f.kind==='serial-pattern');
  const agreeW=ser(w).filter(f=>f.conf==='high'),agreeM=ser(m).filter(f=>f.conf==='high');
  const B=M.benchmark,C=M.controls;
- let recov='—',recSub='Build with --benchmark-json to include';
+ let recov='Not in this build',recSub='Build with --benchmark-json to include';
  if(B){const r=B.series.map(s=>s.results.ensemble);const full=r.filter(x=>x&&x.grade==='full').length,part=r.filter(x=>x&&x.grade==='partial').length;recov=`${full+part} of ${r.length}`;recSub=`known serial cases caught (${full} full, ${part} partial)`}
- let rel='—',relSub='Build with --controls-json to include';
+ let rel='Not in this build',relSub='Build with --controls-json to include';
  if(C){const row=C.rows.find(r=>r.victim_sex==='Female'&&r.detector==='ensemble: high');if(row){rel=`${row.null_findings}`;relSub=`chance findings among ${row.real_findings} where detectors agree (women)`}}
  const issues=Object.values(M.quality).reduce((a,q)=>a+q.rows.length,0);
  const stages=[['Sources',P.sources.length,'Files in','sources'],['Data fixes',P.fixes.length,'Problems corrected or flagged','fixes'],['Detectors',P.detectors.length,'Models that search','detectors'],['Enrichers',P.enrichers.length,'Context added','enrichers'],['Presets',P.presets.length,'Ways to combine detectors','presets'],['Findings',agreeW.length+agreeM.length,'Where detectors agree','out']];
@@ -303,12 +303,12 @@ function renderOverview(){
  <h1>${esc(M.state)} · ${Y0}–${Y1}</h1>
  <p class="lede">${fmt(M.cases_total)} killings in this state's case file, searched by ${P.detectors.length} detectors for places, methods and periods where far fewer were solved than expected. A finding is a pattern worth review, never evidence that cases are linked.</p>
  <div class="grid g4">
-  <div class="card stat"><div class="k">Detectors agree · women</div><div class="v red">${agreeW.length}</div><div class="d">serial-pattern findings</div></div>
-  <div class="card stat"><div class="k">Detectors agree · men</div><div class="v red">${agreeM.length}</div><div class="d">serial-pattern findings</div></div>
-  <div class="card stat"><div class="k">Benchmark</div><div class="v green">${esc(recov)}</div><div class="d">${esc(recSub)}</div></div>
-  <div class="card stat"><div class="k">False alarms</div><div class="v blue">${esc(rel)}</div><div class="d">${esc(relSub)}</div></div>
+  <div class="card stat"><div class="k">Detectors agree · women</div><div class="v ${agreeW.length?'red':''}">${agreeW.length}</div><div class="d">serial-pattern findings</div></div>
+  <div class="card stat"><div class="k">Detectors agree · men</div><div class="v ${agreeM.length?'red':''}">${agreeM.length}</div><div class="d">serial-pattern findings</div></div>
+  <div class="card stat"><div class="k">Benchmark</div><div class="v ${B?'green':'na'}">${esc(recov)}</div><div class="d">${esc(recSub)}</div></div>
+  <div class="card stat"><div class="k">False alarms</div><div class="v ${rel!=='Not in this build'?'blue':'na'}">${esc(rel)}</div><div class="d">${esc(relSub)}</div></div>
  </div>
- <div class="sectionhead"><div><h2>Pipeline</h2><div class="muted small">Every stage is a plugin registry. Tap one to see what's installed.</div></div></div>
+ <div class="sectionhead"><div><h2>Pipeline</h2><div class="muted small">Every stage is a plugin registry. Select one to see what's installed.</div></div></div>
  <div class="pipe">${stages.map(([l,n,s,k])=>`<button class="stage ${k==='out'?'out':''}" data-k="${k}"><div class="n">${n}</div><div class="l">${esc(l)}</div><div class="s">${esc(s)}</div></button>`).join('')}</div>
  <div class="sectionhead"><div><h2>Strongest leads · women</h2><div class="muted small">Serial-pattern findings where detectors agree, most unsolved first</div></div><button class="btn" id="allFind">All findings →</button></div>
  <div class="leads">${agreeW.slice(0,6).map((f,i)=>`<button class="lead" data-i="${i}"><div style="display:flex;justify-content:space-between;gap:8px"><span class="t">${esc(placeOf(f))}</span><span class="big">${f.t-f.s}</span></div><div class="m">${esc(M.weapons[f.w])}${f.band?' · ages '+esc(f.band):''} · ${yr(f.y0,f.y1)}</div><div class="m">${f.s} of ${f.t} solved${f.exp!=null?` vs ${pct(f.exp)} expected`:''} · ${esc(f.by.join(' + '))}</div></button>`).join('')||'<div class="empty">No agreed findings.</div>'}</div>
@@ -343,7 +343,7 @@ function filterFindings(){
 }
 function renderList(){
  $('count').textContent=SHOWN.length?`${SHOWN.length} finding${SHOWN.length>1?'s':''} · strongest first`:'';
- $('list').innerHTML=SHOWN.length?SHOWN.slice(0,250).map((f,i)=>`<li><button class="item ${f.conf}" data-i="${i}" aria-current="${same(S.sel,f)}"><span class="rail2"></span><span class="t">${esc(placeOf(f))}</span><span class="n">${f.t-f.s}</span><span class="m"><span class="tag ${f.conf}">${esc(CONF[f.conf])}</span><span>${esc(M.weapons[f.w])}${f.band?' · '+esc(f.band):''}</span><span>${yr(f.y0,f.y1)}</span><span>${f.s}/${f.t} solved</span></span></button></li>`).join(''):`<li class="empty">No findings match. Try another view, confidence level or filter.</li>`;
+ $('list').innerHTML=SHOWN.length?SHOWN.slice(0,250).map((f,i)=>`<li><button class="item ${f.conf}" data-i="${i}" aria-current="${same(S.sel,f)}"><span class="t">${esc(placeOf(f))}</span><span class="n">${f.t-f.s}</span><span class="m"><span class="tag ${f.conf}">${esc(CONF[f.conf])}</span><span>${esc(M.weapons[f.w])}${f.band?' · '+esc(f.band):''}</span><span>${yr(f.y0,f.y1)}</span><span>${f.s}/${f.t} solved</span></span></button></li>`).join(''):`<li class="empty">No findings match. Try another view, confidence level or filter.</li>`;
 }
 function renderKpis(){
  const c=county();let t=0,s=0,st=0,ss=0;
@@ -406,7 +406,7 @@ function select(f,{tab='why',goWork=false}={}){
 }
 function refresh({keepSel=false}={}){
  build();renderViews();filterFindings();
- if(!keepSel||!SHOWN.some(f=>same(f,S.sel)))S.sel=SHOWN.find(f=>inArea(f,county()))||null;
+ if(!keepSel||!SHOWN.some(f=>same(f,S.sel))){S.sel=SHOWN.find(f=>inArea(f,county()))||SHOWN[0]||null;if(S.sel&&!inArea(S.sel,county())){$('county').value=String(S.sel.c);build()}}
  S.tab='why';renderList();renderKpis();drawHM();renderDetail();save();
 }
 function save(){try{localStorage.setItem('coldmap-app2-'+M.state,JSON.stringify({view:S.view,sex:S.sex,serial:S.serial,county:$('county').value,adult:S.adult}))}catch(e){}}
@@ -489,7 +489,7 @@ function renderQuality(){
  const P=M.plugins,el=$('s-quality');
  const relevant=P.fixes.filter(f=>!f.states.length||f.states.includes(M.state));
  el.innerHTML=`<h1>Data quality</h1><p class="lede">Problems in the data can create false findings or hide real ones. Checks are plugins that look for them; fixes correct the ones we understand, and caveats flag the rest on every finding they touch. These checks ran on ${esc(M.state)}.</p>
- <div class="grid g2">${Object.entries(M.quality).map(([k,q])=>`<div class="card"><div class="cardhead"><span class="nm" style="font-size:13px">${esc(k)}</span><span class="tag ${q.rows.length?'partial':'full'}">${q.rows.length?q.rows.length+' found':'clean'}</span></div><div class="cardbody"><p class="muted" style="margin:0 0 8px">${esc(q.summary)}</p>${q.rows.length?`<div class="scroll"><table><thead><tr><th>Where</th><th>When</th><th>Detail</th></tr></thead><tbody>${q.rows.map(r=>`<tr><td>${esc(r.where)}</td><td class="num">${esc(String(r.when).replace(/^(\d{4})-\1 \(1 yrs\)$/,'$1'))}</td><td>${esc(r.detail)}</td></tr>`).join('')}</tbody></table></div>`:''}</div></div>`).join('')}</div>
+ <div class="grid g2">${Object.entries(M.quality).map(([k,q])=>`<div class="card"><div class="cardhead"><span class="nm" style="font-size:13px">${esc(k)}</span><span class="tag ${q.rows.length?'partial':'full'}">${q.rows.length?q.rows.length+' found':'clean'}</span></div><div class="cardbody"><p class="muted" style="margin:0 0 8px">${esc(q.summary)}</p>${q.rows.length?`<div class="scroll"><table><thead><tr><th>Where</th><th>When</th><th>Detail</th></tr></thead><tbody>${q.rows.map(r=>`<tr><td>${esc(r.where)}</td><td class="num">${esc(String(r.when).replace(/^(\d{4})-\1 \(1 yrs\)$/,'$1').replace(/^(\d{4})-(\d{4})/,'$1–$2'))}</td><td>${esc(r.detail)}</td></tr>`).join('')}</tbody></table></div>`:''}</div></div>`).join('')}</div>
  <div class="sectionhead"><div><h2>Fixes and caveats for ${esc(M.state)}</h2><div class="muted small">Fixes change the data on load; caveats appear on every finding they touch</div></div></div>
  <div class="grid g2">${relevant.map(f=>`<div class="pcard"><div class="top"><span class="nm">${esc(f.name)}</span><span class="tag ${f.changes_data?'strict':'sensitive'}">${f.changes_data?'fix applied':'caveat'}</span></div><p style="color:var(--ink);font-weight:700;margin-bottom:4px">${esc(f.title)}</p><p>${esc(f.summary)}</p><div class="cchips">${f.states.length?f.states.map(s=>`<span class="cchip">${esc(s)}</span>`).join(''):'<span class="cchip">all states</span>'}${f.years?`<span class="cchip">${f.years[0]}${f.years[1]!==f.years[0]?'–'+f.years[1]:''}</span>`:'<span class="cchip">all years</span>'}</div></div>`).join('')}</div>`;
 }
@@ -543,9 +543,10 @@ function renderPlugins(){
 
 /* about */
 $('aboutBtn').addEventListener('click',()=>{$('about').classList.add('open');$('aboutClose').focus()});
-$('aboutClose').addEventListener('click',()=>$('about').classList.remove('open'));
-$('about').addEventListener('click',e=>{if(e.target===$('about'))$('about').classList.remove('open')});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')$('about').classList.remove('open')});
+function closeAbout(){if(!$('about').classList.contains('open'))return;$('about').classList.remove('open');$('aboutBtn').focus()}
+$('aboutClose').addEventListener('click',closeAbout);
+$('about').addEventListener('click',e=>{if(e.target===$('about'))closeAbout()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAbout()});
 
 /* boot */
 Promise.all([fetch('agg.json').then(r=>r.json()),fetch('cases.json').then(r=>r.json())]).then(([a,c])=>{
