@@ -254,6 +254,21 @@ th[aria-sort]{color:var(--ink)}
 .mapload{position:absolute;inset:0;display:grid;place-items:center;color:var(--m-mute)}
 @media (max-width:1100px){.mpanel.right{display:none}.mzoom{right:12px}.mlegend{display:none}}
 
+/* models manager: list + detail, like Flags */
+.mrow{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.mrow:hover{background:var(--surf2)}
+.mrow[aria-selected=true]{background:color-mix(in oklab,var(--accent) 9%,var(--surf));outline:1px solid color-mix(in oklab,var(--accent) 45%,transparent);outline-offset:-1px}
+.mrow .n{font:600 13px var(--mono);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.mrow .s{grid-column:1;font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow .a{grid-row:1/3;grid-column:2}
+.mrow.off .n{color:var(--mute)}
+.mrow.bad .n{color:var(--red)}
+.mgrp{position:sticky;top:0;z-index:1;background:var(--surf2);border-bottom:1px solid var(--line2);padding:7px 14px;font-size:10.5px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);display:flex;justify-content:space-between}
+.params td{vertical-align:middle}
+.params .inp{height:28px;width:100%;max-width:220px;font:12.5px var(--mono)}
+.params tr.changed td:first-child code{background:var(--hl);border-radius:2px;padding:0 3px}
+.code{max-height:440px;overflow:auto;white-space:pre;font:12px/1.55 var(--mono)}
+
 /* your datasets */
 .dsform{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin:12px 0}
 .dsform label{display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600}
@@ -300,7 +315,7 @@ th[aria-sort]{color:var(--ink)}
 .doc ul,.doc ol{padding-left:20px;margin:0 0 12px}.doc li{margin:4px 0}
 .doc blockquote{margin:0 0 14px;padding:10px 14px;border:1px solid var(--line);background:var(--surf);border-radius:5px}.doc blockquote p{margin:0}
 pre{background:var(--surf);border:1px solid var(--line);border-radius:5px;padding:12px 14px;overflow:auto;font:12.5px/1.6 var(--mono);margin:0 0 14px}
-.sw{all:unset;box-sizing:border-box;width:34px;height:20px;border-radius:99px;background:var(--pale);border:1px solid var(--line2);position:relative;cursor:pointer;flex:none}
+.sw{all:unset;box-sizing:border-box;display:inline-block;width:34px;height:20px;border-radius:99px;background:var(--pale);border:1px solid var(--line2);position:relative;cursor:pointer;flex:none}
 .sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--surf);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .2s cubic-bezier(.16,1,.3,1)}
 .sw[aria-checked=true]{background:var(--ink);border-color:var(--ink)}
 .sw[aria-checked=true]::after{transform:translateX(14px)}
@@ -318,7 +333,7 @@ pre{background:var(--surf);border:1px solid var(--line);border-radius:5px;paddin
 .dialog footer{display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;border-top:1px solid var(--line)}
 .toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surf);padding:8px 14px;border-radius:5px;font-size:13px;font-weight:600;z-index:40}
 
-@media (max-width:1100px){.split{grid-template-columns:minmax(0,1fr)}.split.open .list{display:none}.split:not(.open) .flag{display:none}.quote{grid-template-columns:repeat(3,minmax(0,1fr))}.board{grid-template-columns:1fr}}
+@media (max-width:1100px){.split.open-both{grid-template-columns:minmax(0,40%) minmax(0,1fr)}.split.open-both .list,.split.open-both .flag{display:block}.split:not(.open-both){grid-template-columns:minmax(0,1fr)}.split.open .list{display:none}.split:not(.open) .flag{display:none}.quote{grid-template-columns:repeat(3,minmax(0,1fr))}.board{grid-template-columns:1fr}}
 @media (max-width:720px){
  .app{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
  .side{grid-row:auto;flex-direction:row;align-items:center;overflow-x:auto;padding:6px 8px;border-right:0;border-bottom:1px solid var(--line)}
@@ -349,6 +364,7 @@ pre{background:var(--surf);border:1px solid var(--line);border-radius:5px;paddin
  </aside>
  <main class="main" id="main"></main>
  <div class="status" id="status" role="status"></div>
+<input type="file" id="pReplace" accept=".py" hidden>
 </div>
 <script>
 const $=id=>document.getElementById(id);
@@ -374,6 +390,7 @@ const q0=new URLSearchParams(location.search);
 if(q0.get('state'))S.f.state=q0.get('state');
 const wantDownload=q0.get('download');
 const wantMapFlag=q0.get('flag');
+const wantModel=q0.get('m');
 if(q0.toString())history.replaceState(null,'',location.pathname==='/'?'/flags':location.pathname);
 
 // ---- data ------------------------------------------------------------------------------------
@@ -543,7 +560,7 @@ async function renderFlag(id){
  const h=`<div class="fpage">
   <div class="crumb"><a href="/places/${slug(f.state)}" data-nav>${esc(f.state)}</a>${f.county&&f.level!=='county'&&f.level!=='region'?` › <a href="/places/${slug(f.state)}/${slug(f.county)}" data-nav>${esc(f.county)}</a>`:f.level==='county'?` › <a href="/places/${slug(f.state)}/${slug(f.place)}" data-nav>county profile</a>`:''} · ${esc(f.level)}${d.flag.archived?' · <span class="tag">from an earlier scan</span>':''}</div>
   <h1 style="margin-top:6px">${esc(f.place)}: ${esc(String(f.weapon).toLowerCase())} killings of ${who(f.sex)}, ${yrs(f.start,f.end)}</h1>
-  <div class="row"><span class="tag ${f.confidence}">${CONF[f.confidence]} confidence</span><span class="tag">${esc(f.kind||'')}</span><a class="btn" href="/map?flag=${f.id}" data-nav style="height:24px;font-size:12px">Show on map</a><span class="muted" style="font-size:12px">found by ${esc((f.by||[]).join(' + '))}${f.q!=null?` · q = ${f.q}`:''}</span></div>
+  <div class="row"><span class="tag ${f.confidence}">${CONF[f.confidence]} confidence</span><span class="tag">${esc(f.kind||'')}</span><a class="btn" href="/map?flag=${f.id}" data-nav style="height:24px;font-size:12px">Show on map</a><span class="muted" style="font-size:12px">found by ${(f.by||[]).map(b=>`<a href="/models?m=detector|${encodeURIComponent(b)}" data-nav>${esc(b)}</a>`).join(' + ')}${f.q!=null?` · q = ${f.q}`:''}</span></div>
   <div class="quote"><div><b>${pct(f.solved/f.total)}</b><span>Solved</span></div><div><b>${pct(f.expected)}</b><span>Expected</span></div><div class="${g<0?'neg':''}"><b>${gapTxt(g)}</b><span>Gap, points</span></div><div><b>${nf.format(f.total-f.solved)}</b><span>Unsolved of ${nf.format(f.total)}</span></div><div><b>${f.end-f.start+1}</b><span>Years</span></div></div>
   ${decideBox(id,f,dec)}
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
@@ -891,35 +908,83 @@ function drawHeat(d){const el=$('heat');if(!el)return;const [Y0,Y1]=d.years,W=el
 async function loadPlugins(){try{S.pl=await api('/api/plugins')}catch(e){S.plErr=e.message}render()}
 async function plugin(action,params,body){
  S.plMsg=null;try{const j=await post('/api/plugins/'+action+(params?'?'+new URLSearchParams(params):''),body);S.pl=j;
-  if(j.added)S.plMsg={ok:1,html:`Added <b>${esc(j.added.file)}</b>: ${j.added.provides.map(x=>`${esc(x.kind)} <code>${esc(x.name)}</code>`).join(', ')}, switched on. Re-scan every state to see it in your flags.${action==='starter'?` Edit it at <code>${esc(j.path)}</code>.`:''}`};
-  else S.plMsg={ok:1,html:action==='remove'?'Removed.':'Saved. Re-scan every state to apply it to your flags.'};
+  if(j.added){const pr=j.added.provides[0];S.plMsg={ok:1,html:`Added <b>${esc(j.added.file)}</b>: ${j.added.provides.map(x=>`${esc(x.kind)} <code>${esc(x.name)}</code>`).join(', ')}, switched on. Re-scan every state to see it in your flags.`};
+   S.mAdd=false;if(pr)S.mSel={kind:pr.kind,name:pr.name};if(action==='starter')post('/api/plugins/open?file='+encodeURIComponent(j.added.file)).catch(()=>{})}
+  else if(action==='remove'){S.plMsg={ok:1,html:'Removed.'};S.mSel=null}
+  else S.plMsg={ok:1,html:action==='param'||action==='reset'?'Setting saved. Re-scan every state to apply it to your flags.':'Saved. Re-scan every state to apply it to your flags.'};
+  S.mCode=null;
  }catch(e){S.plMsg={ok:0,html:esc(e.message)}}
  await poll();
 }
 function renderModels(r){
  if(r.a==='guide')return renderGuide();
+ const mq=new URLSearchParams(location.search).get('m')||(S.usedM?null:wantModel);S.usedM=1;
+ if(mq&&mq!==S.mLastQ){S.mLastQ=mq;const [kind,...rest]=mq.split('|');S.mSel={kind,name:rest.join('|')};S.mAdd=false}
  if(!S.pl){if(!S.plLoading){S.plLoading=1;loadPlugins()}setMain('models-load',`<div class="view"><div class="page"><span class="spin"></span> Loading…</div></div>`);return}
- const pl=S.pl,job=S.st.job,busy=job&&job.running,dis=busy?' disabled':'',n=S.st.national;
- const tagFor=o=>o.startsWith('file ')?`<span class="tag kept">${esc(o.slice(5))}</span>`:o.startsWith('package ')?`<span class="tag">${esc(o)}</span>`:`<span class="tag">built in</span>`;
- const grp=(kind,title,desc)=>{const g=pl.groups.find(x=>x.kind===kind);if(!g)return'';const items=[...g.items].sort((a,b)=>(a.origin==='built in')-(b.origin==='built in')||a.name.localeCompare(b.name));
-  return `<h3>${title}</h3><p class="muted">${desc}</p><ul class="plist">${items.map(i=>`<li><span class="t"><code>${esc(i.name)}</code>${tagFor(i.origin)}${i.tier?`<span class="tag">${esc(i.tier)}</span>`:''}</span><span class="d">${esc(i.summary)}</span><span class="a">${i.locked?'<span class="tag">always on</span>':`<button class="sw" role="switch" aria-checked="${i.on}" aria-label="${esc(i.name)}" data-kind="${kind}" data-name="${esc(i.name)}"${dis}></button>`}</span></li>`).join('')}</ul>`};
- const also=pl.groups.filter(g=>['fix','source','preset','region set','check'].includes(g.kind)&&g.items.length).map(g=>`<p style="margin:10px 0 4px"><b>${esc({fix:'Data fixes',source:'Data sources',preset:'Presets','region set':'Region sets',check:'Data-quality checks'}[g.kind])}</b></p><ul class="plist">${g.items.map(i=>`<li><span class="t"><code>${esc(i.name)}</code>${tagFor(i.origin)}</span><span class="d">${esc(i.summary)}</span></li>`).join('')}</ul>`).join('');
- setMain('models:'+JSON.stringify(pl).length+(S.plMsg?S.plMsg.html:'')+busy+(n&&n.stale),`<div class="view"><div class="page">
-  <h1>Models</h1><p class="lede">Models are how coldmap finds and explains flags. <b>Detectors</b> find flags; <b>enrichers</b> add context to each one. Add your own, or one someone shared, then re-scan to see it in your flags. The <a href="/models/guide" data-nav>plugin guide</a> shows how they're written.</p>
-  ${n&&n.stale?`<p class="msg warn row">Your flags were made with different models. <button class="btn" id="rescan"${dis}>Re-scan every state</button> <span class="muted">about 5 minutes</span></p>`:''}
-  ${S.plMsg?`<p class="msg ${S.plMsg.ok?'ok':'err'}" role="${S.plMsg.ok?'status':'alert'}">${S.plMsg.html}</p>`:''}
-  <div class="box"><h2>Add a model</h2><p class="muted">A model is Python code that runs on your computer with access to your files. Add only ones from people you trust, and read the file first.</p>
-   <ul class="plist">
-    <li><span class="t">Example: Before &amp; after</span><span class="d">Solve rates in the years before and after each flag, to tell a short drop from a long-running problem. Written as a tutorial: <a href="/guide/before_after.py" target="_blank" rel="noopener">read its code</a>.</span><span class="a">${pl.example.added?'<span class="tag kept">added</span>':`<button class="btn" data-pa="example"${dis}>Add</button>`}</span></li>
-    <li><span class="t">A file someone shared</span><span class="d">A single <code>.py</code> file.</span><span class="a"><input type="file" id="pFile" accept=".py" hidden><button class="btn" id="pPick"${dis}>Choose file…</button></span></li>
-    <li><span class="t">From a link</span><span class="d"><span class="row"><input class="inp" id="pUrl" type="url" placeholder="https://github.com/…/my_model.py" aria-label="Link to a model file" style="flex:1"><button class="btn" id="pLink"${dis}>Add</button></span></span></li>
-    <li><span class="t">Write your own</span><span class="d">A starter file with each part explained, in <code>${esc(pl.folder)}</code>.</span><span class="a"><button class="btn" data-pa="starter"${dis}>Create starter</button></span></li>
-   </ul></div>
-  ${pl.files.length?`<h3>Your model files</h3><ul class="plist">${pl.files.map(f=>`<li><span class="t"><code>${esc(f.file)}</code></span><span class="d">${f.error?`<span style="color:var(--red)">Couldn't load: ${esc(f.error)}</span>`:'Adds '+f.provides.map(x=>`${esc(x.kind)} <code>${esc(x.name)}</code>`).join(', ')}</span><span class="a"><button class="btn" data-rm="${esc(f.file)}"${dis}>Remove</button></span></li>`).join('')}</ul>`:''}
-  ${grp('detector','Detectors','Find flags. Strict ones control false alarms; sensitive ones catch more and are noisier.')}
-  ${grp('enricher','Enrichers','Add context to each flag. Notes they write appear under “From plugins” on the flag.')}
-  <h3>Also installed</h3><details><summary class="muted" style="cursor:pointer">Data fixes, sources, presets, regions and checks</summary>${also}</details>
- </div></div>`);
+ const pl=S.pl,job=S.st.job,busy=job&&job.running,n=S.st.national,q=(S.mQ||'').toLowerCase();
+ const grp=k=>pl.groups.find(x=>x.kind===k)||{items:[]};
+ const match=i=>!q||(i.name+' '+i.summary).toLowerCase().includes(q);
+ const tagFor=o=>o.startsWith('file ')?`<span class="tag kept">your file</span>`:o.startsWith('package ')?`<span class="tag">${esc(o)}</span>`:`<span class="tag">built in</span>`;
+ const row=(kind,i)=>{const sel=S.mSel&&S.mSel.kind===kind&&S.mSel.name===i.name;
+  return `<button class="mrow${i.on===false?' off':''}" data-msel="${kind}|${esc(i.name)}" aria-selected="${sel}"><span class="n">${esc(i.name)}${tagFor(i.origin)}${i.tier?`<span class="tag">${esc(i.tier)}</span>`:''}</span><span class="s">${esc(i.summary)}</span>
+   <span class="a">${i.on==null?'':i.locked?'<span class="tag">always on</span>':`<span class="sw" role="switch" tabindex="0" aria-checked="${i.on}" aria-label="Use ${esc(i.name)}" data-kind="${kind}" data-name="${esc(i.name)}"></span>`}</span></button>`};
+ const bad=pl.files.filter(f=>f.error);
+ const ALSO={fix:'Data fixes',source:'Data sources',preset:'Presets','region set':'Region sets',check:'Data-quality checks'};
+ const det=grp('detector').items.filter(match),enr=grp('enricher').items.filter(match);
+ const others=pl.groups.filter(g=>ALSO[g.kind]).map(g=>({g,items:g.items.filter(match)})).filter(x=>x.items.length);
+ const on=k=>grp(k).items.filter(i=>i.on).length;
+ const list=`${bad.length?`<div class="mgrp"><span>Need attention</span><span>${bad.length}</span></div>${bad.map(f=>`<button class="mrow bad" data-msel="file|${esc(f.file)}" aria-selected="${S.mSel&&S.mSel.name===f.file}"><span class="n">${esc(f.file)}</span><span class="s">Couldn't load: ${esc(f.error)}</span></button>`).join('')}`:''}
+  <div class="mgrp"><span>Find flags · detectors</span><span>${on('detector')} on</span></div>${det.map(i=>row('detector',i)).join('')||'<p class="empty">No match.</p>'}
+  <div class="mgrp"><span>Add context · enrichers</span><span>${on('enricher')} on</span></div>${enr.map(i=>row('enricher',i)).join('')||'<p class="empty">No match.</p>'}
+  ${others.map(({g,items})=>`<div class="mgrp"><span>${ALSO[g.kind]}</span><span>${items.length}</span></div>${items.map(i=>row(g.kind,i)).join('')}`).join('')}`;
+ const banner=(n&&n.stale?`<div class="row" style="padding:8px 16px;border-bottom:1px solid var(--line);background:color-mix(in oklab,var(--amber) 9%,var(--surf));font-size:13px">Your flags were made with different models or settings. <button class="btn" id="rescan"${busy?' disabled':''}>Re-scan every state</button><span class="muted">about 5 minutes</span></div>`:'')+
+  (S.plMsg?`<div style="padding:8px 16px;border-bottom:1px solid var(--line)"><span class="msg ${S.plMsg.ok?'ok':'err'}" role="${S.plMsg.ok?'status':'alert'}" style="display:block">${S.plMsg.html}</span></div>`:'')+
+  (busy?`<div style="padding:8px 16px;border-bottom:1px solid var(--line);font-size:13px" class="muted">Models can be changed once this finishes: ${esc(job.title)}.</div>`:'');
+ const key='models:'+JSON.stringify(pl).length+'|'+JSON.stringify([S.mSel,S.mAdd,S.mQ,S.plMsg,busy,n&&n.stale,S.mCode&&S.mCode.name]);
+ const fresh=setMain('models',`<div class="toolbar"><h1>Models</h1><input class="inp" id="mQ" type="search" placeholder="Find a model" aria-label="Find a model" value="${esc(S.mQ||'')}" style="width:200px"><span class="muted" style="font-size:12.5px">${on('detector')} detectors and ${on('enricher')} enrichers on · ${pl.files.length} file${pl.files.length===1?'':'s'} of your own</span><span style="flex:1"></span><a class="btn" href="/models/guide" data-nav>Plugin guide</a><button class="btn primary" id="mAddBtn">Add a model</button></div><div id="mBanner"></div><div class="split open-both" id="msplit"><div class="list" id="mList"></div><div class="flag" id="mDetail"></div></div>`);
+ const putIn=(id,h)=>{const el=$(id);if(el._h!==h){const sc=el.scrollTop;el.innerHTML=h;el._h=h;el.scrollTop=sc}};
+ const keepQ=document.activeElement&&document.activeElement.id==='mQ',caret=keepQ?document.activeElement.selectionStart:0;
+ putIn('mBanner',banner);putIn('mList',list);putIn('mDetail',S.mAdd?modelAdd(pl,busy):modelDetail(pl,busy));
+ if(keepQ&&$('mQ')){$('mQ').focus();$('mQ').setSelectionRange(caret,caret)}
+}
+function modelAdd(pl,busy){
+ const dis=busy?' disabled':'';
+ return `<div class="fpage"><h1>Add a model</h1><p class="lede">A model is Python code that runs on your computer with access to your files. Add only ones from people you trust, and read the file first.</p>
+  <ul class="plist">
+   <li><span class="t">Example: Before &amp; after</span><span class="d">Solve rates in the years before and after each flag, to tell a short drop from a long-running problem. Written as a tutorial: <a href="/guide/before_after.py" target="_blank" rel="noopener">read its code</a>.</span><span class="a">${pl.example.added?'<span class="tag kept">added</span>':`<button class="btn" data-pa="example"${dis}>Add</button>`}</span></li>
+   <li><span class="t">A file someone shared</span><span class="d">A single <code>.py</code> file.</span><span class="a"><input type="file" id="pFile" accept=".py" hidden><button class="btn" id="pPick"${dis}>Choose file…</button></span></li>
+   <li><span class="t">From a link</span><span class="d"><span class="row"><input class="inp" id="pUrl" type="url" placeholder="https://github.com/…/my_model.py" aria-label="Link to a model file" style="flex:1"><button class="btn" id="pLink"${dis}>Add</button></span></span></li>
+   <li><span class="t">Write your own</span><span class="d">A starter file with each part explained, in your models folder. It opens in your editor.</span><span class="a"><button class="btn" data-pa="starter"${dis}>Create starter</button></span></li>
+  </ul><div class="row" style="margin-top:14px"><button class="btn" data-popen="">Open your models folder</button><button class="btn" id="mAddClose">Done</button></div></div>`;
+}
+function modelDetail(pl,busy){
+ const sel=S.mSel;
+ if(!sel)return `<div class="empty" style="padding-top:80px"><p><b>Select a model</b> to see what it does, how much of your research it shaped, its settings and its code.</p><p>Switch any detector or enricher on or off from the list. Your own files can be opened in your editor, replaced or removed.</p></div>`;
+ const dis=busy?' disabled':'';
+ if(sel.kind==='file'){const f=pl.files.find(x=>x.file===sel.name);if(!f)return '';
+  return `<div class="fpage"><h1>${esc(f.file)}</h1><p class="msg err"><b>coldmap couldn't load this file.</b> ${esc(f.error)}</p><p class="muted">Open it in your editor, fix the problem and save; coldmap reloads it next time it starts or when you replace it here.</p>
+   <div class="row"><button class="btn primary" data-popen="${esc(f.file)}">Open in your editor</button><button class="btn" data-preplace="${esc(f.file)}"${dis}>Replace with a new version…</button><button class="btn" data-rm="${esc(f.file)}"${dis}>Remove</button></div></div>`}
+ const g=pl.groups.find(x=>x.kind===sel.kind),i=g&&g.items.find(x=>x.name===sel.name);if(!i)return '';
+ const file=i.origin.startsWith('file ')?i.origin.slice(5):null;
+ const flags=S.flags||[];let effect='';
+ if(sel.kind==='detector'){const c=flags.filter(f=>(f.by||[]).includes(i.name)).length;effect=S.flags?`Found <b class="num">${nf.format(c)}</b> of your <span class="num">${nf.format(flags.length)}</span> flags${c?` (${Math.round(c/flags.length*100)}%)`:''}${i.on?'':' in the last scan; it is off now'}.`:''}
+ else if(sel.kind==='enricher'){const c=flags.filter(f=>(f.plugins||[]).some(x=>x.by===i.name)).length;effect=c?`Wrote notes on <b class="num">${nf.format(c)}</b> of your flags.`:i.locked?'Runs on every flag; other steps rely on it.':`No notes on your current flags${i.on?'':' (it is off)'}; re-scan after switching it on.`}
+ const params=(i.params||[]);
+ const ptable=params.length?`<h3>Settings</h3><p class="muted" style="font-size:12.5px">Change a value and press Enter. Your flags are marked out of date until you re-scan.</p><table class="params"><thead><tr><th>Setting</th><th>Value</th><th>Default</th><th></th></tr></thead><tbody>${params.map(p=>`<tr class="${p.changed?'changed':''}"><td><code>${esc(p.name)}</code><br><span class="muted" style="font-size:12px">${esc(p.help)}</span></td>
+   <td><input class="inp" data-param="${esc(p.name)}" data-det="${esc(i.name)}" value="${esc(Array.isArray(p.value)?p.value.join(', '):p.value??'')}" aria-label="${esc(p.name)}"${dis}></td><td class="num muted">${esc(Array.isArray(p.default)?p.default.join(', '):p.default??'none')}</td>
+   <td>${p.changed?`<button class="btn" data-pdefault="${esc(p.name)}" data-det="${esc(i.name)}"${dis}>Default</button>`:''}</td></tr>`).join('')}</tbody></table>
+   ${params.some(p=>p.changed)?`<div class="row" style="margin-top:8px"><button class="btn" data-preset="${esc(i.name)}"${dis}>Reset all settings</button></div>`:''}`:'';
+ const code=S.mCode&&S.mCode.name===i.name&&S.mCode.kind===sel.kind?S.mCode:null;
+ return `<div class="fpage">
+  <div class="row" style="justify-content:space-between"><h1 style="font-family:var(--mono);font-size:19px">${esc(i.name)}</h1>
+   ${i.on==null?'':i.locked?'<span class="tag">always on</span>':`<label class="row" style="gap:8px;font-weight:600">${i.on?'On':'Off'} <span class="sw" role="switch" tabindex="0" aria-checked="${i.on}" aria-label="Use ${esc(i.name)}" data-kind="${sel.kind}" data-name="${esc(i.name)}"></span></label>`}</div>
+  <div class="row" style="margin:4px 0 10px"><span class="tag">${esc({detector:'finds flags',enricher:'adds context'}[sel.kind]||sel.kind)}</span>${i.tier?`<span class="tag">${esc(i.tier)}</span>`:''}<span class="tag${file?' kept':''}">${esc(file?'your file: '+file:i.origin)}</span></div>
+  <p><b>${esc(i.summary)}</b></p>${i.doc?`<div class="notes">${esc(i.doc).split(/\n\s*\n/).map(x=>`<p>${x}</p>`).join('')}</div>`:''}
+  ${effect?`<h3>In your research</h3><p>${effect}</p>`:''}
+  ${ptable}
+  ${file?`<h3>Your file</h3><div class="row"><button class="btn primary" data-popen="${esc(file)}">Open in your editor</button><button class="btn" data-popen="">Open the folder</button><button class="btn" data-preplace="${esc(file)}"${dis}>Replace with a new version…</button><button class="btn" data-rm="${esc(file)}"${dis}>Remove</button></div><p class="muted" style="font-size:12px;margin-top:6px">After editing the file, press Replace and choose it, or restart coldmap, then re-scan.</p>`:''}
+  <h3>Code</h3>${code?`<pre class="code">${esc(code.code)}</pre>${code.path?`<p class="muted" style="font-size:12px">${esc(code.path)}</p>`:''}`:`<button class="btn" data-pcode="${sel.kind}|${esc(i.name)}">Show the code</button>`}
+ </div>`;
 }
 async function renderGuide(){
  if(!S.guide){setMain('guide-load',`<div class="view"><div class="page"><span class="spin"></span> Loading the guide…</div></div>`);try{S.guide=md(await (await fetch('/guide.md')).text())}catch(e){S.guide='<p class="msg err">The guide could not be loaded.</p>'}}
@@ -1042,6 +1107,7 @@ document.addEventListener('click',async e=>{
  const tr=e.target.closest('[data-href]');if(tr){go(tr.dataset.href);return}
  const op=e.target.closest('[data-open]');if(op){S.f.show='all';selectFlag(op.dataset.open);return}
  const th=e.target.closest('th[data-sort]');if(th&&S.sel){const w=wbOf(S.sel),i=+th.dataset.sort;w.sort=[i,w.sort[0]===i?-w.sort[1]:1];renderWB(S.sel);return}
+ const swEl=e.target.closest('.sw');if(swEl&&swEl.dataset.kind){e.preventDefault();plugin('enable',{kind:swEl.dataset.kind,name:swEl.dataset.name,on:swEl.getAttribute('aria-checked')==='true'?'0':'1'});return}
  const t=e.target.closest('button');if(!t)return;
  if(t.dataset.mf){S.f[t.dataset.mf]=t.dataset.v;updateMap();return}
  if(t.dataset.mw){MP.methods.has(t.dataset.mw)?MP.methods.delete(t.dataset.mw):MP.methods.add(t.dataset.mw);updateMap();return}
@@ -1069,8 +1135,15 @@ document.addEventListener('click',async e=>{
  if(t.id==='aiCode'){S.aiCode='run';render();try{S.aiCode=await post('/api/ai/claude-code')}catch(err){S.aiCode={ok:false,error:err.message}}render();return}
  if(t.dataset.copy){navigator.clipboard.writeText($(t.dataset.copy).textContent).then(()=>toast('Copied'));return}
  if(t.dataset.pa){plugin(t.dataset.pa);return}
+ if(t.dataset.msel){const [kind,...rest]=t.dataset.msel.split('|');if(e.target.closest('.sw'))return;S.mSel={kind,name:rest.join('|')};S.mAdd=false;render();return}
+ if(t.id==='mAddBtn'){S.mAdd=true;render();return}
+ if(t.id==='mAddClose'){S.mAdd=false;render();return}
+ if(t.dataset.popen!=null){try{await post('/api/plugins/open'+(t.dataset.popen?'?file='+encodeURIComponent(t.dataset.popen):''));toast(t.dataset.popen?'Opened in your editor':'Opened the folder')}catch(err){toast(err.message)}return}
+ if(t.dataset.preplace){S.replaceName=t.dataset.preplace;$('pReplace').click();return}
+ if(t.dataset.pdefault){plugin('param',{detector:t.dataset.det,name:t.dataset.pdefault});return}
+ if(t.dataset.preset){plugin('reset',{detector:t.dataset.preset});return}
+ if(t.dataset.pcode){const [kind,...rest]=t.dataset.pcode.split('|'),name=rest.join('|');try{S.mCode={kind,name,...await api('/api/plugins/source?kind='+encodeURIComponent(kind)+'&name='+encodeURIComponent(name))}}catch(err){toast(err.message)}render();return}
  if(t.dataset.rm){if(confirm(`Remove ${t.dataset.rm}? This deletes the file from your models folder.`))plugin('remove',{file:t.dataset.rm});return}
- if(t.classList.contains('sw')){plugin('enable',{kind:t.dataset.kind,name:t.dataset.name,on:t.getAttribute('aria-checked')==='true'?'0':'1'});return}
  if(t.id==='pPick'){$('pFile').click();return}
  if(t.id==='pLink'){const u=$('pUrl').value.trim();if(u)plugin('link',{url:u});return}
  if(t.id==='dsPick'){$('dsFile').click();return}
@@ -1119,13 +1192,17 @@ document.addEventListener('change',e=>{
    S.imp.keep=pv.columns.filter(c=>!c.left_out&&c.name!==S.imp.place&&c.name!==S.imp.time).map(c=>c.name);render();dsCheck()}catch(e){S.imp.err=e.message;render()}});return}
  if(S.imp&&['dsPlace','dsLevel','dsTime'].includes(t.id)){const k={dsPlace:'place',dsLevel:'level',dsTime:'time'}[t.id];S.imp[k]=t.value;S.imp.keep=S.imp.keep.filter(c=>c!==S.imp.place&&c!==S.imp.time);dsCheck();return}
  if(S.imp&&t.dataset.dskeep!=null){const c=t.dataset.dskeep;S.imp.keep=t.checked?[...S.imp.keep,c]:S.imp.keep.filter(x=>x!==c);return}
+ if(t.id==='pReplace'&&t.files[0]){const f=t.files[0];t.value='';f.text().then(text=>plugin('upload',null,{file:S.replaceName||f.name,text}));return}
+ if(t.dataset.param){plugin('param',{detector:t.dataset.det,name:t.dataset.param,value:t.value});return}
  if(t.id==='pFile'&&t.files[0]){const f=t.files[0];if(f.size>512*1024){toast('That file is too big for a model (over 512 KB).');return}f.text().then(text=>plugin('upload',null,{file:f.name,text}));t.value=''}
 });
 document.addEventListener('input',e=>{if(e.target.id==='fQ'){S.f.q=e.target.value;S.limit=200;render()}
+ if(e.target.id==='mQ'){S.mQ=e.target.value;render();return}
  if(e.target.id==='mDist'){MP.dist=+e.target.value;clearTimeout(MP.dt);MP.dt=setTimeout(updateMap,120);return}
  const k={dsName:'name',dsDesc:'description',dsSource:'source'}[e.target.id];if(k&&S.imp)S.imp[k]=e.target.value});
 document.addEventListener('keydown',e=>{
  if(document.querySelector('.dialog'))return;
+ if((e.key===' '||e.key==='Enter')&&e.target.classList&&e.target.classList.contains('sw')){e.preventDefault();e.target.click();return}
  const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
  if(e.key==='Escape'&&typing){document.activeElement.blur();return}
  if(typing||e.metaKey||e.ctrlKey||e.altKey||route().sec!=='flags'||!S.flags)return;

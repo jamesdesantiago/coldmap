@@ -286,7 +286,7 @@ class Library:
             if tmp.exists():
                 shutil.rmtree(tmp)
             out = build_national(self.data(), tmp, detectors=tuple(on["detectors"]),
-                                 enrichers=tuple(on["enrichers"]), progress=progress)
+                                 enrichers=tuple(on["enrichers"]), progress=progress, params=on["params"])
             body = json.loads(out.read_text())
             conf: dict[str, int] = {}
             for r in body["findings"]:
@@ -316,7 +316,7 @@ class Library:
             if tmp.exists():
                 shutil.rmtree(tmp)
             build_site(data, state, tmp, detectors=tuple(on["detectors"]), enrichers=tuple(on["enrichers"]),
-                       progress=progress)
+                       params=on["params"], progress=progress)
             (tmp / ".coldmap-build").write_text(self.stamp)
             if out.exists():
                 shutil.rmtree(out)
@@ -600,10 +600,21 @@ class App:
                 summary = getattr(obj, "summary", "") or getattr(obj, "note", "") or getattr(obj, "title", "")
                 item = {"name": name, "summary": summary, "origin": r.origin(name)}
                 if r.kind in ("detector", "enricher"):
+                    import inspect
                     item["on"] = name in on[r.kind + "s"]
                     item["locked"] = r.kind == "enricher" and name in plugins.LOCKED_ENRICHERS
+                    # The model's own words: its class docstring, else its module's (never one inherited from a base class).
+                    doc = (obj.__dict__.get("__doc__") or "").strip()
+                    if not doc:
+                        mod = inspect.getmodule(obj)
+                        doc = (mod.__doc__ or "").strip() if mod and mod.__name__ not in (
+                            "coldmap.detectors.base", "coldmap.enrichers", "coldmap.enrichers.builtin") else ""
+                    item["doc"] = inspect.cleandoc(doc) if doc else ""
                     if r.kind == "detector":
                         item["tier"] = getattr(obj, "tier", None)
+                        mine = on["params"].get(name, {})
+                        item["params"] = [{**p, "value": mine.get(p["name"], p["default"]), "changed": p["name"] in mine}
+                                          for p in obj.describe()["params"]]
                 items.append(item)
             groups.append({"kind": r.kind, "items": items})
         ex_name, _ = plugins.example()
@@ -620,6 +631,14 @@ class App:
             if action == "remove":
                 plugins.remove(q.get("file", ""))
                 return self.plugins_view()
+            if action == "param":
+                plugins.set_param(q.get("detector", ""), q.get("name", ""), q.get("value") if "value" in q else None)
+                return self.plugins_view()
+            if action == "reset":
+                plugins.reset_params(q.get("detector", ""))
+                return self.plugins_view()
+            if action == "open":
+                return {**self.plugins_view(), "opened": plugins.open_path(q.get("file") or None)}
             if action == "example":
                 added = plugins.add(*plugins.example())
             elif action == "starter":
@@ -800,6 +819,9 @@ def _handler(app: App):
                     return self._json(200, app.status())
                 if path == "/api/plugins":
                     return self._json(200, app.plugins_view())
+                if path == "/api/plugins/source":
+                    from .. import plugins
+                    return self._json(200, plugins.source(q.get("kind", ""), q.get("name", "")))
                 if path == "/api/flags":
                     summary, rows = app.flags()
                     return self._json(200, {"meta": summary, "flags": rows})

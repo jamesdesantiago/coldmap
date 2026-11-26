@@ -194,7 +194,9 @@ def enabled() -> dict[str, list[str]]:
     enr_all = _order("enricher")
     want = s.get("enrichers", enr_all)
     enr = [n for n in enr_all if n in want or n in LOCKED_ENRICHERS]
-    return {"detectors": dets or [n for n in DEFAULT_DETECTORS], "enrichers": enr or list(DEFAULT_ENRICHERS)}
+    dets = dets or [n for n in DEFAULT_DETECTORS]
+    return {"detectors": dets, "enrichers": enr or list(DEFAULT_ENRICHERS),
+            "params": {d: p for d, p in s.get("params", {}).items() if d in dets and p}}
 
 
 def set_enabled(kind: str, name: str, on: bool) -> dict[str, list[str]]:
@@ -212,6 +214,97 @@ def set_enabled(kind: str, name: str, on: bool) -> dict[str, list[str]]:
     _settings_path().parent.mkdir(parents=True, exist_ok=True)
     _settings_path().write_text(json.dumps(s, indent=1))
     return enabled()
+
+
+def _coerce(raw: str, typ: str):
+    """A setting typed in the app, as the detector's parameter type."""
+    raw = str(raw).strip()
+    optional = "None" in typ
+    if optional and raw.lower() in ("", "none", "off"):
+        return None
+    base = typ.replace("| None", "").replace("None |", "").strip()
+    try:
+        if base.startswith("tuple") or base.startswith("list"):
+            return [x.strip() for x in raw.split(",") if x.strip()]
+        if base == "bool":
+            return raw.lower() in ("1", "true", "yes", "on")
+        if base == "int":
+            return int(float(raw))
+        if base == "float":
+            return float(raw)
+    except ValueError:
+        raise ValueError(f"{raw!r} isn't a valid {base}.") from None
+    return raw
+
+
+def set_param(detector: str, name: str, raw: str | None) -> dict:
+    """Change one detector setting (raw=None goes back to its default)."""
+    from .detectors import DETECTORS
+    if detector not in DETECTORS:
+        raise ValueError(f"There's no detector called {detector!r}.")
+    spec = {p["name"]: p for p in DETECTORS.get(detector).describe()["params"]}
+    if name not in spec:
+        raise ValueError(f"{detector} has no setting called {name!r}.")
+    s = _settings()
+    params = s.setdefault("params", {}).setdefault(detector, {})
+    if raw is None:
+        params.pop(name, None)
+    else:
+        value = _coerce(raw, spec[name]["type"])
+        DETECTORS.get(detector)(**{**params, name: value})  # the detector accepts it
+        params[name] = value
+    if not params:
+        s["params"].pop(detector, None)
+    _settings_path().parent.mkdir(parents=True, exist_ok=True)
+    _settings_path().write_text(json.dumps(s, indent=1))
+    return enabled()
+
+
+def reset_params(detector: str) -> dict:
+    s = _settings()
+    s.get("params", {}).pop(detector, None)
+    _settings_path().parent.mkdir(parents=True, exist_ok=True)
+    _settings_path().write_text(json.dumps(s, indent=1))
+    return enabled()
+
+
+def source(kind: str, name: str) -> dict:
+    """A model's code: the whole file for plugin files, the class for built-ins and packages."""
+    import inspect
+    from .core.registry import Registry
+    reg = next((r for r in Registry.ALL if r.kind == kind), None)
+    if reg is None or name not in reg:
+        raise ValueError(f"There's no {kind} called {name!r}.")
+    origin = reg.origin(name)
+    if origin.startswith("file "):
+        path = folder() / origin[5:]
+        return {"origin": origin, "path": str(path), "code": path.read_text(encoding="utf-8")}
+    obj = reg.get(name)
+    target = obj if inspect.isclass(obj) else type(obj)
+    try:
+        code, path = inspect.getsource(target), inspect.getsourcefile(target)
+    except (OSError, TypeError):
+        code, path = "# The source isn't available for this one.", None
+    return {"origin": origin, "path": path, "code": code}
+
+
+def open_path(filename: str | None = None) -> str:
+    """Open a plugin file in the default editor, or the plugins folder, on this computer."""
+    import subprocess
+    if filename:
+        if not _FILE.match(filename) or not (folder() / filename).exists():
+            raise ValueError(f"There's no plugin file called {filename}.")
+        target = folder() / filename
+    else:
+        target = folder()
+        target.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        os.startfile(str(target))  # noqa: S606 (opening the user's own file, on their request)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(target)])
+    else:
+        subprocess.Popen(["xdg-open", str(target)])
+    return str(target)
 
 
 def fingerprint() -> str:

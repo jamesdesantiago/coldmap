@@ -23,10 +23,10 @@ NATIONAL_STEPS = [("women", "Search every state for clusters among women"),
 
 
 def build_national(data: Dataset, out_dir: Path, detectors=DEFAULT_DETECTORS, enrichers=None,
-                   progress=None) -> Path:
+                   progress=None, params: dict | None = None) -> Path:
     """progress(key) as each NATIONAL_STEPS step starts; progress("explain", done, total) as it goes."""
     step = progress or (lambda *a: None)
-    ens = Ensemble.from_names(detectors, {}, **({"enrichers": tuple(enrichers)} if enrichers else {}))
+    ens = Ensemble.from_names(detectors, params or {}, **({"enrichers": tuple(enrichers)} if enrichers else {}))
     found = []
     for key, sex in (("women", "Female"), ("men", "Male")):
         step(key)
@@ -64,7 +64,7 @@ def build_national(data: Dataset, out_dir: Path, detectors=DEFAULT_DETECTORS, en
     rank = {"high": 0, "strong": 1, "possible": 2}
     rows.sort(key=lambda r: (rank.get(r["confidence"], 3), -(r["total"] - r["solved"])))
     meta = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "years": [int(c.year.min()), int(c.year.max())], "detectors": list(detectors),
+            "years": [int(c.year.min()), int(c.year.max())], "detectors": list(detectors), "params": params or {},
             "enrichers": list(enrichers or ens.enrichers), "fixes": list(data.fixes),
             "states": sorted({r["state"] for r in rows if r["state"]}), "national_cases": int(len(c))}
     out_dir.mkdir(parents=True, exist_ok=True)

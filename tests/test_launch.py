@@ -419,3 +419,28 @@ def test_ai_check_starts_the_real_server(chome, tmp_path):
                                                                         "COLDMAP_HOME": str(chome)}})
     assert r["ok"], r
     assert {"research_flags", "shortlist", "local_datasets"} <= set(r["tools"])
+
+
+def test_manage_models_settings_and_code(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, post = server(app)
+    view = json.loads(get("/api/plugins")[1])
+    scan = next(i for g in view["groups"] if g["kind"] == "detector" for i in g["items"] if i["name"] == "scan")
+    assert scan["doc"] and "Helper class" not in scan["doc"] and {p["name"] for p in scan["params"]} >= {"max_q", "levels"}
+    post("/api/plugins/param?detector=scan&name=max_q&value=0.05")
+    post("/api/plugins/param?detector=scan&name=levels&value=county,%20agency,%20msa")
+    from coldmap import plugins
+    assert plugins.enabled()["params"] == {"scan": {"max_q": 0.05, "levels": ["county", "agency", "msa"]}}
+    with pytest.raises(urllib.error.HTTPError, match="400"):
+        post("/api/plugins/param?detector=scan&name=max_q&value=lots")
+    app.national()
+    assert _wait(app).error is None  # the scan runs with the changed settings
+    assert json.loads((chome / "sites" / "_national" / "national.json").read_text())["meta"]["params"]["scan"]["max_q"] == 0.05
+    post("/api/plugins/reset?detector=scan")
+    assert plugins.enabled()["params"] == {}
+    assert json.loads(get("/api/status")[1])["national"]["stale"] is True
+    code = json.loads(get("/api/plugins/source?kind=detector&name=window")[1])
+    assert "class SlidingWindow" in code["code"]
+    with pytest.raises(urllib.error.HTTPError, match="400"):
+        post("/api/plugins/open?file=..%5Cevil.py")  # only files in the models folder
