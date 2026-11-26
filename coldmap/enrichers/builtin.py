@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import weakref
+
 import pandas as pd
 
 from . import ENRICHERS, Enricher
@@ -16,6 +18,24 @@ def kind_of(weapon: str, total: int, max_series: int = 100) -> str:
     return "serial-pattern" if weapon in SERIAL_METHODS and total <= max_series else "accountability"
 
 
+_MEMO: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+
+
+def _memo(data, key, fn):
+    """Per-Dataset cache: national tables are reused across every finding and every run."""
+    m = _MEMO.setdefault(data, {})
+    if key not in m:
+        m[key] = fn()
+    return m[key]
+
+
+def county_of(cases: pd.DataFrame, level: str) -> pd.Series:
+    """Most common county for each place at `level` (ties: first alphabetically, as Series.mode)."""
+    n = cases.groupby([level, "county"]).size().rename("n").reset_index()
+    n = n.sort_values(["n", "county"], ascending=[False, True], kind="mergesort")
+    return n.drop_duplicates(level).set_index(level).county
+
+
 @ENRICHERS.register
 class CountyEnricher(Enricher):
     name = "county"
@@ -23,7 +43,7 @@ class CountyEnricher(Enricher):
 
     def enrich(self, findings, data):
         need = {f.level for f in findings if f.county is None and f.level != "county"}
-        maps = {lvl: data.cases.groupby(lvl).county.agg(lambda s: s.mode().iat[0] if len(s.mode()) else None)
+        maps = {lvl: _memo(data, ("county_of", lvl), lambda lvl=lvl: county_of(data.cases, lvl))
                 for lvl in need if lvl in data.cases.columns}
         for f in findings:
             if f.county is None:
@@ -65,7 +85,8 @@ class CoverageEnricher(Enricher):
             level = f.level if f.level in ("county", "agency") else "county"
             place = f.place if level == f.level else f.county
             if level not in tables:
-                tables[level] = coverage_table(data.cases, data.clearance, level)
+                tables[level] = _memo(data, ("coverage", level),
+                                      lambda: coverage_table(data.cases, data.clearance, level))
             t = tables[level]
             rows = t[(t.index.get_level_values(1) == place)]
             rows = rows[(rows.index.get_level_values(2) >= f.start) & (rows.index.get_level_values(2) <= f.end)]
