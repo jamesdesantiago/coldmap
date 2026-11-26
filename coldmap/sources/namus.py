@@ -55,6 +55,17 @@ def _county_label(county, state_full):
     return f"{c}, {ABBR[state_full]}"
 
 
+def _age(v):
+    """NamUs shows ages as text: '54 Years', '6 Months', '20-30 Years'. Returns years (first number)."""
+    if pd.isna(v):
+        return None
+    m = re.search(r"(\d+(?:\.\d+)?)", str(v))
+    if not m:
+        return None
+    n = float(m.group(1))
+    return 0.0 if re.search(r"month|week|day", str(v), re.I) else n
+
+
 def _sex(v):
     v = str(v).strip().lower()
     return "Female" if v.startswith("f") else "Male" if v.startswith("m") else "Unknown"
@@ -91,7 +102,7 @@ class _NamUs(Source):
             "sex": raw[need["sex"]].map(_sex),
         })
         age_col = col("age", self.age_options)
-        out["age"] = pd.to_numeric(raw[age_col], errors="coerce") if age_col else pd.NA
+        out["age"] = pd.to_numeric(raw[age_col].map(_age), errors="coerce") if age_col else pd.NA
         race_col = col("race", ["Race / Ethnicity", "Race/Ethnicity", "Race"])
         out["race"] = raw[race_col].astype(str) if race_col else ""
         out["year"] = out.date.dt.year

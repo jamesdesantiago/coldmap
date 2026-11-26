@@ -13,7 +13,7 @@ def _namus_missing_csv(path):
     rows = []
     for i, y in enumerate(range(1980, 2010)):
         rows.append({"Case": f"MP{i}", "DLC": f"{y}-06-01", "Legal First Name": "Jane", "Legal Last Name": "Doe",
-                     "Missing Age": 30, "City": "A City", "County": "A County", "State": "TL",
+                     "Missing Age": "30 Years", "City": "A City", "County": "A County", "State": "TL",
                      "Biological Sex": "Female", "Race / Ethnicity": "White"})
     for j in range(8):  # extra missing women in 1990-1993
         rows.append({"Case": f"MPX{j}", "DLC": f"{1990 + j % 4}-03-01", "Legal First Name": "X",
@@ -31,6 +31,12 @@ def test_namus_loader_drops_names_and_normalizes(tmp_path, monkeypatch):
     t = coldmap.SOURCES.get("namus-missing")().load_aux(p)
     assert not any("name" in c.lower() for c in t.columns)
     assert set(t.county) == {"A, TL"} and set(t.sex) == {"Female"} and t.year.min() == 1980
+    assert t.age.max() == 30
+
+
+def test_namus_age_text():
+    from coldmap.sources.namus import _age
+    assert _age("54 Years") == 54 and _age("6 Months") == 0 and _age("20-30 Years") == 20 and _age("") is None
 
 
 def test_namus_enricher_counts(tmp_path, monkeypatch, planted):
