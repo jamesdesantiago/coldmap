@@ -232,10 +232,12 @@ def explorer(cases, source, clearance, skip_fix, namus_missing, namus_unidentifi
 @click.option("--port", default=8765, show_default=True)
 @click.option("--no-browser", is_flag=True, help="Don't open a browser window")
 def open_cmd(state, cases, clearance, sample, refresh, rebuild, port, no_browser):
-    """The easy way in: opens the coldmap app in your browser.
+    """Open the coldmap research app in your browser.
 
-    The app walks you through getting the data, picking a state and building its
-    explorer, with progress for each step. Give STATE to start building it right away.
+    The first time, it downloads MAP's files and scans every state (a few minutes, with
+    progress). Then: ranked flags, each flag's evidence, places, a shortlist with second
+    review and an export for MAP, models (plugins) and AI assistants (MCP). Give STATE to
+    start with the flags narrowed to it.
 
     
     coldmap open
@@ -249,7 +251,7 @@ def open_cmd(state, cases, clearance, sample, refresh, rebuild, port, no_browser
     if sample:
         from ..sample import make_sample
         cases, clearance = make_sample(launch.home() / "sample")
-        mode, state = "sample", state or "Samplestate"
+        mode = "sample"
     else:
         mode = "files" if cases else "map"
     app = launch.App(mode, Path(cases) if cases else None, Path(clearance) if clearance else None,
@@ -258,7 +260,7 @@ def open_cmd(state, cases, clearance, sample, refresh, rebuild, port, no_browser
     if refresh and mode == "map":
         query["download"] = "refresh"
     if state:
-        query["build"] = state.strip()
+        query["state"] = state.strip()
     launch.serve(app, port, open_browser=not no_browser, path="/" + (f"?{urlencode(query)}" if query else ""))
 
 

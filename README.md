@@ -23,18 +23,16 @@ Close and reopen the terminal, then run:
 uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip coldmap open
 ```
 
-Your browser opens on the coldmap app straight away. It explains what coldmap does and walks you through three steps, with progress for each:
+Your browser opens on the coldmap app straight away. The first time, it downloads the Murder Accountability Project's public files (about 365 MB) and scans every state once (about 5 minutes), with progress for each step. After that it opens straight to your research:
 
-1. **Get the data.** One click downloads the Murder Accountability Project's public files (about 365 MB, under a minute on a fast connection). Later, **Check for updates** compares your copy with MAP's latest without downloading it again.
-2. **Choose a state.** All of them are listed, with their case counts.
-3. **Build and explore.** coldmap searches the state (a few seconds for most, a minute or two for the largest), then opens the explorer. Each build is saved, so it opens instantly next time. The explorer's state menu switches states or goes back home.
+- **Flags**: every flag in the country, ranked, narrowed by state, county, victims, confidence and kind. Each row leads with the gap between how often killings were solved and how often they were expected to be. Select one to see why it was flagged, the trend chart, the case rows, the data's known problems and notes from models. Keyboard: arrow keys move, `s` keeps, `x` dismisses, `/` searches.
+- **Shortlist**: flags you kept, on their way to MAP: your notes, the second person's review (required by the [ethics rules](ETHICS.md) before anything leaves), and an export for MAP.
+- **Places**: every state and county: killings, share solved, a heatmap by method and year, and the flags there.
+- **Models**: add detectors and enrichers from a file, a link or a starter template, and switch them on or off. See the [plugin guide](coldmap/docs/plugins.md), also in the app.
+- **AI assistants**: connect Claude or any MCP client. It reads the same flags and shortlist (`research_flags`, `shortlist`) and can triage flags, pull case rows and run models; the app gives you the exact config for this computer.
+- **Methods**: how a flag is made, confidence levels, data fixes, data quality by state, and how to improve the research.
 
-Two more pages sit in the header:
-
-- **Nationwide** scans every state in one pass (about 5 minutes on the national file) and ranks every flag together, with filters for victims, confidence, kind and state. Each flag opens in its state's explorer.
-- **Plugins** adds plugins from a file, a link or a starter template, and switches detectors and enrichers on or off. Start with the example, *Before & after*. See the [plugin guide](coldmap/docs/plugins.md), also in the app.
-
-Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
+Your shortlist and notes are saved in `~/.coldmap/research`. Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
 
 Change what comes after `coldmap open` to do more (keep the `uvx --from ...` part in front):
 

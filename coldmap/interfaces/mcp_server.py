@@ -145,6 +145,40 @@ def benchmark(detectors: list[str] | None = None) -> list[dict]:
     return evaluate(_data(), tuple(detectors or (*DEFAULT_DETECTORS, "ensemble"))).to_dict(orient="records")
 
 
+# ---- the research workspace the coldmap app keeps (COLDMAP_HOME) ------------------------------
+@mcp.tool()
+def research_flags(state: str | None = None, victim_sex: str = "Female", confidence: str = "strong",
+                   kind: str | None = None, top: int = 25) -> dict:
+    """The ranked national list of flags the coldmap app shows (from its last nationwide scan).
+    confidence: "high" (detectors agree), "strong" (high + strong) or "all". state: full name."""
+    import json
+    from ..plugins import home
+    from .research import with_ids
+    path = home() / "sites" / "_national" / "national.json"
+    if not path.exists():
+        return {"error": "No nationwide scan yet. Open the coldmap app (coldmap open) to run one.",
+                "ethics": ETHICS}
+    rows = with_ids(json.loads(path.read_text())["findings"])
+    keep = {"high": ("high",), "strong": ("high", "strong")}.get(confidence, ("high", "strong", "possible"))
+    rows = [r for r in rows if r["sex"] == victim_sex and r["confidence"] in keep
+            and (not state or r["state"] == state) and (not kind or r["kind"] == kind)]
+    cols = ("id", "state", "place", "level", "weapon", "start", "end", "total", "solved", "expected",
+            "confidence", "kind", "what")
+    return {"flags": [{k: r.get(k) for k in cols} for r in rows[:top]], "matching": len(rows), "ethics": ETHICS}
+
+
+@mcp.tool()
+def shortlist() -> dict:
+    """Flags the researcher kept in the coldmap app, with their notes and review status
+    (kept, reviewed by a second person, sent to MAP). Dismissed flags are left out."""
+    from .research import decisions
+    out = [{"id": d["id"], "status": d.get("status"), "note": d.get("note"), "reviewer": d.get("reviewer"),
+            "flag": {k: d["flag"].get(k) for k in ("state", "place", "weapon", "start", "end", "total",
+                                                    "solved", "expected", "confidence", "what")}}
+           for d in decisions().values() if d.get("status") != "dismissed"]
+    return {"shortlist": out, "ethics": ETHICS}
+
+
 def main():
     mcp.run()
 

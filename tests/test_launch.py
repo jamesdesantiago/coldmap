@@ -5,6 +5,7 @@ import shutil
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
 
@@ -57,8 +58,10 @@ def server():
             with urllib.request.urlopen(base + p) as r:
                 return r.geturl().removeprefix(base), r.read().decode()
 
-        def post(p, header=True):
-            req = urllib.request.Request(base + p, method="POST", headers={"X-Coldmap": "1"} if header else {})
+        def post(p, header=True, body=None):
+            data = json.dumps(body).encode() if body is not None else None
+            req = urllib.request.Request(base + p, method="POST", data=data,
+                                         headers={"X-Coldmap": "1", "Content-Type": "application/json"} if header else {})
             with urllib.request.urlopen(req) as r:
                 return r.status, json.loads(r.read())
         return get, post
@@ -128,8 +131,11 @@ def test_open_does_no_work_before_the_page(chome, monkeypatch):
 
     r = CliRunner().invoke(main, ["open", "--sample", "--no-browser"])
     assert r.exit_code == 0, r.output
-    assert served["path"] == "/?build=Samplestate" and served["app"].mode == "sample"
-    assert not (chome / "sites").exists()  # the page builds it, with progress
+    assert served["path"] == "/" and served["app"].mode == "sample"
+    assert not (chome / "sites").exists()  # the app runs setup, with progress
+
+    r = CliRunner().invoke(main, ["open", "California", "--no-browser"])
+    assert served["path"] == "/?state=California"
 
 
 def test_download_job_with_progress(chome, tmp_path, monkeypatch):
@@ -148,13 +154,15 @@ def test_download_job_with_progress(chome, tmp_path, monkeypatch):
     monkeypatch.setattr(launch, "download", fake)
     app = launch.App("map")
     assert app.status()["data"]["ready"] is False
-    job = _wait(app) if app.download() else None
-    assert job.error is None and job.result == {"states": 1}
-    assert [s["state"] for s in job.steps] == ["done"] * 3
+    app.setup()
+    job = _wait(app)
+    assert job.error is None and job.result["findings"] > 0
+    assert [s["key"] for s in job.steps][:3] == ["dl-cases", "dl-clearance", "load"]
+    assert all(s["state"] == "done" for s in job.steps)
     assert ticks == ["SHR76_25a.csv", "UCR65_25.csv"]
     st = app.status()
-    assert st["data"]["ready"] and st["states"][0]["name"] == "Samplestate" and st["states"][0]["cases"] > 0
-    assert st["data"]["files"][0]["downloaded"]
+    assert st["data"]["ready"] and st["national"]["findings"] == job.result["findings"]
+    assert st["data"]["files"][0]["downloaded"] and not st["national"]["stale"]
 
     # update check compares ETags without downloading
     monkeypatch.setattr(launch, "remote_info", lambda url: {"size": 1, "etag": "etag-SHR76_25a.csv"
@@ -183,44 +191,58 @@ def test_failed_clearance_download_is_a_note(chome, tmp_path, monkeypatch):
     assert app.lib.clearance is None
 
 
-def test_server_lists_and_builds_states_with_progress(chome, tmp_path, server):
+def test_research_flow_from_flag_to_export(chome, tmp_path, server):
+    """Setup scans every state; then a flag's evidence, keep, second review, export."""
     cases, clearance = _two_state_sample(tmp_path)
     app = launch.App("files", cases, clearance)
     get, post = server(app)
-
-    _, page = get("/")
-    assert "Choose a state" in page and "<title>coldmap</title>" in page
-    st = json.loads(get("/api/status")[1])
-    assert st["states"] is None and st["job"]["kind"] == "index"  # listing starts in the background
-    _wait(app)
-    st = json.loads(get("/api/status")[1])
-    assert [s["slug"] for s in st["states"]] == ["otherstate", "samplestate"]
-    assert not any(s["built"] for s in st["states"])
-
-    url, _ = get("/otherstate/")  # not built yet: back to the app, which builds it
-    assert url == "/?build=otherstate"
+    for page in ("/", "/flags", "/flags/abc", "/shortlist", "/places/samplestate", "/models", "/ai", "/methods"):
+        assert "<title>coldmap</title>" in get(page)[1]
+    assert json.loads(get("/api/status")[1])["national"] is None
     with pytest.raises(urllib.error.HTTPError, match="403"):
-        post("/api/build?state=otherstate", header=False)
-    code, job = post("/api/build?state=otherstate")
-    assert code == 202 and job["title"] == "Building Otherstate"
-    assert [s["key"] for s in job["steps"]] == ["load"] + [k for k, _ in BUILD_STEPS]
-    done = _wait(app)
-    assert done.error is None and done.result["slug"] == "otherstate"
+        post("/api/setup", header=False)
+    code, job = post("/api/setup")
+    assert code == 202 and job["kind"] == "setup"
+    assert _wait(app).error is None
 
-    assert json.loads(get("/otherstate/agg.json")[1])["meta"]["state"] == "Otherstate"
-    menu = json.loads(get("/states.json")[1])["states"]
-    assert [s["built"] for s in menu] == [True, False]
-    assert get("/nowhere/")[0] == "/"
+    flags = json.loads(get("/api/flags")[1])["flags"]
+    assert {f["state"] for f in flags} == {"Samplestate", "Otherstate"} and all(f["id"] for f in flags)
+    f = flags[0]
+    d = json.loads(get(f"/api/flag/{f['id']}")[1])
+    assert d["flag"]["id"] == f["id"] and d["series"] and d["cases_total"] == len(d["cases"]) > 0
+    assert d["decision"] is None
+
+    with pytest.raises(urllib.error.HTTPError, match="400"):  # export needs a second review
+        post("/api/decide", body={"id": f["id"], "status": "sent"})
+    post("/api/decide", body={"id": f["id"], "status": "kept"})
+    post("/api/note", body={"id": f["id"], "note": "Checked local news; no known series."})
+    with pytest.raises(urllib.error.HTTPError, match="400"):
+        post("/api/decide", body={"id": f["id"], "status": "reviewed"})  # needs the reviewer's name
+    post("/api/decide", body={"id": f["id"], "status": "reviewed", "reviewer": "A.B."})
+    md = get(f"/api/export?id={f['id']}")[1]
+    assert md.startswith("# Lead for review:") and "Reviewed by A.B." in md
+    assert "not evidence that cases are linked" in md and "Checked local news" in md
+    assert json.loads(get("/api/status")[1])["decisions"]["reviewed"] == 1
+
+    places = json.loads(get("/api/places?sex=Female")[1])
+    assert {p["state"] for p in places} == {"Samplestate", "Otherstate"}
+    prof = json.loads(get("/api/place?state=Samplestate&sex=Female")[1])
+    county = prof["counties"][0]["county"]
+    cp = json.loads(get(f"/api/place?state=Samplestate&county={urllib.parse.quote(county)}&sex=Female")[1])
+    assert cp["cells"] and cp["killings"] > 0
+    ai = json.loads(get("/api/ai")[1])
+    assert ai["desktop"]["mcpServers"]["coldmap"]["env"]["COLDMAP_CASES"] == str(cases)
+    assert "research_flags" in [t[0] for t in ai["tools"]]
 
 
 def test_one_job_at_a_time(chome, tmp_path, server):
     cases, clearance = make_sample(tmp_path)
     app = launch.App("files", cases, clearance)
     gate = threading.Event()
-    app.start("index", "Waiting", [("x", "Wait")], lambda job: gate.wait(10))
+    app.start("national", "Waiting", [("x", "Wait")], lambda job: gate.wait(10))
     _, post = server(app)
     with pytest.raises(urllib.error.HTTPError, match="409"):
-        post("/api/build?state=Samplestate")
+        post("/api/national")
     gate.set()
     _wait(app)
 
@@ -290,21 +312,14 @@ def test_starter_plugin_works_and_names_do_not_clash(chome):
     assert ENRICHERS.origin("my-plugin") == "file my_plugin.py"
 
 
-def test_nationwide_scan_ranks_every_state(chome, tmp_path, server):
-    cases, clearance = _two_state_sample(tmp_path)
+def test_models_change_marks_the_scan_out_of_date(chome, tmp_path):
+    cases, clearance = make_sample(tmp_path)
     app = launch.App("files", cases, clearance)
-    get, post = server(app)
-    _wait(app)  # listing states
-    code, job = post("/api/national")
-    assert code == 202 and job["kind"] == "national"
-    done = _wait(app)
-    assert done.error is None and done.result["states"] == 2
-    st = json.loads(get("/api/status")[1])
-    assert st["national"]["findings"] == done.result["findings"] > 0
-    body = json.loads(get("/national.json")[1])
-    assert {r["state"] for r in body["findings"]} == {"Samplestate", "Otherstate"}
-    assert all(r["what"] for r in body["findings"])
-    assert "<title>coldmap</title>" in get("/national")[1] and "<title>coldmap</title>" in get("/plugins")[1]
+    app.national()
+    assert _wait(app).error is None and app.status()["national"]["stale"] is False
+    app.plugin_action("example", {}, b"")
+    assert app.status()["national"]["stale"] is True  # still shown, with a re-scan offer
+    assert app.flags()[1]
 
 
 def test_plugin_guide_ships_inside_the_app(chome, tmp_path, server):
@@ -315,5 +330,5 @@ def test_plugin_guide_ships_inside_the_app(chome, tmp_path, server):
     guide = get("/guide.md")[1]
     assert guide.startswith("# Plugins") and "../examples/before_after.py" in guide
     assert "class BeforeAfter(Enricher)" in get("/guide/before_after.py")[1]
-    page = get("/plugins")[1]
-    assert 'href="/guide"' in page and "PLUGINS.md" not in page
+    page = get("/models")[1]
+    assert 'href="/models/guide"' in page and "PLUGINS.md" not in page

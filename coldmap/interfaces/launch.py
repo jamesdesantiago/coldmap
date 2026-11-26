@@ -1,9 +1,10 @@
-"""`coldmap open`: a local app that walks you from nothing to the explorer.
+"""`coldmap open`: the coldmap research app, served on this computer.
 
-The command starts a small server on this computer and opens the browser straight away, on a home
-page that guides each step and shows its progress: download MAP's public files (or check them for
-updates), pick a state, build its explorer, open it. Nothing heavy runs before the page is up, and
-nothing is published. Builds are cached until the data or coldmap changes.
+The command starts a small server and opens the browser straight away. The app guides setup
+(download MAP's files, then scan every state once), then the research itself: a ranked list of
+flags, each flag's evidence, places, a shortlist with second review and an export for MAP, plus
+models (plugins), AI assistants (MCP) and methods. Nothing is published; the research workspace
+lives in COLDMAP_HOME (see research.py).
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import uuid
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import parse_qs, quote, unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import click
 
@@ -37,7 +38,7 @@ MAP_FILES = {
                   "?rlkey=jhs7ktqhb9h3dnml1wety4nhb&dl=1"),
 }
 LABELS = {"cases": "case file", "clearance": "clearance file"}
-SHELL = Path(__file__).with_name("explorer") / "shell.html"
+APP_PAGE = Path(__file__).with_name("explorer") / "app.html"
 
 
 from ..plugins import home  # noqa: E402  (data, builds, plugins and settings live here)
@@ -259,22 +260,25 @@ class Library:
         from .. import plugins
         return _data_stamp(self.cases, self.clearance) + "|" + plugins.fingerprint()
 
-    def national_summary(self, stamp: str | None = None) -> dict | None:
-        """What the last nationwide scan found, if it is current."""
+    def national_summary(self, current_only: bool = False) -> dict | None:
+        """What the last nationwide scan found, with `stale` set when the data or plugins changed
+        since (current_only=True returns None instead)."""
         d = self.national_dir
         try:
-            if (d / ".coldmap-build").read_text() != (stamp or self.national_stamp):
-                return None
-            return json.loads((d / "summary.json").read_text())
+            summary = json.loads((d / "summary.json").read_text())
+            stale = (d / ".coldmap-build").read_text() != self.national_stamp
         except (OSError, ValueError):
             return None
+        if stale and current_only:
+            return None
+        return {**summary, "stale": stale}
 
     def build_national(self, progress=None) -> dict:
         from .. import plugins
         from .explorer.national import build_national
         with self._lock:
             stamp = self.national_stamp
-            if (s := self.national_summary(stamp)) and not self.rebuild:
+            if (s := self.national_summary(current_only=True)) and not self.rebuild:
                 return s
             on = plugins.enabled()
             tmp = self.root / "_national.building"
@@ -293,7 +297,7 @@ class Library:
             if self.national_dir.exists():
                 shutil.rmtree(self.national_dir)
             tmp.replace(self.national_dir)
-            return summary
+            return {**summary, "stale": False}
 
     def build(self, state: str, progress=None) -> Path:
         """Build (or reuse) the explorer for a state and return its folder.
@@ -387,6 +391,7 @@ class App:
         self._own = (Path(cases) if cases else None, Path(clearance) if clearance else None)
         self.job: Job | None = None
         self.check: dict | None = None
+        self._flags: tuple | None = None
         self._lock = threading.Lock()
         self.lib: Library | None = None
         self.reload()
@@ -421,53 +426,49 @@ class App:
         threading.Thread(target=run, daemon=True).start()
         return job
 
+    def _fetch(self, job: Job, want: list[str]) -> None:
+        for key in want:
+            name = MAP_FILES[key][0]
+            job.step(f"dl-{key}")
+            try:
+                info = download(_url(key), home() / "data" / name, name,
+                                progress=lambda done, total: setattr(job, "bytes", [done, total]))
+                _remember(key, info)
+            except Exception as e:
+                if key == "clearance":
+                    job.notes.append(f"Skipped the clearance file ({e}). Everything still works; "
+                                     "coverage figures will be blank.")
+                    continue
+                raise click.ClickException(f"Couldn't download {name}: {e}. {manual_route(name)}")
+        self.check = None
+        self.reload()
+
+    def setup(self) -> Job:
+        """First run: get whatever data is missing, then scan every state once."""
+        from .explorer.national import NATIONAL_STEPS
+        want = [k for k, p in zip(MAP_FILES, self.paths()) if self.mode == "map" and not p.exists()]
+        steps = [(f"dl-{k}", f"Download MAP's {LABELS[k]}") for k in want]
+        steps += [("load", "Read the case file")] + NATIONAL_STEPS
+
+        def work(job: Job):
+            self._fetch(job, want)
+            if self.lib is None:
+                raise click.ClickException("No case file yet. Download it, or start coldmap with --cases.")
+            job.step("load")
+            self.lib.data()
+            job.finish(self.lib.build_national(progress=job.step))
+        return self.start("setup", "Preparing coldmap", steps, work)
+
     def download(self, refresh: bool = False) -> Job:
         if self.mode != "map":
             raise click.ClickException("This session uses your own files; there is nothing to download.")
         want = [k for k, p in zip(MAP_FILES, self.paths()) if refresh or not p.exists()]
-        steps = [(f"dl-{k}", f"Download the {LABELS[k]}") for k in want]
-        steps.append(("index", "Read the case file and list the states"))
+        steps = [(f"dl-{k}", f"Download MAP's {LABELS[k]}") for k in want]
 
         def work(job: Job):
-            for key in want:
-                name = MAP_FILES[key][0]
-                job.step(f"dl-{key}")
-                try:
-                    info = download(_url(key), home() / "data" / name, name,
-                                    progress=lambda done, total: setattr(job, "bytes", [done, total]))
-                    _remember(key, info)
-                except Exception as e:
-                    if key == "clearance":
-                        job.notes.append(f"Skipped the clearance file ({e}). The explorer still works; "
-                                         "coverage figures will be blank.")
-                        continue
-                    raise click.ClickException(f"Couldn't download {name}: {e}. {manual_route(name)}")
-            self.check = None
-            self.reload()
-            job.step("index")
-            job.finish({"states": len(self.lib.states())})
+            self._fetch(job, want)
+            job.finish({"files": want})
         return self.start("download", "Updating the data" if refresh else "Getting the data", steps, work)
-
-    def index(self) -> Job:
-        def work(job: Job):
-            job.step("index")
-            job.finish({"states": len(self.lib.states())})
-        return self.start("index", "Reading the case file", [("index", "Read the case file and list the states")],
-                          work)
-
-    def build(self, state: str) -> Job:
-        from .explorer.build import BUILD_STEPS
-        if self.lib is None:
-            raise click.ClickException("Get the data first.")
-        state = self.lib.resolve(state)
-        lib = self.lib
-
-        def work(job: Job):
-            job.step("load")
-            lib.data()
-            lib.build(state, progress=job.step)
-            job.finish({"state": state, "slug": slugify(state)})
-        return self.start("build", f"Building {state}", [("load", "Load the case file")] + BUILD_STEPS, work)
 
     def national(self) -> Job:
         from .explorer.national import NATIONAL_STEPS
@@ -479,8 +480,75 @@ class App:
             job.step("load")
             lib.data()
             job.finish(lib.build_national(progress=job.step))
-        return self.start("national", "Scanning every state", [("load", "Load the case file")] + NATIONAL_STEPS,
+        return self.start("national", "Scanning every state", [("load", "Read the case file")] + NATIONAL_STEPS,
                           work)
+
+    # ---- research --------------------------------------------------------------------------
+    def flags(self) -> tuple[dict | None, list[dict]]:
+        """The ranked national list (with stable ids), cached until a new scan lands."""
+        from .research import with_ids
+        lib = self.lib
+        s = lib.national_summary() if lib else None
+        if not s:
+            return None, []
+        if self._flags and self._flags[0] == s["generated"]:
+            return s, self._flags[1]
+        rows = with_ids(json.loads((lib.national_dir / "national.json").read_text())["findings"])
+        self._flags = (s["generated"], rows)
+        return s, rows
+
+    def flag(self, fid: str) -> dict:
+        from . import research
+        _, rows = self.flags()
+        r = next((x for x in rows if x["id"] == fid), None)
+        if r is None:
+            saved = research.decisions().get(fid)
+            if not saved:
+                raise KeyError(fid)
+            r = {**saved["flag"], "id": fid, "archived": True}
+        return {"flag": r, "decision": research.decisions().get(fid),
+                **research.flag_detail(self._data(), r)}
+
+    def _data(self):
+        if self.lib is None:
+            raise click.ClickException("Get the data first.")
+        return self.lib.data()
+
+    def ai_setup(self) -> dict:
+        """How to connect an AI assistant to coldmap through MCP, with this computer's paths."""
+        import importlib.util
+        import sys
+        cases, clearance = self.paths()
+        env = {"COLDMAP_CASES": str(cases) if cases else "", "COLDMAP_HOME": str(home())}
+        if clearance and clearance.exists():
+            env["COLDMAP_CLEARANCE"] = str(clearance)
+        local = {"command": sys.executable, "args": ["-m", "coldmap.interfaces.mcp_server"], "env": env}
+        uvx = {"command": "uvx", "args": ["--from", "coldmap[mcp] @ https://github.com/jamesdesantiago/coldmap/"
+                                          "archive/refs/heads/main.zip", "coldmap-mcp"], "env": env}
+        ready = importlib.util.find_spec("mcp") is not None
+        server = local if ready else uvx
+        cli = " ".join(["claude mcp add coldmap", *[f'-e {k}="{v}"' for k, v in env.items()], "--",
+                        f'"{server["command"]}"' if " " in server["command"] else server["command"],
+                        *[f'"{a}"' if " " in a else a for a in server["args"]]])
+        return {"sdk_installed": ready, "desktop": {"mcpServers": {"coldmap": server}}, "claude_code": cli,
+                "tools": [
+                    ["research_flags", "The ranked national list of flags this app shows, with filters"],
+                    ["shortlist", "Your kept flags, notes and review status"],
+                    ["triage_finding", "Why a place was flagged, in plain language"],
+                    ["get_cases", "The case rows behind a flag (no names exist in the data)"],
+                    ["scan_clusters", "Run any detectors or preset on a state"],
+                    ["coverage_gaps", "Where the case file is missing reported murders"],
+                    ["data_quality", "Known reporting problems by state"],
+                    ["false_alarms", "How often a detector flags shuffled data"],
+                    ["benchmark", "Which known, solved series each detector finds"],
+                    ["list_plugins", "Installed models, enrichers, fixes and presets"]]}
+
+    def methods(self) -> dict:
+        from .. import FIXES
+        from ..explain import CONFIDENCE
+        return {"confidence": CONFIDENCE,
+                "fixes": [{"name": n, "title": f.title, "summary": f.summary, "states": list(f.states)}
+                          for n, f in FIXES]}
 
     def _idle(self) -> None:
         if self.job and self.job.running:
@@ -569,23 +637,18 @@ class App:
                           "path": str(p) if p else None, "present": present,
                           "size": st.st_size if st else None,
                           "downloaded": saved.get(key, {}).get("downloaded") if self.mode == "map" else None})
-        lib, states = self.lib, None
-        if lib and lib.cached_states() is not None:
-            stamp = lib.stamp
-            states = [{"name": s, "slug": slugify(s), "built": lib.is_built(s, stamp), "cases": lib.counts.get(s)}
-                      for s in lib.states()]
-        elif lib and not (self.job and self.job.running):
-            try:
-                self.index()  # first run with this data: list the states in the background
-            except Busy:
-                pass
         from .. import plugins
+        from . import research
+        lib = self.lib
         on = plugins.enabled()
+        dec = research.decisions().values()
+        counts = {k: sum(1 for d in dec if d.get("status") == k) for k in research.STATUSES}
         return {"version": __version__, "mode": self.mode, "home": str(home()), "notice": NOTICE,
                 "data": {"ready": lib is not None, "files": files, "check": self.check},
-                "states": states, "national": lib.national_summary() if lib else None,
+                "national": lib.national_summary() if lib else None,
                 "plugins": {"detectors": on["detectors"], "enrichers": on["enrichers"],
                             "files": len(plugins.files())},
+                "decisions": counts,
                 "job": self.job.view() if self.job else None}
 
 
@@ -612,70 +675,110 @@ def _handler(app: App):
             self.send_header("Content-Length", "0")
             self.end_headers()
 
+        def _body(self) -> dict:
+            n = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(min(n, 2 * 1024 * 1024)) if n else b""
+            try:
+                return json.loads(raw or b"{}")
+            except ValueError:
+                return {}
+
         def do_POST(self):
             # The page sends this header; another site can't without a CORS preflight we never answer.
             if self.headers.get("X-Coldmap") != "1":
                 return self._send(403, "Forbidden")
+            from . import research
             u = urlsplit(self.path)
-            q = parse_qs(u.query)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
             try:
+                if u.path == "/api/setup":
+                    return self._json(202, app.setup().view())
                 if u.path == "/api/download":
-                    return self._json(202, app.download(refresh=q.get("refresh") == ["1"]).view())
-                if u.path == "/api/build":
-                    return self._json(202, app.build((q.get("state") or [""])[0]).view())
+                    return self._json(202, app.download(refresh=q.get("refresh") == "1").view())
                 if u.path == "/api/check":
                     return self._json(200, app.check_updates())
                 if u.path == "/api/national":
                     return self._json(202, app.national().view())
+                if u.path == "/api/decide":
+                    b = self._body()
+                    flag = b.get("flag")
+                    if flag is None:
+                        _, rows = app.flags()
+                        flag = next((r for r in rows if r["id"] == b.get("id")), None)
+                    return self._json(200, research.decide(str(b.get("id", "")), str(b.get("status", "")), flag,
+                                                           b.get("note"), b.get("reviewer")))
+                if u.path == "/api/note":
+                    b = self._body()
+                    return self._json(200, research.note(str(b.get("id", "")), str(b.get("note", ""))))
+                if u.path == "/api/forget":
+                    research.forget(q.get("id", ""))
+                    return self._json(200, {"ok": True})
                 if u.path.startswith("/api/plugins/"):
                     n = int(self.headers.get("Content-Length") or 0)
                     body = self.rfile.read(min(n, 2 * 1024 * 1024)) if n else b""
-                    flat = {k: v[0] for k, v in q.items()}
-                    return self._json(200, app.plugin_action(u.path.rsplit("/", 1)[1], flat, body))
+                    return self._json(200, app.plugin_action(u.path.rsplit("/", 1)[1], q, body))
             except Busy as e:
                 return self._json(409, {"error": str(e)})
-            except click.ClickException as e:
-                return self._json(400, {"error": e.message})
-            return self._send(404, "Not found")
+            except (click.ClickException, ValueError) as e:
+                return self._json(400, {"error": getattr(e, "message", None) or str(e)})
+            return self._json(404, {"error": "Not found"})
 
         def do_GET(self):
-            path = urlsplit(self.path).path
+            from . import research
+            u = urlsplit(self.path)
+            path, q = u.path, {k: v[0] for k, v in parse_qs(u.query).items()}
             if path == "/guide.md":
                 from .. import plugins
                 return self._send(200, plugins.GUIDE.read_text(encoding="utf-8"), "text/markdown; charset=utf-8")
             if path == "/guide/before_after.py":
                 from .. import plugins
                 return self._send(200, plugins.example()[1], "text/plain; charset=utf-8")
-            if path in ("/", "/index.html", "/plugins", "/national", "/guide"):
-                return self._send(200, SHELL.read_text(encoding="utf-8"), "text/html; charset=utf-8")
-            if path == "/api/status":
-                return self._json(200, app.status())
-            if path == "/api/plugins":
-                return self._json(200, app.plugins_view())
-            lib = app.lib
-            if path == "/national.json":
-                if not (lib and lib.national_summary()):
-                    return self._json(404, {"error": "Run the nationwide scan first."})
-                self.directory = str(lib.national_dir)
-                self.path = "/national.json"
-                return super().do_GET()
-            if path == "/states.json":  # the explorer's state menu
-                names = (lib.cached_states() if lib else None) or []
-                stamp = lib.stamp if lib else None
-                return self._json(200, {"states": [{"name": s, "slug": slugify(s), "built": lib.is_built(s, stamp)}
-                                                   for s in names]})
-            slug, sep, rest = unquote(path).lstrip("/").partition("/")
-            names = (lib.cached_states() if lib else None) or []
-            state = next((s for s in names if slugify(s) == slug), None)
-            if state is None:
-                return self._redirect("/")
-            if not sep:
-                return self._redirect(f"/{slug}/", 301)
-            if not lib.is_built(state):
-                return self._redirect(f"/?build={quote(slug)}")
-            self.directory = str(lib.site(state))
-            self.path = "/" + rest
-            return super().do_GET()
+            if not path.startswith("/api/"):
+                return self._send(200, APP_PAGE.read_text(encoding="utf-8"), "text/html; charset=utf-8")
+            try:
+                if path == "/api/status":
+                    return self._json(200, app.status())
+                if path == "/api/plugins":
+                    return self._json(200, app.plugins_view())
+                if path == "/api/flags":
+                    summary, rows = app.flags()
+                    return self._json(200, {"meta": summary, "flags": rows})
+                if path.startswith("/api/flag/"):
+                    return self._json(200, app.flag(unquote(path.rsplit("/", 1)[1])))
+                if path == "/api/decisions":
+                    return self._json(200, research.decisions())
+                if path == "/api/export":
+                    from .. import __version__
+                    d = research.decisions().get(q.get("id", ""))
+                    if not d:
+                        raise KeyError(q.get("id"))
+                    date = _sources().get("cases", {}).get("downloaded")
+                    return self._send(200, research.export_markdown(d, __version__, date),
+                                      "text/markdown; charset=utf-8")
+                if path == "/api/places":
+                    _, rows = app.flags()
+                    return self._json(200, research.states_table(app._data(), rows, q.get("sex", "Female")))
+                if path == "/api/place":
+                    _, rows = app.flags()
+                    if q.get("county"):
+                        return self._json(200, research.county_profile(app._data(), q.get("state", ""),
+                                                                       q["county"], q.get("sex", "Female")))
+                    return self._json(200, research.state_profile(app._data(), rows, q.get("state", ""),
+                                                                  q.get("sex", "Female")))
+                if path == "/api/quality":
+                    from ..quality import CHECKS, report
+                    out = {n: {"summary": CHECKS.get(n).summary, "rows": json.loads(t.to_json(orient="records"))}
+                           for n, t in report(app._data(), q.get("state") or None, top=10).items()}
+                    return self._json(200, out)
+                if path == "/api/ai":
+                    return self._json(200, app.ai_setup())
+                if path == "/api/methods":
+                    return self._json(200, app.methods())
+            except KeyError:
+                return self._json(404, {"error": "Not found. It may be from an older scan."})
+            except (click.ClickException, ValueError) as e:
+                return self._json(409, {"error": getattr(e, "message", None) or str(e)})
+            return self._json(404, {"error": "Not found"})
 
     return Handler
 
