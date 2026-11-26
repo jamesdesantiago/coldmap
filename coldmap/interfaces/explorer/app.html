@@ -189,6 +189,71 @@ th[aria-sort]{color:var(--ink)}
 .tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--surf);font-size:12px;line-height:1.45;padding:7px 10px;border-radius:4px;z-index:60;max-width:320px;white-space:pre-line;box-shadow:0 6px 18px rgba(0,0,0,.2)}
 .tip b{font-weight:700}
 
+/* map: a dark situation display, whatever the app's theme */
+.mapwrap{position:relative;flex:1;min-height:0;background:#060a0f;overflow:hidden;color:#d6e2ec;
+ --m-line:#1c2a38;--m-mute:#7d91a4;--m-ink:#e6f0f8;--m-panel:rgba(9,14,21,.92);--m-red:#ff5a4e;--m-amber:#f5a524;--m-link:#46d4ff;--m-teal:#2fb3c9}
+#mapsvg{display:block;width:100%;height:100%;cursor:grab}
+#mapsvg:active{cursor:grabbing}
+.mapwrap .county{stroke:#0b131c;stroke-width:.35}
+.mapwrap .county:hover{stroke:var(--m-ink);stroke-width:1}
+.mapwrap .county.sel{stroke:var(--m-link);stroke-width:1.6}
+.mapwrap .states{fill:none;stroke:#2d3e50;stroke-width:.8}
+.mapwrap .nation{fill:none;stroke:#41586e;stroke-width:1}
+.mapwrap .flag{cursor:pointer}
+.mapwrap .flag.dim,.mapwrap .link.dim{opacity:.08!important}
+.mapwrap .link{fill:none;stroke:var(--m-link);stroke-linecap:round;stroke-dasharray:6 4;animation:flow 1.6s linear infinite;cursor:help}
+.mapwrap .link.hot{stroke:#fff}
+.mapwrap .ring{fill:none;stroke:var(--m-red);transform-box:fill-box;transform-origin:center;animation:ping 2.4s cubic-bezier(.16,1,.3,1) infinite;pointer-events:none}
+@keyframes flow{to{stroke-dashoffset:-20}}
+@keyframes ping{0%{transform:scale(1);opacity:.8}100%{transform:scale(3.2);opacity:0}}
+@media (prefers-reduced-motion:reduce){.mapwrap .link,.mapwrap .ring{animation:none}.mapwrap .ring{display:none}}
+.mpanel{position:absolute;top:12px;background:var(--m-panel);border:1px solid var(--m-line);border-radius:8px;padding:12px 14px;font-size:12.5px;max-height:calc(100% - 132px);overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.mpanel.left{left:12px;width:262px}
+.mpanel.right{right:12px;width:330px}
+.mpanel h2{color:var(--m-ink);font-size:14px;margin:0 0 6px}
+.mpanel .lbl{display:block;font-size:10.5px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.08em;color:var(--m-mute);margin:12px 0 5px}
+.mpanel p{margin:0 0 8px;color:#b8c7d4}
+.mpanel .seg{background:#0d141d;border-color:var(--m-line)}
+.mpanel .seg button{color:var(--m-mute);height:27px;font-size:12px;padding:0 9px}
+.mpanel .seg button+button{border-color:var(--m-line)}
+.mpanel .seg button[aria-pressed=true]{background:var(--m-ink);color:#060a0f}
+.mpanel .sel{background-color:#0d141d;border-color:var(--m-line);color:var(--m-ink);height:28px;width:100%;max-width:none}
+.mchips{display:flex;flex-wrap:wrap;gap:5px}
+.mchip{border:1px solid var(--m-line);background:#0d141d;color:var(--m-mute);border-radius:12px;height:24px;padding:0 9px;font-size:11.5px;font-weight:600;cursor:pointer}
+.mchip[aria-pressed=true]{border-color:var(--m-link);color:var(--m-ink);background:color-mix(in oklab,var(--m-link) 16%,#0d141d)}
+.mpanel input[type=range]{width:100%;accent-color:var(--m-link)}
+.mpanel .btn{background:#0d141d;border-color:var(--m-line);color:var(--m-ink);height:28px;font-size:12px}
+.mpanel .btn.primary{background:var(--m-ink);color:#060a0f;border-color:var(--m-ink)}
+.mpanel .btn:hover{border-color:var(--m-mute)}
+.mpanel .num{color:var(--m-ink)}
+.mstat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--m-line);border:1px solid var(--m-line);border-radius:6px;overflow:hidden;margin:8px 0}
+.mstat div{background:#0b121a;padding:7px 9px}
+.mstat b{display:block;font:600 16px var(--mono);color:var(--m-ink)}
+.mstat span{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--m-mute)}
+.mstat .neg b{color:var(--m-red)}
+.mlist{list-style:none;margin:0;padding:0}
+.mlist li button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--m-line);cursor:pointer;font-size:12.5px}
+.mlist li button:hover{background:#101a25}
+.mlist .d{width:9px;height:9px;border-radius:50%}
+.mlist .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mlist .r{font:11.5px var(--mono);color:var(--m-mute)}
+.mtime{position:absolute;left:12px;right:12px;bottom:12px;height:96px;background:var(--m-panel);border:1px solid var(--m-line);border-radius:8px;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;padding:8px 12px}
+.mtime svg{width:100%;height:78px;display:block}
+.mtime text{font:10px var(--mono);fill:var(--m-mute)}
+.mtime .bars rect{fill:#2a3b4d}.mtime .bars rect.on{fill:var(--m-link)}
+.mtime .selection{fill:var(--m-link);fill-opacity:.12;stroke:var(--m-link)}
+.mtime .handle{fill:var(--m-link)}
+.mplay{display:grid;gap:6px;justify-items:center;font:600 13px var(--mono);color:var(--m-ink)}
+.mplay button{width:34px;height:34px;border-radius:50%;border:1px solid var(--m-line);background:#0d141d;color:var(--m-ink);cursor:pointer;display:grid;place-items:center}
+.mplay svg{width:13px;height:13px;fill:currentColor}
+.mlegend{position:absolute;left:286px;bottom:120px;background:var(--m-panel);border:1px solid var(--m-line);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--m-mute);display:grid;gap:5px}
+.mlegend .ramp{width:160px;height:8px;border-radius:2px}
+.mlegend .ends{display:flex;justify-content:space-between;font:10px var(--mono)}
+.mzoom{position:absolute;right:354px;top:12px;display:grid;gap:4px}
+.mzoom button{width:30px;height:30px;border-radius:5px;border:1px solid var(--m-line);background:var(--m-panel);color:var(--m-ink);cursor:pointer;font:600 15px var(--mono)}
+.mapload{position:absolute;inset:0;display:grid;place-items:center;color:var(--m-mute)}
+@media (max-width:1100px){.mpanel.right{display:none}.mzoom{right:12px}.mlegend{display:none}}
+
 /* your datasets */
 .dsform{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin:12px 0}
 .dsform label{display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600}
@@ -270,6 +335,7 @@ pre{background:var(--surf);border:1px solid var(--line);border-radius:5px;paddin
   <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="4" fill="var(--ink)"/><rect x="5" y="5" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="5" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="5" width="4" height="4" fill="var(--red)"/><rect x="5" y="9" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="9" y="9" width="4" height="4" fill="var(--red)"/><rect x="13" y="9" width="4" height="4" fill="var(--red)"/><rect x="5" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="13" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/></svg><span>coldmap</span></div>
   <div class="grp">Research</div>
   <a class="nav" href="/flags" data-nav data-sec="flags"><svg viewBox="0 0 16 16"><path d="M3 14V2.5M3 3h8.5l-1.7 3 1.7 3H3"/></svg>Flags<span class="ct" id="ctFlags"></span></a>
+  <a class="nav" href="/map" data-nav data-sec="map"><svg viewBox="0 0 16 16"><path d="M1.5 3.5l4-1.5 5 2 4-1.5v10l-4 1.5-5-2-4 1.5z"/><path d="M5.5 2v10M10.5 4v10"/></svg>Map</a>
   <a class="nav" href="/shortlist" data-nav data-sec="shortlist"><svg viewBox="0 0 16 16"><path d="M4 2h8v12l-4-2.8L4 14z"/></svg>Shortlist<span class="ct" id="ctShort"></span></a>
   <a class="nav" href="/places" data-nav data-sec="places"><svg viewBox="0 0 16 16"><path d="M8 14s4.5-4.2 4.5-7.5a4.5 4.5 0 10-9 0C3.5 9.8 8 14 8 14z"/><circle cx="8" cy="6.5" r="1.6"/></svg>Places</a>
   <div class="grp">Extend</div>
@@ -307,6 +373,7 @@ const S={st:null,flags:null,meta:null,dec:{},detail:{},sel:null,limit:200,places
 const q0=new URLSearchParams(location.search);
 if(q0.get('state'))S.f.state=q0.get('state');
 const wantDownload=q0.get('download');
+const wantMapFlag=q0.get('flag');
 if(q0.toString())history.replaceState(null,'',location.pathname==='/'?'/flags':location.pathname);
 
 // ---- data ------------------------------------------------------------------------------------
@@ -380,10 +447,10 @@ function render(){
  renderStatus();
  const st=S.st;
  if(!st){$('main').innerHTML=`<div class="view"><div class="page"><p class="${S.err?'msg err':'muted'}">${esc(S.err||'Opening coldmap…')}</p></div></div>`;return}
- const research=['flags','shortlist','places'].includes(r.sec);
+ const research=['flags','shortlist','places','map'].includes(r.sec);
  if(research&&!st.national)return renderGate();
- ({flags:renderFlags,shortlist:renderShortlist,places:renderPlaces,models:renderModels,ai:renderAI,methods:renderMethods,data:renderData}[r.sec]||renderFlags)(r);
- document.title=({flags:'Flags',shortlist:'Shortlist',places:'Places',models:'Models',ai:'AI assistants',methods:'Methods',data:'Data'}[r.sec]||'coldmap')+' · coldmap';
+ ({flags:renderFlags,map:renderMap,shortlist:renderShortlist,places:renderPlaces,models:renderModels,ai:renderAI,methods:renderMethods,data:renderData}[r.sec]||renderFlags)(r);
+ document.title=({flags:'Flags',map:'Map',shortlist:'Shortlist',places:'Places',models:'Models',ai:'AI assistants',methods:'Methods',data:'Data'}[r.sec]||'coldmap')+' · coldmap';
 }
 function setMain(key,html){const m=$('main');if(m.dataset.key!==key){m.dataset.key=key;m.innerHTML=html;return true}return false}
 
@@ -476,7 +543,7 @@ async function renderFlag(id){
  const h=`<div class="fpage">
   <div class="crumb"><a href="/places/${slug(f.state)}" data-nav>${esc(f.state)}</a>${f.county&&f.level!=='county'&&f.level!=='region'?` › <a href="/places/${slug(f.state)}/${slug(f.county)}" data-nav>${esc(f.county)}</a>`:f.level==='county'?` › <a href="/places/${slug(f.state)}/${slug(f.place)}" data-nav>county profile</a>`:''} · ${esc(f.level)}${d.flag.archived?' · <span class="tag">from an earlier scan</span>':''}</div>
   <h1 style="margin-top:6px">${esc(f.place)}: ${esc(String(f.weapon).toLowerCase())} killings of ${who(f.sex)}, ${yrs(f.start,f.end)}</h1>
-  <div class="row"><span class="tag ${f.confidence}">${CONF[f.confidence]} confidence</span><span class="tag">${esc(f.kind||'')}</span><span class="muted" style="font-size:12px">found by ${esc((f.by||[]).join(' + '))}${f.q!=null?` · q = ${f.q}`:''}</span></div>
+  <div class="row"><span class="tag ${f.confidence}">${CONF[f.confidence]} confidence</span><span class="tag">${esc(f.kind||'')}</span><a class="btn" href="/map?flag=${f.id}" data-nav style="height:24px;font-size:12px">Show on map</a><span class="muted" style="font-size:12px">found by ${esc((f.by||[]).join(' + '))}${f.q!=null?` · q = ${f.q}`:''}</span></div>
   <div class="quote"><div><b>${pct(f.solved/f.total)}</b><span>Solved</span></div><div><b>${pct(f.expected)}</b><span>Expected</span></div><div class="${g<0?'neg':''}"><b>${gapTxt(g)}</b><span>Gap, points</span></div><div><b>${nf.format(f.total-f.solved)}</b><span>Unsolved of ${nf.format(f.total)}</span></div><div><b>${f.end-f.start+1}</b><span>Years</span></div></div>
   ${decideBox(id,f,dec)}
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
@@ -599,6 +666,162 @@ function mineView(x,f,d){
  const table=x.rows.length?`<div class="cases" style="max-height:220px;margin-top:6px"><table><thead><tr><th>Year</th><th>Mo.</th>${x.level!=='county'?'<th>Place</th>':''}${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${x.rows.map(r=>`<tr><td class="num">${r.year}</td><td>${r.month?MONTHS[r.month]:''}</td>${x.level!=='county'?`<td>${esc(r.place)}</td>`:''}${cols.map(c=>`<td>${esc(r[c]??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'';
  return `<div class="mine"><div class="row"><b>${esc(x.name)}</b><span class="tag">${esc(x.level)}</span><span class="muted" style="font-size:12px">${nf.format(x.rows_total)} rows within ten years of the flag${x.all_rows>x.rows_total?`, ${nf.format(x.all_rows)} in all`:''}</span></div>
   ${x.description?`<p class="muted" style="margin:4px 0 0;font-size:12.5px">${esc(x.description)}${x.source?` Source: ${esc(x.source)}`:''}</p>`:''}${charts}${table}</div>`;
+}
+
+// ---- map ------------------------------------------------------------------------------------
+const MW=['Gun','Knife','Beating/blunt','Strangle/asphyxia','Fire','Other/unknown'];
+const MP={methods:new Set(MW.filter(w=>w!=='Gun')),metric:'solved',links:true,dist:150,y:null,sel:null,stats:{},k:1};
+function loadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`))return res();const el=document.createElement('script');el.src=src;el.onload=res;el.onerror=()=>rej(new Error('Could not load '+src));document.head.append(el)})}
+async function mapAssets(){
+ if(MP.ready)return;
+ if(!MP.loading)MP.loading=(async()=>{await loadScript('/vendor/d3.v7.min.js');await loadScript('/vendor/topojson-client.min.js');
+  const topo=await (await fetch('/vendor/counties-10m.json')).json();
+  MP.counties=topojson.feature(topo,topo.objects.counties).features;MP.states=topojson.mesh(topo,topo.objects.states,(a,b)=>a!==b);
+  MP.nation=topojson.feature(topo,topo.objects.nation);MP.byId=Object.fromEntries(MP.counties.map(f=>[f.id,f]));MP.ready=true})();
+ await MP.loading;
+}
+async function mapStats(sex){if(!MP.stats[sex])MP.stats[sex]=await api('/api/map?sex='+sex);return MP.stats[sex]}
+function renderMap(r){
+ const fresh=setMain('map',`<div class="mapwrap" id="mapwrap"><svg id="mapsvg" role="img" aria-label="Map of US counties with flags and the links between them"></svg>
+  <div class="mapload" id="mapload"><span><span class="spin"></span> Drawing the map…</span></div>
+  <aside class="mpanel left" id="mLeft" aria-label="Map filters"></aside><aside class="mpanel right" id="mRight" aria-label="Selection"></aside>
+  <div class="mzoom"><button id="mzIn" aria-label="Zoom in">+</button><button id="mzOut" aria-label="Zoom out">−</button><button id="mzHome" aria-label="Whole country" style="font-size:11px">US</button></div>
+  <div class="mlegend" id="mLegend"></div><div class="mtime" id="mTime"></div></div>`);
+ const want=new URLSearchParams(location.search).get('flag')||(S.usedMapFlag?null:wantMapFlag);S.usedMapFlag=1;if(want&&MP.sel?.id!==want)MP.sel={type:'flag',id:want,zoom:true};
+ if(fresh||!MP.svg){MP.svg=null;(async()=>{try{await mapAssets();await mapStats(S.f.sex==='all'?'all':S.f.sex);buildMap();updateMap()}catch(e){$('mapload').innerHTML=`<p class="msg err">${esc(e.message)}</p>`}})();return}
+ updateMap();
+}
+function buildMap(){
+ const svg=d3.select('#mapsvg'),wrap=$('mapwrap');if(!wrap)return;const W=wrap.clientWidth,H=wrap.clientHeight;
+ svg.attr('viewBox',`0 0 ${W} ${H}`);svg.selectAll('*').remove();
+ const defs=svg.append('defs');const gl=defs.append('filter').attr('id','glow').attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%');
+ gl.append('feGaussianBlur').attr('stdDeviation',2.2).attr('result','b');const mg=gl.append('feMerge');mg.append('feMergeNode').attr('in','b');mg.append('feMergeNode').attr('in','SourceGraphic');
+ const proj=d3.geoAlbersUsa().fitExtent([[300,30],[W-350,H-120]],MP.nation),path=d3.geoPath(proj);
+ MP.proj=proj;MP.path=path;const g=svg.append('g');MP.g=g;
+ MP.cent={};MP.ll={};MP.counties.forEach(f=>{const c=path.centroid(f);if(isFinite(c[0])){MP.cent[f.id]=c;MP.ll[f.id]=d3.geoCentroid(f)}});
+ g.append('g').selectAll('path').data(MP.counties).join('path').attr('class','county').attr('d',path).attr('data-fips',d=>d.id);
+ g.append('path').attr('class','states').attr('d',path(MP.states)).attr('vector-effect','non-scaling-stroke');
+ g.append('path').attr('class','nation').attr('d',path(MP.nation)).attr('vector-effect','non-scaling-stroke');
+ g.selectAll('path.county').attr('vector-effect','non-scaling-stroke');
+ MP.gLinks=g.append('g');MP.gFlags=g.append('g');
+ MP.zoom=d3.zoom().scaleExtent([1,48]).on('zoom',e=>{g.attr('transform',e.transform);MP.k=e.transform.k;scaleMarks()});
+ svg.call(MP.zoom).on('dblclick.zoom',null);
+ svg.on('click',e=>{const c=e.target.closest('.county'),fl=e.target.closest('.flag');if(fl){MP.sel={type:'flag',id:fl.dataset.id};updateMap();return}if(c){MP.sel={type:'county',fips:c.dataset.fips};updateMap();return}});
+ MP.svg=svg;$('mapload').remove();
+}
+function scaleMarks(){const k=MP.k,f=Math.pow(k,.8);MP.gFlags.selectAll('circle.dot').attr('r',function(){return this.dataset.r/f});MP.gFlags.selectAll('circle.ring').attr('r',function(){return this.dataset.r/f});MP.gLinks.selectAll('path').attr('stroke-width',function(){return this.dataset.w/Math.sqrt(k)})}
+function strength(f){return f.q!=null?Math.max(.3,Math.min(1,-Math.log10(Math.max(f.q,1e-4))/3)):({high:.9,strong:.7,possible:.4})[f.confidence]||.4}
+function mapFlags(){
+ const st=MP.stats[S.f.sex==='all'?'all':S.f.sex];if(!st||!S.flags)return [];
+ const [y0,y1]=MP.y||[0,9999];
+ return S.flags.filter(f=>(S.f.sex==='all'||f.sex===S.f.sex)&&(S.f.conf==='all'||(S.f.conf==='high'?f.confidence==='high':f.confidence!=='possible'))
+  &&MP.methods.has(f.weapon)&&f.end>=y0&&f.start<=y1).map(f=>{
+   const ids=(f.counties||[f.county]).map(c=>st.fips[c]).filter(id=>id&&MP.cent[id]);if(!ids.length)return null;
+   const xy=[d3.mean(ids,i=>MP.cent[i][0]),d3.mean(ids,i=>MP.cent[i][1])],ll=[d3.mean(ids,i=>MP.ll[i][0]),d3.mean(ids,i=>MP.ll[i][1])];
+   return {f,ids,xy,ll,s:strength(f)}}).filter(Boolean);
+}
+function mapLinks(items){
+ if(!MP.links)return [];const out=[],by={};items.forEach(it=>{(by[it.f.sex+'|'+it.f.weapon]=by[it.f.sex+'|'+it.f.weapon]||[]).push(it)});
+ for(const grp of Object.values(by))for(let i=0;i<grp.length;i++)for(let j=i+1;j<grp.length;j++){const a=grp[i],b=grp[j];
+  if(a.f.end<b.f.start||b.f.end<a.f.start||a.ids.some(x=>b.ids.includes(x)))continue;
+  const mi=d3.geoDistance(a.ll,b.ll)*3958.8;if(mi>MP.dist)continue;
+  const ov=Math.min(a.f.end,b.f.end)-Math.max(a.f.start,b.f.start)+1,span=Math.max(a.f.end-a.f.start+1,b.f.end-b.f.start+1);
+  out.push({a,b,mi,ov,w:Math.min(a.s,b.s)*(ov/span)*(1-.6*mi/MP.dist)})}
+ return out.sort((x,y)=>y.w-x.w).slice(0,600);
+}
+function updateMap(){
+ if(!MP.svg||!S.flags)return;const sexKey=S.f.sex==='all'?'all':S.f.sex,st=MP.stats[sexKey];
+ if(!st){mapStats(sexKey).then(updateMap);return}
+ const years=S.flags.map(f=>[f.start,f.end]).flat();const Y0=d3.min(years),Y1=d3.max(years);if(!MP.y)MP.y=[Y0,Y1];
+ // counties: shade by the chosen measure
+ const C=st.counties,flagsIn={};const items=mapFlags();items.forEach(it=>it.ids.forEach(i=>flagsIn[i]=(flagsIn[i]||0)+1));
+ const red='#c2392f',teal='#2fb3c9',base='#101820';
+ const solvedC=d3.scaleLinear().domain([.35,.65,.95]).range([red,'#3a4552',teal]).clamp(true);
+ const unsC=d3.scaleLog().domain([1,3000]).range(['#1b2633','#ff5a4e']).clamp(true);
+ const flagC=d3.scaleLinear().domain([0,1,6]).range([base,'#4a3a12','#f5a524']).clamp(true);
+ MP.g.selectAll('path.county').attr('fill',d=>{const c=C[d.id];if(MP.metric==='flags')return flagsIn[d.id]?flagC(flagsIn[d.id]):base;if(!c||!c[1])return base;
+   return MP.metric==='solved'?(c[1]<8?d3.interpolateRgb(base,solvedC(c[2]/c[1]))(.45):solvedC(c[2]/c[1])):unsC(Math.max(1,c[1]-c[2]))})
+  .attr('data-tip',d=>{const c=C[d.id];return c?`<b>${esc(c[0])}</b>\n${nf.format(c[1])} killings of ${who(S.f.sex)} 12+, ${Math.round(c[2]/c[1]*100)}% solved\n${nf.format(c[1]-c[2])} unsolved${flagsIn[d.id]?`\n${flagsIn[d.id]} flag${flagsIn[d.id]>1?'s':''} shown`:''}`:`${esc(d.properties.name)}\nNo cases in the file`})
+  .classed('sel',d=>MP.sel&&MP.sel.type==='county'&&MP.sel.fips===d.id);
+ // links: same method and victims, overlapping years, within the distance
+ const links=mapLinks(items);MP.lastLinks=links;
+ const selId=MP.sel&&MP.sel.type==='flag'?MP.sel.id:null,selF=MP.sel&&MP.sel.type==='county'?MP.sel.fips:null;
+ const touches=it=>selId?it.f.id===selId:selF?it.ids.includes(selF):false;
+ const linked=new Set();if(selId||selF)links.forEach(l=>{if(touches(l.a)||touches(l.b)){linked.add(l.a.f.id);linked.add(l.b.f.id)}});
+ MP.gLinks.selectAll('path').data(links,l=>l.a.f.id+l.b.f.id).join('path').attr('class',l=>'link'+((selId||selF)&&!(touches(l.a)||touches(l.b))?' dim':'')+((selId||selF)&&(touches(l.a)||touches(l.b))?' hot':''))
+  .attr('d',l=>{const [x1,y1]=l.a.xy,[x2,y2]=l.b.xy,mx=(x1+x2)/2,my=(y1+y2)/2,dx=x2-x1,dy=y2-y1,c=.22;return `M${x1},${y1}Q${mx-dy*c},${my+dx*c} ${x2},${y2}`})
+  .attr('data-w',l=>(1.2+3.2*l.w).toFixed(2)).attr('opacity',l=>(.5+.5*l.w).toFixed(2)).attr('filter','url(#glow)')
+  .attr('data-tip',l=>`<b>Shared pattern</b>\n${esc(l.a.f.place)} · ${esc(l.b.f.place)}\n${esc(String(l.a.f.weapon).toLowerCase())} killings of ${who(l.a.f.sex)}, overlapping ${Math.max(l.a.f.start,l.b.f.start)}–${Math.min(l.a.f.end,l.b.f.end)} (${l.ov} yr)\n${Math.round(l.mi)} miles apart · strength ${Math.round(l.w*100)}\nA shared pattern, not evidence that cases are linked.`);
+ // flags: size = unsolved, colour = confidence, brightness = strength of evidence
+ const col={high:'#ff5a4e',strong:'#f5a524',possible:'#7d91a4'};
+ const sel=MP.gFlags.selectAll('g.flag').data(items.sort((a,b)=>(a.f.total-a.f.solved)-(b.f.total-b.f.solved)),it=>it.f.id).join(en=>{const g=en.append('g').attr('class','flag');g.append('circle').attr('class','ring');g.append('circle').attr('class','dot');return g});
+ sel.attr('data-id',it=>it.f.id).attr('transform',it=>`translate(${it.xy[0]},${it.xy[1]})`).classed('dim',it=>(selId||selF)&&!(touches(it)||linked.has(it.f.id)))
+  .attr('data-tip',it=>{const f=it.f,g=gapOf(f);return `<b>${esc(f.place)}</b>, ${esc(f.state)}\n${esc(String(f.weapon).toLowerCase())} killings of ${who(f.sex)}, ${yrs(f.start,f.end)}\n${pct(f.solved/f.total)} solved vs ${pct(f.expected)} expected (${gapTxt(g)} pts)\n${f.total-f.solved} of ${f.total} unsolved · ${CONF[f.confidence]}${f.q!=null?` · q = ${f.q}`:''}`});
+ sel.select('circle.dot').attr('data-r',it=>(2.4+Math.sqrt(it.f.total-it.f.solved)*.55).toFixed(2)).attr('fill',it=>col[it.f.confidence]).attr('fill-opacity',it=>it.s.toFixed(2))
+  .attr('stroke',it=>it.f.id===selId?'#fff':'#060a0f').attr('stroke-width',it=>it.f.id===selId?1.6:.6).attr('vector-effect','non-scaling-stroke').attr('filter',it=>it.f.confidence==='high'?'url(#glow)':null);
+ sel.select('circle.ring').attr('data-r',it=>(2.4+Math.sqrt(it.f.total-it.f.solved)*.55).toFixed(2)).attr('display',it=>it.f.confidence==='high'&&it.s>.8?null:'none').attr('vector-effect','non-scaling-stroke');
+ scaleMarks();
+ if(MP.sel&&MP.sel.zoom){MP.sel.zoom=false;const it=items.find(x=>x.f.id===MP.sel.id);if(it)zoomTo(it.xy,6)}
+ mapLeft(items,links);mapRight(items,links,st);mapLegend();mapTime(Y0,Y1);
+}
+function zoomTo([x,y],k){const wrap=$('mapwrap');MP.svg.transition().duration(750).call(MP.zoom.transform,d3.zoomIdentity.translate(wrap.clientWidth/2,wrap.clientHeight/2).scale(k).translate(-x,-y))}
+function mapLeft(items,links){
+ const f=S.f,seg=(k,o,obj=f)=>`<div class="seg" role="group">${o.map(([v,l])=>`<button data-mf="${k}" data-v="${v}" aria-pressed="${obj[k]===v}">${l}</button>`).join('')}</div>`;
+ const html=`<h2>Map</h2><p><span class="num">${nf.format(items.length)}</span> flags · <span class="num">${nf.format(links.length)}</span> links</p>
+  <span class="lbl">Victims</span>${seg('sex',[['Female','Women'],['Male','Men'],['all','Both']])}
+  <span class="lbl">Confidence</span>${seg('conf',[['high','High'],['strong','High + strong'],['all','All']])}
+  <span class="lbl">Methods</span><div class="mchips">${MW.map(w=>`<button class="mchip" data-mw="${w}" aria-pressed="${MP.methods.has(w)}">${esc(w.replace('Strangle/asphyxia','Strangle').replace('Beating/blunt','Beating').replace('Other/unknown','Other'))}</button>`).join('')}</div>
+  <span class="lbl">Shade counties by</span><select class="sel" id="mMetric"><option value="solved"${MP.metric==='solved'?' selected':''}>Share solved</option><option value="unsolved"${MP.metric==='unsolved'?' selected':''}>Unsolved killings</option><option value="flags"${MP.metric==='flags'?' selected':''}>Flags shown</option></select>
+  <span class="lbl">Links between places</span><label style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input type="checkbox" id="mLinks"${MP.links?' checked':''}> Show shared patterns</label>
+  <label for="mDist" style="font-size:12px;color:var(--m-mute)">Within <span class="num">${MP.dist}</span> miles</label><input type="range" id="mDist" min="25" max="500" step="25" value="${MP.dist}">
+  <p style="font-size:11.5px;color:var(--m-mute);margin-top:8px">A link joins flags with the same method and victims, overlapping years, within the distance. Brighter means stronger evidence (lower q) and more overlap. A link is a shared pattern, never evidence that cases are connected.</p>`;
+ if($('mLeft')._h!==html){$('mLeft').innerHTML=html;$('mLeft')._h=html}
+}
+function mapRight(items,links,st){
+ const el=$('mRight');let html;
+ if(!MP.sel)html=`<h2>Click anything</h2><p>Scroll to zoom, drag to move. Click a county for its record, a flag for its evidence and the places it shares a pattern with.</p><span class="lbl">Strongest links shown</span><ul class="mlist">${links.slice(0,8).map(l=>`<li><button data-mflag="${l.a.f.id}"><span class="d" style="background:var(--m-link)"></span><span class="t">${esc(l.a.f.place)} · ${esc(l.b.f.place)}</span><span class="r">${Math.round(l.mi)} mi</span></button></li>`).join('')||'<li class="muted">None with these filters.</li>'}</ul>`;
+ else if(MP.sel.type==='county'){const c=st.counties[MP.sel.fips],here=items.filter(it=>it.ids.includes(MP.sel.fips)),feat=MP.byId[MP.sel.fips],lbl=c?c[0]:feat?.properties.name;
+  const state=(S.flags.find(f=>(f.counties||[f.county]).includes(lbl))||{}).state;
+  html=`<h2>${esc(lbl||'County')}</h2>${c?`<div class="mstat"><div><b>${nf.format(c[1])}</b><span>Killings</span></div><div><b>${pct(c[2]/c[1])}</b><span>Solved</span></div><div class="neg"><b>${nf.format(c[1]-c[2])}</b><span>Unsolved</span></div></div>`:'<p>No cases in the file.</p>'}
+   <span class="lbl">Flags here (${here.length})</span><ul class="mlist">${here.map(it=>`<li><button data-mflag="${it.f.id}"><span class="d" style="background:${({high:'#ff5a4e',strong:'#f5a524',possible:'#7d91a4'})[it.f.confidence]}"></span><span class="t">${esc(String(it.f.weapon).toLowerCase())} · ${yrs(it.f.start,it.f.end)}</span><span class="r">${gapTxt(gapOf(it.f))}</span></button></li>`).join('')||'<li style="color:var(--m-mute);padding:6px 0">None with these filters.</li>'}</ul>
+   <div class="row" style="margin-top:10px">${state&&lbl?`<a class="btn" href="/places/${slug(state)}/${slug(lbl)}" data-nav>County profile</a>`:''}<button class="btn" id="mClear">Clear</button></div>`}
+ else{const it=items.find(x=>x.f.id===MP.sel.id),f=it?it.f:S.flags.find(x=>x.id===MP.sel.id);
+  if(!f)html=`<p>That flag isn't in the current filters.</p><button class="btn" id="mClear">Clear</button>`;
+  else{const g=gapOf(f),mine=links.filter(l=>l.a.f.id===f.id||l.b.f.id===f.id).map(l=>({o:l.a.f.id===f.id?l.b:l.a,l}));
+   html=`<h2>${esc(f.place)}</h2><p>${esc(f.state)} · ${esc(String(f.weapon).toLowerCase())} killings of ${who(f.sex)}, ${yrs(f.start,f.end)}</p>
+    <div class="mstat"><div><b>${pct(f.solved/f.total)}</b><span>Solved</span></div><div><b>${pct(f.expected)}</b><span>Expected</span></div><div class="neg"><b>${gapTxt(g)}</b><span>Gap pts</span></div></div>
+    <p style="font-size:12px">${CONF[f.confidence]} confidence · found by ${esc((f.by||[]).join(' + '))}${f.q!=null?` · q = ${f.q}`:''}</p>
+    <span class="lbl">Shares a pattern with (${mine.length})</span><ul class="mlist">${mine.map(({o,l})=>`<li><button data-mflag="${o.f.id}"><span class="d" style="background:var(--m-link)"></span><span class="t">${esc(o.f.place)}, ${esc(o.f.state)} · ${yrs(o.f.start,o.f.end)}</span><span class="r">${Math.round(l.mi)} mi</span></button></li>`).join('')||`<li style="color:var(--m-mute);padding:6px 0">No other flag with the same method and victims within ${MP.dist} miles and overlapping years.</li>`}</ul>
+    <div class="row" style="margin-top:10px"><a class="btn primary" href="/flags/${f.id}" data-nav>Open the evidence</a><button class="btn" id="mClear">Clear</button></div>`}}
+ if(el._h!==html){el.innerHTML=html;el._h=html}
+}
+function mapLegend(){
+ const m=MP.metric,ramp=m==='solved'?'linear-gradient(90deg,#c2392f,#3a4552,#2fb3c9)':m==='unsolved'?'linear-gradient(90deg,#1b2633,#ff5a4e)':'linear-gradient(90deg,#101820,#4a3a12,#f5a524)';
+ const ends=m==='solved'?['35% solved','95%']:m==='unsolved'?['1 unsolved','3,000+']:['no flags','6+'];
+ const html=`<span>${m==='solved'?'Share solved':m==='unsolved'?'Unsolved killings':'Flags shown'} · ${who(S.f.sex)} 12+</span><div class="ramp" style="background:${ramp}"></div><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>
+  <span><span style="color:#ff5a4e">●</span> high <span style="color:#f5a524">●</span> strong <span style="color:#7d91a4">●</span> possible · size = unsolved</span>`;
+ if($('mLegend')._h!==html){$('mLegend').innerHTML=html;$('mLegend')._h=html}
+}
+function mapTime(Y0,Y1){
+ const el=$('mTime');if(!el)return;
+ if(!el._built){el._built=1;el.innerHTML=`<div class="mplay"><button id="mPlay" aria-label="Play through the years"><svg viewBox="0 0 12 12"><path d="M3 2l7 4-7 4z"/></svg></button><span id="mYears"></span></div><svg id="mTimeSvg"></svg>`}
+ const svg=d3.select('#mTimeSvg'),W=$('mTimeSvg').clientWidth||800,H=78,L=8,R=8,B=16;svg.attr('viewBox',`0 0 ${W} ${H}`);
+ const x=d3.scaleLinear().domain([Y0,Y1+1]).range([L,W-R]);
+ const pool=S.flags.filter(f=>(S.f.sex==='all'||f.sex===S.f.sex)&&(S.f.conf==='all'||(S.f.conf==='high'?f.confidence==='high':f.confidence!=='possible'))&&MP.methods.has(f.weapon));
+ const counts=d3.range(Y0,Y1+1).map(y=>[y,pool.filter(f=>f.start<=y&&f.end>=y).length]),mx=d3.max(counts,c=>c[1])||1;
+ svg.selectAll('g.bars').data([0]).join('g').attr('class','bars').selectAll('rect').data(counts).join('rect')
+  .attr('x',d=>x(d[0])+.5).attr('width',Math.max(1,x(Y0+1)-x(Y0)-1)).attr('y',d=>H-B-(H-B-6)*d[1]/mx).attr('height',d=>(H-B-6)*d[1]/mx)
+  .attr('class',d=>d[0]>=MP.y[0]&&d[0]<=MP.y[1]?'on':'').attr('data-tip',d=>`<b>${d[0]}</b>\n${d[1]} flags active`);
+ svg.selectAll('g.ax').data([0]).join('g').attr('class','ax').attr('transform',`translate(0,${H-B+2})`).call(d3.axisBottom(x).ticks(10).tickFormat(d3.format('d')).tickSize(0)).call(g=>g.select('.domain').remove());
+ if(!MP.brush){MP.brush=d3.brushX().extent([[L,2],[W-R,H-B]]).on('end',e=>{if(!e.sourceEvent)return;if(!e.selection){MP.y=[Y0,Y1]}else{MP.y=e.selection.map(v=>Math.round(x.invert(v))).map((v,i)=>i?Math.min(Y1,v-1):v)}updateMap()});svg.append('g').attr('class','brush').call(MP.brush)}
+ svg.select('g.brush').call(MP.brush.move,[x(MP.y[0]),x(MP.y[1]+1)]);
+ $('mYears').textContent=MP.y[0]===MP.y[1]?MP.y[0]:MP.y[0]+'–'+MP.y[1];
+}
+function mapPlay(){
+ if(MP.timer){clearInterval(MP.timer);MP.timer=null;$('mPlay').innerHTML='<svg viewBox="0 0 12 12"><path d="M3 2l7 4-7 4z"/></svg>';return}
+ const years=S.flags.map(f=>[f.start,f.end]).flat(),Y0=d3.min(years),Y1=d3.max(years),win=5;let y=Y0;
+ $('mPlay').innerHTML='<svg viewBox="0 0 12 12"><path d="M3 2h2v8H3zM7 2h2v8H7z"/></svg>';
+ MP.timer=setInterval(()=>{MP.y=[y,Math.min(Y1,y+win-1)];updateMap();y++;if(y>Y1-win+1){clearInterval(MP.timer);MP.timer=null;$('mPlay').innerHTML='<svg viewBox="0 0 12 12"><path d="M3 2l7 4-7 4z"/></svg>'}},420);
 }
 
 // ---- shortlist -------------------------------------------------------------------------------
@@ -813,6 +1036,13 @@ document.addEventListener('click',async e=>{
  const op=e.target.closest('[data-open]');if(op){S.f.show='all';selectFlag(op.dataset.open);return}
  const th=e.target.closest('th[data-sort]');if(th&&S.sel){const w=wbOf(S.sel),i=+th.dataset.sort;w.sort=[i,w.sort[0]===i?-w.sort[1]:1];renderWB(S.sel);return}
  const t=e.target.closest('button');if(!t)return;
+ if(t.dataset.mf){S.f[t.dataset.mf]=t.dataset.v;updateMap();return}
+ if(t.dataset.mw){MP.methods.has(t.dataset.mw)?MP.methods.delete(t.dataset.mw):MP.methods.add(t.dataset.mw);updateMap();return}
+ if(t.dataset.mflag){MP.sel={type:'flag',id:t.dataset.mflag,zoom:true};updateMap();return}
+ if(t.id==='mClear'){MP.sel=null;updateMap();return}
+ if(t.id==='mPlay'){mapPlay();return}
+ if(t.id==='mzIn'||t.id==='mzOut'){MP.svg.transition().duration(300).call(MP.zoom.scaleBy,t.id==='mzIn'?1.8:1/1.8);return}
+ if(t.id==='mzHome'){MP.svg.transition().duration(600).call(MP.zoom.transform,d3.zoomIdentity);return}
  if(t.dataset.themeSet){document.documentElement.dataset.theme=t.dataset.themeSet;try{localStorage.setItem('coldmap-theme',t.dataset.themeSet)}catch(_){}document.querySelectorAll('svg').length&&($('main').dataset.key='');render();return}
  if(t.dataset.f){S.f[t.dataset.f]=t.dataset.v;S.limit=200;$('main').dataset.key=location.pathname.startsWith('/places')?'':$('main').dataset.key;render();return}
  if(t.classList.contains('frow')){selectFlag(t.dataset.id);return}
@@ -863,6 +1093,8 @@ document.addEventListener('change',e=>{
  const t=e.target;
  if(t.id==='fState'){S.f.state=t.value;S.f.county='';S.limit=200;render()}
  if(t.id==='fCounty'){S.f.county=t.value;render()}
+ if(t.id==='mMetric'){MP.metric=t.value;updateMap()}
+ if(t.id==='mLinks'){MP.links=t.checked;updateMap()}
  if((t.id==='wbY0'||t.id==='wbY1')&&S.sel){const w=wbOf(S.sel);w[t.id==='wbY0'?'y0':'y1']=+t.value;if(w.y0>w.y1)[w.y0,w.y1]=[w.y1,w.y0];renderWB(S.sel)}
  if(t.id==='fKind'){S.f.kind=t.value;render()}
  if(t.id==='fShow'){S.f.show=t.value;render()}
@@ -880,6 +1112,7 @@ document.addEventListener('change',e=>{
  if(t.id==='pFile'&&t.files[0]){const f=t.files[0];if(f.size>512*1024){toast('That file is too big for a model (over 512 KB).');return}f.text().then(text=>plugin('upload',null,{file:f.name,text}));t.value=''}
 });
 document.addEventListener('input',e=>{if(e.target.id==='fQ'){S.f.q=e.target.value;S.limit=200;render()}
+ if(e.target.id==='mDist'){MP.dist=+e.target.value;clearTimeout(MP.dt);MP.dt=setTimeout(updateMap,120);return}
  const k={dsName:'name',dsDesc:'description',dsSource:'source'}[e.target.id];if(k&&S.imp)S.imp[k]=e.target.value});
 document.addEventListener('keydown',e=>{
  if(document.querySelector('.dialog'))return;
@@ -893,7 +1126,7 @@ document.addEventListener('keydown',e=>{
  else if(e.key==='s'&&S.sel&&!status(S.sel)){act('kept')}
  else if(e.key==='x'&&S.sel&&!status(S.sel)){act('dismissed')}
 });
-addEventListener('resize',()=>{const m=$('main');if(m){const pane=$('flagPane');if(pane)pane._h='';tipEl.hidden=true;m.dataset.key=location.pathname.startsWith('/places')?'':m.dataset.key;render()}});
+addEventListener('resize',()=>{if(route().sec==='map'&&MP.svg){MP.svg=null;$('main').dataset.key='';MP.brush=null}const m=$('main');if(m){const pane=$('flagPane');if(pane)pane._h='';tipEl.hidden=true;m.dataset.key=location.pathname.startsWith('/places')?'':m.dataset.key;render()}});
 if(location.pathname==='/')history.replaceState(null,'','/flags');
 poll();
 </script>

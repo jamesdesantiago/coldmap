@@ -9,6 +9,7 @@ so a later re-scan never loses what someone reviewed.
 from __future__ import annotations
 
 import hashlib
+import re
 import json
 import threading
 from datetime import datetime, timezone
@@ -266,3 +267,72 @@ def export_markdown(d: dict, version: str, data_date: str | None) -> str:
               f"coldmap scan SHR76_25a.csv --state \"{f['state']}\" --clearance UCR65_25.csv --explain 5",
               ""]
     return "\n".join(lines)
+
+
+# ---- the map: case-file county labels -> census county codes (us-atlas) ---------------------
+STATE_FIPS = {"AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10",
+              "DC": "11", "FL": "12", "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19",
+              "KS": "20", "KY": "21", "LA": "22", "ME": "23", "MD": "24", "MA": "25", "MI": "26", "MN": "27",
+              "MS": "28", "MO": "29", "MT": "30", "NE": "31", "NV": "32", "NH": "33", "NJ": "34", "NM": "35",
+              "NY": "36", "NC": "37", "ND": "38", "OH": "39", "OK": "40", "OR": "41", "PA": "42", "RI": "44",
+              "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50", "VA": "51", "WA": "53",
+              "WV": "54", "WI": "55", "WY": "56"}
+ATLAS = Path(__file__).with_name("explorer") / "vendor" / "counties-10m.json"
+_FIPS: dict[str, str | None] = {}
+# Counties renamed or redrawn since the case file's labels, or garbled in the atlas.
+FIPS_ALIASES = {"Dona Ana, NM": "35013", "Shannon, SD": "46102", "Clifton Forge, VA": "51005",
+                "Wrangell-Petersburg, AK": "02195", "Prince of Wales-Outer Ketchikan, AK": "02198",
+                "Skagway-Hoonah-Angoon, AK": "02105"}
+_ATLAS_IDX: dict = {}
+
+
+def _key(name: str) -> str:
+    import unicodedata
+    n = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
+    n = re.sub(r"\bsaint\b", "st", n)
+    n = re.sub(r"\s+(county|parish|borough|census area|municipality|city and borough)$", "", n.strip())
+    return re.sub(r"[^a-z0-9]", "", n)
+
+
+def county_fips(label: str) -> str | None:
+    """Census county code for a case-file county label ("Multnomah, OR" -> "41051")."""
+    if label in _FIPS:
+        return _FIPS[label]
+    if not _ATLAS_IDX:
+        for g in json.loads(ATLAS.read_text(encoding="utf-8"))["objects"]["counties"]["geometries"]:
+            fid = g["id"]
+            city = int(fid[2:]) >= 500 and fid[:2] in ("51", "24", "29", "32")
+            _ATLAS_IDX.setdefault((fid[:2], _key(g["properties"]["name"]), city), fid)
+    out = FIPS_ALIASES.get(label)
+    if out:
+        pass
+    elif label.strip().lower() == "district of columbia":
+        out = "11001"
+    elif ", " in label:
+        name, st = label.rsplit(", ", 1)
+        city = name.endswith(" city")
+        name = name[:-5] if city else name
+        sf = STATE_FIPS.get(st.strip())
+        if sf:
+            k = _key(name)
+            out = _ATLAS_IDX.get((sf, k, city)) or _ATLAS_IDX.get((sf, k, not city))
+    _FIPS[label] = out
+    return out
+
+
+def map_counties(data, sex: str) -> dict:
+    """Every county's killings and solved (victims 12 and older), keyed by census code, plus the
+    label -> code table the page uses to place flags."""
+    c = data.cases[_sex(data.cases, sex) & data.cases.county.notna() & (data.cases.vic_age >= 12)]
+    g = c.groupby("county").solved.agg(["size", "sum"])
+    counties, unmatched = {}, []
+    for label, (n, s) in g.iterrows():
+        f = county_fips(label)
+        if f:
+            prev = counties.get(f, [label, 0, 0])
+            counties[f] = [prev[0], prev[1] + int(n), prev[2] + int(s)]
+        else:
+            unmatched.append([label, int(n)])
+    labels = data.cases.county.dropna().unique()
+    return {"counties": counties, "fips": {lb: county_fips(lb) for lb in labels if county_fips(lb)},
+            "unmatched": sorted(unmatched, key=lambda x: -x[1])[:20]}

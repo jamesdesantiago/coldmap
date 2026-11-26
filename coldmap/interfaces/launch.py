@@ -768,6 +768,20 @@ def _handler(app: App):
             if path == "/guide/before_after.py":
                 from .. import plugins
                 return self._send(200, plugins.example()[1], "text/plain; charset=utf-8")
+            if path.startswith("/vendor/"):  # the map's libraries and county shapes, shipped with coldmap
+                name = path.rsplit("/", 1)[1]
+                f = APP_PAGE.with_name("vendor") / name
+                if name in ("d3.v7.min.js", "topojson-client.min.js", "counties-10m.json") and f.exists():
+                    ctype = "application/json" if name.endswith(".json") else "text/javascript; charset=utf-8"
+                    b = f.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(b)))
+                    self.send_header("Cache-Control", "max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(b)
+                    return
+                return self._send(404, "Not found")
             if not path.startswith("/api/"):
                 return self._send(200, APP_PAGE.read_text(encoding="utf-8"), "text/html; charset=utf-8")
             try:
@@ -805,6 +819,8 @@ def _handler(app: App):
                     out = {n: {"summary": CHECKS.get(n).summary, "rows": json.loads(t.to_json(orient="records"))}
                            for n, t in report(app._data(), q.get("state") or None, top=10).items()}
                     return self._json(200, out)
+                if path == "/api/map":
+                    return self._json(200, research.map_counties(app._data(), q.get("sex", "all")))
                 if path == "/api/datasets":
                     from .. import datasets
                     return self._json(200, datasets.all_meta())

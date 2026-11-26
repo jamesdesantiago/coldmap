@@ -368,3 +368,19 @@ def test_your_datasets_describe_places_never_people(chome, tmp_path, server):
     assert json.loads(get("/api/status")[1])["national"]["stale"] is True  # models may use it: re-scan offered
     post("/api/datasets/remove?slug=missing-reports")
     assert json.loads(get("/api/datasets")[1]) == []
+
+
+def test_map_places_counties_and_ships_its_assets(chome, tmp_path, server):
+    from coldmap.interfaces import research
+    assert research.county_fips("Multnomah, OR") == "41051"
+    assert research.county_fips("Baltimore city, MD") == "24510" and research.county_fips("Baltimore, MD") == "24005"
+    assert research.county_fips("De Kalb, GA") == "13089" and research.county_fips("Dona Ana, NM") == "35013"
+    assert research.county_fips("District of Columbia") == "11001"
+    cases, clearance = make_sample(tmp_path)
+    get, _ = server(launch.App("files", cases, clearance))
+    assert "d3js.org" in get("/vendor/d3.v7.min.js")[1][:200]
+    assert '"counties"' in get("/vendor/counties-10m.json")[1][:400]
+    with pytest.raises(urllib.error.HTTPError, match="404"):
+        get("/vendor/../launch.py")
+    m = json.loads(get("/api/map?sex=all")[1])
+    assert set(m) == {"counties", "fips", "unmatched"}
