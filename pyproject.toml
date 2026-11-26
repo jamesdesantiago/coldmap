@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coldmap"
+version = "0.1.0"
+description = "Open toolkit for finding clusters of unsolved homicides in public U.S. homicide data"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = ["pandas>=2.0", "scipy>=1.10", "click>=8.0"]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.2"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+coldmap = "coldmap.cli:main"
+coldmap-mcp = "coldmap.mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["coldmap*"]
+
+[tool.setuptools.package-data]
+coldmap = ["explorer/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
