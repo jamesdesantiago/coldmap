@@ -6,6 +6,34 @@ Homicide investigations are local. When one offender kills across jurisdictions 
 
 > **A finding is a pattern worth review, never evidence that cases are linked.** Read [ETHICS.md](ETHICS.md) before sharing anything coldmap produces.
 
+## Open it (no setup beyond one installer)
+
+You don't need to know Python. Install [uv](https://docs.astral.sh/uv/), a small tool that runs Python programs. Paste this into a terminal (PowerShell on Windows, Terminal on Mac):
+
+```bash
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# Mac or Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Close and reopen the terminal, then run:
+
+```bash
+uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip coldmap open California
+```
+
+The first time, coldmap downloads the Murder Accountability Project's public files (about 365 MB), searches the state and opens the explorer in your browser. **Every state in the file is in the menu at the top of the page**; one you haven't opened before takes a few seconds to build, then it's saved. After the first run everything opens in seconds. Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
+
+Change what comes after `coldmap open` to do more (keep the `uvx --from ...` part in front):
+
+- Start on another state: `coldmap open Texas`. Leave the state off and it asks.
+- Just looking? `coldmap open --sample` opens a synthetic example (invented data, no download).
+- MAP released new data? `coldmap open California --refresh`.
+- Already have the files? `coldmap open California --cases SHR76_25a.csv --clearance UCR65_25.csv`.
+
+To type just `coldmap open California` from then on, install it once with `uv tool install https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip`. Data and built explorers live in `~/.coldmap` (change it with the `COLDMAP_HOME` environment variable).
+
 ## The pipeline
 
 ```

@@ -5,3 +5,6 @@ __pycache__/
 *.zip
 explorer_site/
 site/
+.venv/
+.impeccable/config.local.json
+.impeccable/hook.cache.json
