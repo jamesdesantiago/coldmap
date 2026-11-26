@@ -25,7 +25,8 @@ Every box marked *plugin* is a registry. Built-ins register themselves; third-pa
 | source | `map-clearance` | MAP's agency clearance file (`UCR65_25.csv`) |
 | source | `namus-missing`, `namus-unidentified` | NamUs Missing and Unidentified Persons CSV exports (names dropped on load) |
 | fix | `2021-relationship-coding` | Corrects ~630 California 2021 cases wrongly read as unsolved ([DATA_ISSUES.md](DATA_ISSUES.md)) |
-| detector | `scan` (strict) | Every window length at county and agency level vs the rest of the state; Monte Carlo p-values, false-discovery-rate q-values |
+| detector | `scan` (strict) | Every window length at agency, county and region level vs the rest of the state; Monte Carlo p-values, false-discovery-rate q-values |
+| regions | `california`, `washington` | Groups of neighboring counties scanned as one place; add your own in JSON |
 | detector | `window` (sensitive) | Fixed rolling windows below a solve-rate threshold |
 | detector | `map` (sensitive) | Faithful port of MAP's original algorithm |
 | enricher | `county`, `kind`, `coverage`, `namus` | County for agency findings; serial-pattern vs accountability; share of murders present in the case file; NamUs missing and unidentified counts vs typical |
@@ -84,6 +85,21 @@ Explicit `-d` and `-p` options override a preset. Presets are a registry too, so
 
 **Why only age bands?** Race and ethnicity are left out on purpose: race-based clusters risk spotlighting communities and are easy to misuse. Circumstance is left out because it is circular: police record "circumstances undetermined" largely *because* a case is unsolved, so splitting on it manufactures clusters, and false-alarm tests can't catch that.
 
+## Regions
+
+Offenders cross county lines, so `scan` also tests **regions**: groups of neighboring counties. Built-in sets cover California (six regions, all 58 counties) and the Puget Sound area of Washington. Regional windows are capped at 12 years (`scan.region_max_len`) so big regions don't just report decades-long trends. Define your own:
+
+```json
+{"name": "texas-metros", "state": "Texas",
+ "regions": {"Houston area": ["Harris, TX", "Fort Bend, TX", "Montgomery, TX"]}}
+```
+
+```python
+coldmap.load_regions("texas.json")      # registers it; scan picks it up automatically
+```
+
+In the ensemble, a regional finding agrees with a county finding inside it, but the two are never merged: they say different things.
+
 ## Why was this flagged?
 
 `coldmap.explain(finding, data)`, `coldmap scan --explain N`, the MCP `triage_finding` tool and the explorer's panel all give the same plain-language triage: the numbers against what was expected, which detectors agree and how much that level of confidence is worth, statistics, data problems that touch that state and period, coverage, NamUs context, who the victims were in aggregate, and next steps.
@@ -111,28 +127,29 @@ Swap in a different `Matcher` to define agreement another way (neighboring count
 
 `coldmap benchmark` scores any detector, preset or the ensemble against known adjudicated series in [`coldmap/benchmarks/known_series.json`](coldmap/benchmarks/known_series.json). A hit is **full** if the finding covers at least half the series' years without being much longer, and **partial** if it touches the series but mostly describes something else. Results on MAP's August 2026 file:
 
-| Series | window | scan | balanced | profiles |
-|---|---|---|---|---|
-| William Suff, Riverside County 1986–1991 | full | partial | full (high) | missed |
-| Hillside Stranglers, Los Angeles 1977–1978 | full | missed | full (high) | full (high) |
-| Golden State Killer, Orange County 1980–1981 | full | missed | full (possible) | missed |
-| Green River Killer, King County WA 1982–1984 | full | full | full (high) | full (high) |
-| Darren Vann, Gary IN 1994–2014 | missed | full | full (strong) | full (strong) |
-| Chester Turner, Los Angeles 1987–1998 | partial | full | full (high) | full (high) |
-| Lonnie Franklin Jr., Los Angeles 1985–2007 | partial | missed | partial (high) | partial (high) |
-| Randy Kraft, Orange County 1976–1983 (male victims) | missed | missed | missed | missed |
-| Andre Crawford, Chicago 1993–1999 | missed | partial | partial (high) | full (strong) |
-| **Recovered** | 4 full, 2 partial | 3 full, 2 partial | **6 full, 2 partial** | 5 full, 1 partial |
+| Series | window | scan | balanced |
+|---|---|---|---|
+| William Suff, Riverside County 1986–1991 | full | partial | full (high) |
+| Hillside Stranglers, Los Angeles 1977–1978 | full | full (region) | full (high) |
+| Golden State Killer, Orange County 1980–1981 | full | missed | full (high) |
+| Green River Killer, King County WA 1982–1984 | full | full | full (high) |
+| Darren Vann, Gary IN 1994–2014 | missed | full | full (strong) |
+| Chester Turner, Los Angeles 1987–1998 | partial | full | full (high) |
+| Lonnie Franklin Jr., Los Angeles 1985–2007 | partial | missed | partial (high) |
+| Randy Kraft, Orange County 1976–1983 (male victims) | full | full (region) | full (high) |
+| Andre Crawford, Chicago 1993–1999 | missed | partial | partial (high) |
+| **Recovered** | 5 full, 2 partial | 5 full, 2 partial | **7 full, 2 partial** |
 
 What the table says:
-- **No detector or preset catches everything,** which is why they're combined, and why `profiles` is worth running alongside `balanced` (it's the only one that fully catches Chicago).
+- **Combined, every series is caught:** 7 fully, 2 partially. No single detector does that.
+- **Regions matter.** Kraft is caught across Southern California: strangulations of men in 1976–1980 were solved 28% of the time against 61% expected, the era of Kearney, Bonin and Kraft, whose victims were left across several counties. A backtest flags it by 1978, five years before Kraft's arrest.
 - **Overlapping series blur together.** Turner, Franklin and others were active in South Los Angeles at the same time, so one finding can touch several series.
-- **Gun series are a blind spot.** Franklin shot most of his victims; gun findings are labeled accountability because most gun clusters are not serial.
-- **Male victims are a blind spot.** Kraft is missed by everything. Killings of men are dominated by other patterns, and improving this is on the roadmap.
+- **Gun series are the hardest.** Franklin shot most of his victims, and most gun clusters are not serial, so gun findings are labeled accountability.
+- **Correction:** earlier versions reported Kraft as missed by every detector. That was a benchmark bug (it reused the women's results for male series), not a detector failure. A test now guards against it.
 
 MAP's original method pools all 50 years for a county, which dilutes these series; it was designed for national screening with expert review, and its strongest flags (such as strangulations of women in Fulton County, Georgia) are reproduced exactly.
 
-`--backtest` reports the first year each would have been flagged using only data available then (Suff: 1986, arrest 1992; Green River: 1982, arrest 2001; Gary: 1998, arrest 2014). Lead times are optimistic: any finding overlapping the series' years counts.
+`--backtest` reports the first year each would have been flagged using only data available then (Suff: 1986, arrest 1992; Kraft: 1978, arrest 1983; Green River: 1982, arrest 2001; Gary: 1998, arrest 2014). Lead times are optimistic: any finding overlapping the series' years counts.
 
 A new detector earns its place by catching what others miss without adding noise. The benchmark and the negative controls are how you show both.
 
@@ -140,16 +157,16 @@ A new detector earns its place by catching what others miss without adding noise
 
 Benchmarks measure what a detector catches; **negative controls** measure what it invents. `coldmap controls` shuffles solved and unsolved labels across places within each state, victim sex, method and year. That keeps every statewide trend but destroys real clusters, so any finding on the shuffled data is a false alarm. Serial-pattern findings for women, MAP file August 2026, average of 5 shuffles:
 
-| Confidence | California real / by chance | Indiana | Illinois | Washington |
-|---|---|---|---|---|
-| high (detectors agree) | 12 / 0.0 | 3 / 0.6 | 6 / 3.8 | 7 / 4.4 |
-| strong (strict only) | 1 / 0.0 | 3 / 0.2 | 4 / 0.4 | 2 / 0.6 |
-| possible (sensitive only) | 38 / 25.4 | 3 / 5.0 | 3 / 2.2 | 4 / 4.2 |
+| Confidence | California women real / by chance | California men | Indiana | Illinois | Washington |
+|---|---|---|---|---|---|
+| high (detectors agree) | 18 / 2.6 | 34 / 0.0 | 3 / 0.6 | 6 / 3.8 | 7 / 4.4 |
+| strong (strict only) | 1 / 0.4 | 9 / 0.2 | 3 / 0.2 | 4 / 0.4 | 2 / 0.6 |
+| possible (sensitive only) | 35 / 23.4 | 31 / 32.4 | 3 / 5.0 | 3 / 2.2 | 4 / 4.2 |
 
 What this says:
 - **"Possible" findings are mostly noise.** Treat them as weak leads at best.
 - **"Strong" findings hold up** across all four states.
-- **"High" is clean in California and Indiana but not in Illinois or Washington,** where one county (Cook, King) holds most of the state's cases. Comparing that county with "the rest of the state" leaves a thin baseline, and both detectors fire on it by chance. Fixing that (for example, comparing with similar counties in other states) is on the roadmap.
+- **"High" is mostly clean in California (about 1 in 7 for women once regions are on, essentially none for men) and Indiana, but not in Illinois or Washington,** where one county (Cook, King) holds most of the state's cases. Comparing that county with "the rest of the state" leaves a thin baseline, and both detectors fire on it by chance. Fixing that (for example, comparing with similar counties in other states) is on the roadmap.
 - **Always run `coldmap controls` for the state you're studying** before trusting its findings.
 
 ## Data quality
@@ -185,7 +202,8 @@ Tools: `list_plugins`, `scan_clusters` (any detectors, parameters or preset), `t
 [CONTRIBUTING.md](CONTRIBUTING.md) walks through adding a detector, source, fix or enricher, and packaging it as a plugin. Ideas on the roadmap:
 
 - Better baselines for states dominated by one county (compare with similar counties nationally)
-- Detection for male victims and gun series (the two blind spots in the benchmark)
+- Region sets for more states, and true spatial scanning from county coordinates
+- Detection for gun series (the hardest case in the benchmark)
 - A missing-to-unidentified matcher using NamUs exports, with resolved cases as its benchmark
 - Spatial scan across neighboring counties (needs county centroids or adjacency)
 - Victim-profile detectors (age band, circumstance) and a matcher that compares profiles

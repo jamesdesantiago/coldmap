@@ -54,7 +54,8 @@ def _group(weapon: str) -> str:
 
 def hit(series: KnownSeries, findings: list[Finding]) -> list[Finding]:
     places = {series.county, series.agency} - {None}
-    return [f for f in findings if (f.place in places or f.county == series.county)
+    return [f for f in findings if (f.place in places or f.county == series.county
+                                    or series.county in f.extras.get("counties", ()))
             and f.victim_sex == series.victim_sex and _group(f.weapon) in series.weapons
             and f.start <= series.end and f.end >= series.start and f.kind in (None, "serial-pattern")]
 
@@ -92,7 +93,7 @@ def evaluate(data: Dataset, detectors=(*DEFAULT_DETECTORS, "ensemble"), params: 
     for s in series:
         row = {"series": s.name, "years": f"{s.start}-{s.end}"}
         for name in detectors:
-            key = (name, s.state)
+            key = (name, s.state, s.victim_sex)
             if key not in cache:
                 cache[key] = _runner(name, params.get(name, {}))(data, Query(state=s.state, victim_sex=s.victim_sex))
             best, g = best_hit(s, cache[key])

@@ -12,6 +12,7 @@ coldmap/
   detectors/       Detector plugins: the models                         registry: DETECTORS
   enrichers/       Enricher plugins: add info to findings               registry: ENRICHERS
   quality/         Check plugins: data-quality report                   registry: CHECKS
+  regions/         Region sets: neighboring counties scanned as one      registry: REGIONS
   stats/           shared statistics (scan likelihood, Monte Carlo, FDR)
   ensemble.py      run detectors together; Matcher decides agreement
   benchmarks/      known series (JSON), evaluate/backtest, negative controls
@@ -47,6 +48,8 @@ Each registry has an entry-point group:
 | DETECTORS | `coldmap.detectors` |
 | ENRICHERS | `coldmap.enrichers` |
 | CHECKS | `coldmap.checks` |
+| REGIONS | `coldmap.regions` |
+| PRESETS | `coldmap.presets` |
 
 Built-ins register on import. Entry points load the first time a registry is queried.
 

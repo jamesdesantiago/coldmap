@@ -62,8 +62,14 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
         for n in names:
             views[n][sx] = Ensemble([x for x in ens.detectors if x.name == n]).combine(copy.deepcopy({n: found[n]}))
 
+    busy = d.county.value_counts()
+
     def row(fd):
-        c = cidx.get(fd.county)
+        cs = [cidx[x] for x in fd.extras.get("counties", []) if x in cidx] if fd.level == "region" else []
+        if cs:
+            c = cidx[max((counties[i] for i in cs), key=lambda x: busy.get(x, 0))]
+        else:
+            c = cidx.get(fd.county)
         if c is None:
             return None
         return [c, fd.place if fd.level != "county" else None, WEAPONS.index(_group(fd.weapon)),
@@ -73,7 +79,7 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
                 {k.split("-")[1]: [v["count"], v["typical"]] for k, v in fd.extras.items()
                  if k.startswith("namus-") and isinstance(v, dict)} or None,
                 {k: v for k, v in explain(fd, data).items() if k in ("what", "agreement", "statistics", "data", "cases", "namus")},
-                fd.extras.get("profile", {}).get("age_band")]
+                fd.extras.get("profile", {}).get("age_band"), cs or None]
 
     strip = counties[0][counties[0].rfind(","):] if "," in counties[0] else ""
     busiest = d.county.value_counts().index[0]

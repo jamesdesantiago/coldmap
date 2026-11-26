@@ -9,8 +9,13 @@ def test_ensemble_catches_every_known_series(real):
     report = evaluate(real, detectors=("ensemble",), params={"ensemble": {"params": {"scan": {"reps": 499}}}})
     known = report[report.series != "RECOVERED"]
     missed = known[known.ensemble == "missed"].series.tolist()
-    # Randy Kraft (male victims) is a documented miss; anything else is a regression.
-    assert missed == ["Randy Kraft (Scorecard Killer)"], f"Ensemble missed: {missed}"
+    assert not missed, f"Ensemble missed: {missed}"
+
+
+def test_region_scan_catches_kraft(real):
+    kraft = next(s for s in load_series() if s.name.startswith("Randy Kraft"))
+    report = evaluate(real, detectors=("scan",), params={"scan": {"reps": 499}}, series=[kraft])
+    assert "Southern California" in report.iloc[0]["scan"]
 
 
 def test_scan_catches_slow_series(real):

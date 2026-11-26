@@ -50,6 +50,10 @@ Subclass `coldmap.quality.Check`, implement `run(data, state=None)` returning a 
 
 Subclass `coldmap.enrichers.Enricher`, implement `enrich(findings, data)`, register it. Enrichers must not drop findings.
 
+## Add a region set
+
+Write a JSON file (`name`, `state`, `regions`: region name to list of county labels as they appear in the data, e.g. `"Harris, TX"`) and load it with `coldmap.load_regions`, or register a `RegionSet` in a plugin through the `coldmap.regions` entry point. Base regions on established planning or metro regions and say so in `note`.
+
 ## Add a preset
 
 Register a `coldmap.presets.Preset(name, summary, detectors, params)`. Say who it's for and benchmark it.
