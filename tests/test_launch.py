@@ -230,3 +230,13 @@ def test_states_list_is_cached_without_loading(chome, tmp_path, monkeypatch):
     lib = launch.Library(cases, clearance)
     monkeypatch.setattr(lib, "data", lambda: pytest.fail("loaded the case file"))
     assert lib.states() == ["Samplestate"] and lib.counts["Samplestate"] > 0
+
+
+def test_busy_port_is_refused_not_shared():
+    """On Windows the stdlib server would share a busy port; ours must fail so serve() falls back."""
+    a = launch._Server(("127.0.0.1", 0), launch._handler(launch.App("map")))
+    try:
+        with pytest.raises(OSError):
+            launch._Server(("127.0.0.1", a.server_address[1]), launch._handler(launch.App("map")))
+    finally:
+        a.server_close()

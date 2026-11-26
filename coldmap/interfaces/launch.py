@@ -504,12 +504,19 @@ def _handler(app: App):
     return Handler
 
 
+class _Server(http.server.ThreadingHTTPServer):
+    # The stdlib default (SO_REUSEADDR) lets Windows bind a port another server already holds, so
+    # the browser would reach that server instead. Refuse, and fall back to a free port.
+    allow_reuse_address = False
+    daemon_threads = True
+
+
 def serve(app: App, port: int, open_browser: bool, path: str = "/") -> None:
     handler = _handler(app)
     try:
-        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+        httpd = _Server(("127.0.0.1", port), handler)
     except OSError:
-        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)  # port busy: pick a free one
+        httpd = _Server(("127.0.0.1", 0), handler)  # port busy: pick a free one
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     click.echo(f"\ncoldmap is running at {url}  (only on this computer)\n"
                f"Everything else happens in the browser. Press Ctrl+C here to stop.")
