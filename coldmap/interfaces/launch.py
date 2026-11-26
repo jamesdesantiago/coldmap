@@ -40,9 +40,7 @@ LABELS = {"cases": "case file", "clearance": "clearance file"}
 SHELL = Path(__file__).with_name("explorer") / "shell.html"
 
 
-def home() -> Path:
-    """Where coldmap keeps downloaded data and built sites (COLDMAP_HOME, default ~/.coldmap)."""
-    return Path(os.environ.get("COLDMAP_HOME") or Path.home() / ".coldmap")
+from ..plugins import home  # noqa: E402  (data, builds, plugins and settings live here)
 
 
 def _url(key: str) -> str:
@@ -89,6 +87,29 @@ def remote_info(url: str) -> dict:
         return {"size": size, "etag": r.headers.get("ETag")}
 
 
+def fetch_plugin(url: str) -> tuple[str, str]:
+    """Download a plugin .py file from a link (GitHub file pages are turned into raw links)."""
+    url = url.strip()
+    m = re.match(r"https://github\.com/([^/]+)/([^/]+)/blob/(.+)$", url)
+    if m:
+        url = f"https://raw.githubusercontent.com/{m[1]}/{m[2]}/{m[3]}"
+    if not url.startswith("https://"):
+        raise ValueError("Use an https:// link to a .py file, for example a file on GitHub.")
+    name = unquote(urlsplit(url).path.rsplit("/", 1)[-1])
+    if not name.endswith(".py"):
+        raise ValueError("The link should point to a single .py file.")
+    req = urllib.request.Request(url, headers={"User-Agent": "coldmap"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            raw = r.read(512 * 1024 + 1)
+    except Exception as e:
+        raise ValueError(f"Couldn't download that link: {e}") from None
+    try:
+        return name, raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("That link isn't a text .py file.") from None
+
+
 def _sources_file() -> Path:
     return home() / "data" / "sources.json"
 
@@ -132,12 +153,18 @@ def ensure_data(refresh: bool = False) -> tuple[Path, Path | None]:
     return paths["cases"], paths["clearance"]
 
 
-def _stamp(*files: Path | None) -> str:
+def _data_stamp(*files: Path | None) -> str:
+    """Identifies the data files (and coldmap version): enough for the list of states."""
     from .. import __version__
+    return "|".join([__version__] + [f"{f.resolve()}:{f.stat().st_size}:{f.stat().st_mtime_ns}" for f in files if f])
+
+
+def _stamp(*files: Path | None) -> str:
+    """Identifies everything a build depends on: data, coldmap, the page template and plugins."""
+    from .. import plugins
     from .explorer import build as b
-    parts = [__version__, str(Path(b.__file__).with_name("index.html").stat().st_mtime_ns)]
-    parts += [f"{f.resolve()}:{f.stat().st_size}:{f.stat().st_mtime_ns}" for f in files if f]
-    return "|".join(parts)
+    page = str(Path(b.__file__).with_name("index.html").stat().st_mtime_ns)
+    return "|".join([_data_stamp(*files), page, plugins.fingerprint()])
 
 
 def slugify(state: str) -> str:
@@ -163,12 +190,16 @@ class Library:
         self.clearance = Path(clearance) if clearance else None
         self.rebuild = rebuild
         self.root = home() / "sites"
-        self.stamp = _stamp(self.cases, self.clearance)
         self._data = None
         self._states: list[str] | None = None
         self.counts: dict[str, int] = {}
         self._lock = threading.RLock()
         self._fresh: set[str] = set()  # built during this run (so --rebuild applies once per state)
+
+    @property
+    def stamp(self) -> str:
+        """Identifies the data, coldmap and plugins a build came from (cheap to recompute)."""
+        return _stamp(self.cases, self.clearance)
 
     @property
     def loaded(self) -> bool:
@@ -186,7 +217,7 @@ class Library:
         if self._states is None:
             try:
                 saved = json.loads((self.root / "states.json").read_text())
-                if saved["stamp"] == self.stamp:
+                if saved["stamp"] == _data_stamp(self.cases, self.clearance):
                     self._states, self.counts = saved["states"], saved.get("counts", {})
             except (OSError, ValueError, KeyError):
                 pass
@@ -201,7 +232,8 @@ class Library:
         self._states, self.counts = sorted(n.index.tolist()), {k: int(v) for k, v in n.items()}
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / "states.json").write_text(
-            json.dumps({"stamp": self.stamp, "states": self._states, "counts": self.counts}))
+            json.dumps({"stamp": _data_stamp(self.cases, self.clearance), "states": self._states,
+                        "counts": self.counts}))
         return self._states
 
     def resolve(self, state: str) -> str:
@@ -210,11 +242,52 @@ class Library:
     def site(self, state: str) -> Path:
         return self.root / slugify(state)
 
-    def is_built(self, state: str) -> bool:
+    def is_built(self, state: str, stamp: str | None = None) -> bool:
+        """Built for the current data, coldmap and plugins. Pass `stamp` when checking many states."""
         if self.rebuild and state not in self._fresh:
             return False
         f = self.site(state) / ".coldmap-build"
-        return f.exists() and f.read_text() == self.stamp
+        return f.exists() and f.read_text() == (stamp or self.stamp)
+
+    @property
+    def national_dir(self) -> Path:
+        return self.root / "_national"
+
+    def national_summary(self, stamp: str | None = None) -> dict | None:
+        """What the last nationwide scan found, if it is current."""
+        d = self.national_dir
+        try:
+            if (d / ".coldmap-build").read_text() != (stamp or self.stamp):
+                return None
+            return json.loads((d / "summary.json").read_text())
+        except (OSError, ValueError):
+            return None
+
+    def build_national(self, progress=None) -> dict:
+        from .. import plugins
+        from .explorer.national import build_national
+        with self._lock:
+            stamp = self.stamp
+            if (s := self.national_summary(stamp)) and not self.rebuild:
+                return s
+            on = plugins.enabled()
+            tmp = self.root / "_national.building"
+            if tmp.exists():
+                shutil.rmtree(tmp)
+            out = build_national(self.data(), tmp, detectors=tuple(on["detectors"]),
+                                 enrichers=tuple(on["enrichers"]), progress=progress)
+            body = json.loads(out.read_text())
+            conf: dict[str, int] = {}
+            for r in body["findings"]:
+                conf[r["confidence"]] = conf.get(r["confidence"], 0) + 1
+            summary = {"generated": body["meta"]["generated"], "findings": len(body["findings"]),
+                       "states": len(body["meta"]["states"]), "confidence": conf}
+            (tmp / "summary.json").write_text(json.dumps(summary))
+            (tmp / ".coldmap-build").write_text(stamp)
+            if self.national_dir.exists():
+                shutil.rmtree(self.national_dir)
+            tmp.replace(self.national_dir)
+            return summary
 
     def build(self, state: str, progress=None) -> Path:
         """Build (or reuse) the explorer for a state and return its folder.
@@ -224,12 +297,15 @@ class Library:
             out = self.site(state)
             if self.is_built(state):
                 return out
+            from .. import plugins
             from .explorer.build import build_site
             data = self.data()
+            on = plugins.enabled()
             tmp = out.with_name(out.name + ".building")
             if tmp.exists():
                 shutil.rmtree(tmp)
-            build_site(data, state, tmp, progress=progress)
+            build_site(data, state, tmp, detectors=tuple(on["detectors"]), enrichers=tuple(on["enrichers"]),
+                       progress=progress)
             (tmp / ".coldmap-build").write_text(self.stamp)
             if out.exists():
                 shutil.rmtree(out)
@@ -255,14 +331,16 @@ class Job:
         self.kind, self.title = kind, title
         self.steps = [{"key": k, "label": label, "state": "pending"} for k, label in steps]
         self.bytes: list | None = None
+        self.count: list | None = None   # [done, total] within the current step
         self.notes: list[str] = []
         self.error: str | None = None
         self.result: dict | None = None
         self.started = time.time()
         self.ended: float | None = None
 
-    def step(self, key: str) -> None:
-        """Mark `key` as running and every step before it as done."""
+    def step(self, key: str, done: int | None = None, total: int | None = None) -> None:
+        """Mark `key` as running and every step before it as done; done/total count within it."""
+        self.count = [done, total] if done is not None else None
         hit = False
         for s in self.steps:
             if s["key"] == key:
@@ -288,7 +366,7 @@ class Job:
 
     def view(self) -> dict:
         return {"id": self.id, "kind": self.kind, "title": self.title, "steps": self.steps,
-                "bytes": self.bytes, "notes": self.notes, "error": self.error, "result": self.result,
+                "bytes": self.bytes, "count": self.count, "notes": self.notes, "error": self.error, "result": self.result,
                 "running": self.running, "elapsed": round((self.ended or time.time()) - self.started, 1)}
 
 
@@ -385,6 +463,70 @@ class App:
             job.finish({"state": state, "slug": slugify(state)})
         return self.start("build", f"Building {state}", [("load", "Load the case file")] + BUILD_STEPS, work)
 
+    def national(self) -> Job:
+        from .explorer.national import NATIONAL_STEPS
+        if self.lib is None:
+            raise click.ClickException("Get the data first.")
+        lib = self.lib
+
+        def work(job: Job):
+            job.step("load")
+            lib.data()
+            job.finish(lib.build_national(progress=job.step))
+        return self.start("national", "Scanning every state", [("load", "Load the case file")] + NATIONAL_STEPS,
+                          work)
+
+    def _idle(self) -> None:
+        if self.job and self.job.running:
+            raise Busy(f"Wait until this finishes: {self.job.title}")
+
+    def plugins_view(self) -> dict:
+        from .. import plugins
+        from ..core.registry import Registry
+        on = plugins.enabled()
+        groups = []
+        for r in Registry.ALL:
+            items = []
+            for name, obj in r:
+                summary = getattr(obj, "summary", "") or getattr(obj, "note", "") or getattr(obj, "title", "")
+                item = {"name": name, "summary": summary, "origin": r.origin(name)}
+                if r.kind in ("detector", "enricher"):
+                    item["on"] = name in on[r.kind + "s"]
+                    item["locked"] = r.kind == "enricher" and name in plugins.LOCKED_ENRICHERS
+                    if r.kind == "detector":
+                        item["tier"] = getattr(obj, "tier", None)
+                items.append(item)
+            groups.append({"kind": r.kind, "items": items})
+        ex_name, _ = plugins.example()
+        return {"groups": groups, "files": plugins.files(), "folder": str(plugins.folder()),
+                "example": {"file": ex_name, "added": (plugins.folder() / ex_name).exists()}}
+
+    def plugin_action(self, action: str, q: dict, body: bytes) -> dict:
+        from .. import plugins
+        self._idle()
+        try:
+            if action == "enable":
+                plugins.set_enabled(q.get("kind", ""), q.get("name", ""), q.get("on") == "1")
+                return self.plugins_view()
+            if action == "remove":
+                plugins.remove(q.get("file", ""))
+                return self.plugins_view()
+            if action == "example":
+                added = plugins.add(*plugins.example())
+            elif action == "starter":
+                added = plugins.add(*plugins.starter())
+            elif action == "upload":
+                j = json.loads(body or b"{}")
+                added = plugins.add(str(j.get("file", "")), str(j.get("text", "")))
+            elif action == "link":
+                name, text = fetch_plugin(q.get("url", ""))
+                added = plugins.add(name, text)
+            else:
+                raise ValueError("Unknown plugin action.")
+        except ValueError as e:
+            raise click.ClickException(str(e)) from None
+        return {**self.plugins_view(), "added": added, "path": str(plugins.folder() / added["file"])}
+
     def check_updates(self) -> dict:
         """Compare MAP's files with the downloaded copies without downloading them."""
         saved, files = _sources(), []
@@ -423,16 +565,22 @@ class App:
                           "downloaded": saved.get(key, {}).get("downloaded") if self.mode == "map" else None})
         lib, states = self.lib, None
         if lib and lib.cached_states() is not None:
-            states = [{"name": s, "slug": slugify(s), "built": lib.is_built(s), "cases": lib.counts.get(s)}
+            stamp = lib.stamp
+            states = [{"name": s, "slug": slugify(s), "built": lib.is_built(s, stamp), "cases": lib.counts.get(s)}
                       for s in lib.states()]
         elif lib and not (self.job and self.job.running):
             try:
                 self.index()  # first run with this data: list the states in the background
             except Busy:
                 pass
+        from .. import plugins
+        on = plugins.enabled()
         return {"version": __version__, "mode": self.mode, "home": str(home()), "notice": NOTICE,
                 "data": {"ready": lib is not None, "files": files, "check": self.check},
-                "states": states, "job": self.job.view() if self.job else None}
+                "states": states, "national": lib.national_summary() if lib else None,
+                "plugins": {"detectors": on["detectors"], "enrichers": on["enrichers"],
+                            "files": len(plugins.files())},
+                "job": self.job.view() if self.job else None}
 
 
 def _handler(app: App):
@@ -471,6 +619,13 @@ def _handler(app: App):
                     return self._json(202, app.build((q.get("state") or [""])[0]).view())
                 if u.path == "/api/check":
                     return self._json(200, app.check_updates())
+                if u.path == "/api/national":
+                    return self._json(202, app.national().view())
+                if u.path.startswith("/api/plugins/"):
+                    n = int(self.headers.get("Content-Length") or 0)
+                    body = self.rfile.read(min(n, 2 * 1024 * 1024)) if n else b""
+                    flat = {k: v[0] for k, v in q.items()}
+                    return self._json(200, app.plugin_action(u.path.rsplit("/", 1)[1], flat, body))
             except Busy as e:
                 return self._json(409, {"error": str(e)})
             except click.ClickException as e:
@@ -479,14 +634,23 @@ def _handler(app: App):
 
         def do_GET(self):
             path = urlsplit(self.path).path
-            if path in ("/", "/index.html"):
+            if path in ("/", "/index.html", "/plugins", "/national"):
                 return self._send(200, SHELL.read_text(encoding="utf-8"), "text/html; charset=utf-8")
             if path == "/api/status":
                 return self._json(200, app.status())
+            if path == "/api/plugins":
+                return self._json(200, app.plugins_view())
             lib = app.lib
+            if path == "/national.json":
+                if not (lib and lib.national_summary()):
+                    return self._json(404, {"error": "Run the nationwide scan first."})
+                self.directory = str(lib.national_dir)
+                self.path = "/national.json"
+                return super().do_GET()
             if path == "/states.json":  # the explorer's state menu
                 names = (lib.cached_states() if lib else None) or []
-                return self._json(200, {"states": [{"name": s, "slug": slugify(s), "built": lib.is_built(s)}
+                stamp = lib.stamp if lib else None
+                return self._json(200, {"states": [{"name": s, "slug": slugify(s), "built": lib.is_built(s, stamp)}
                                                    for s in names]})
             slug, sep, rest = unquote(path).lstrip("/").partition("/")
             names = (lib.cached_states() if lib else None) or []

@@ -389,7 +389,7 @@ function renderDetail(){
   p.innerHTML=`<div class="why"><h3 class="dtitle">${esc(title)}</h3>
    <div class="dsub"><span class="tag ${sel.conf}">${esc(CONF[sel.conf])}</span>${sel.by.map(b=>`<span class="tag">${esc(b)}</span>`).join('')}${sel.q!=null?`<span>q = ${sel.q<0.001?'&lt;0.001':sel.q.toFixed(3)}</span>`:''}</div>
    <div class="compare"><div><b style="color:var(--red)">${sel.t-sel.s}</b><span>unsolved of ${sel.t}</span></div><div><b>${pct(sel.s/sel.t)}</b><span>solved here</span></div><div><b style="color:var(--blue)">${sel.exp!=null?pct(sel.exp):'—'}</b><span>expected</span></div></div>
-   <p class="leadp">${esc(e.what)}</p><p>${esc(e.agreement)}</p>${e.cases?`<h4>Victims</h4><p>${esc(e.cases)}</p>`:''}${e.namus?`<h4>NamUs</h4><p>${esc(e.namus)}</p>`:''}
+   <p class="leadp">${esc(e.what)}</p><p>${esc(e.agreement)}</p>${e.cases?`<h4>Victims</h4><p>${esc(e.cases)}</p>`:''}${e.namus?`<h4>NamUs</h4><p>${esc(e.namus)}</p>`:''}${e.plugins&&e.plugins.length?`<h4>From plugins</h4>${e.plugins.map(n=>`<p><b>${esc(n.title)}.</b> ${esc(n.text)} <span class="muted">(${esc(n.by)})</span></p>`).join('')}`:''}
    ${e.data&&e.data.length?`<h4>Data notes</h4><ul>${li(e.data)}</ul>`:''}
    <h4>Next steps</h4><ol><li>Search public news and court records: is a series here already known or solved?</li><li>Read the cases: do dates, ages and circumstances resemble each other?</li><li>If it still looks unexplained, send it to the Murder Accountability Project. Never contact families, witnesses or possible suspects.</li></ol>
    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="copyFinding">Copy summary</button><button class="btn" id="seeCases">See cases</button></div></div>`;

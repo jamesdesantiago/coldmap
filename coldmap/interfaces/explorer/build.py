@@ -67,10 +67,11 @@ def _json_or_none(path):
 def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETECTORS,
                params: dict | None = None, profiles: bool = True,
                benchmark_file: str | Path | None = None, controls_file: str | Path | None = None,
-               progress=None) -> Path:
+               progress=None, enrichers: tuple[str, ...] | None = None) -> Path:
     """Build the app. benchmark_file / controls_file are JSON written by
     `coldmap benchmark --json` and `coldmap controls --json` (optional; shown if given).
-    progress, if given, is called with each BUILD_STEPS key as that step starts."""
+    progress, if given, is called with each BUILD_STEPS key as that step starts.
+    enrichers: which enrichers to run (default: the built-in defaults)."""
     params = params or {}
     step = progress or (lambda key: None)
     step("count")
@@ -97,14 +98,15 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
               idx["circ"][str(r.circumstance)], idx["rel"][str(r.relationship)]] for r in f.itertuples()]
 
     # Run each detector once per victim sex; combine for the ensemble view.
-    ens = Ensemble.from_names(detectors, params)
+    ekw = {"enrichers": tuple(enrichers)} if enrichers else {}
+    ens = Ensemble.from_names(detectors, params, **ekw)
     names = [x.name for x in ens.detectors]
     views = {"ensemble": {}, **{n: {} for n in names}}
     prof = None
     if profiles:
         from ...presets import resolve
         pd_, pp_ = resolve("profiles")
-        prof = Ensemble.from_names(pd_, pp_)
+        prof = Ensemble.from_names(pd_, pp_, **ekw)
         views["profiles"] = {}
     for sx, sex in ((0, "Female"), (1, "Male")):
         step("women" if sx == 0 else "men")
@@ -132,7 +134,8 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
                 [names.index(x) for x in fd.found_by if x in names], CONF.index(fd.confidence), fd.kind,
                 {k.split("-")[1]: [v["count"], v["typical"]] for k, v in fd.extras.items()
                  if k.startswith("namus-") and isinstance(v, dict)} or None,
-                {k: v for k, v in explain(fd, data).items() if k in ("what", "agreement", "statistics", "data", "cases", "namus")},
+                {k: v for k, v in explain(fd, data).items()
+                 if k in ("what", "agreement", "statistics", "data", "cases", "namus", "plugins")},
                 fd.extras.get("profile", {}).get("age_band"), cs or None]
 
     step("explain")

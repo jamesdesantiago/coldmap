@@ -8,6 +8,10 @@ enough for coldmap to find them:
     # in the plugin's pyproject.toml
     [project.entry-points."coldmap.detectors"]
     streak = "coldmap_streak:StreakDetector"
+
+A plugin can also be a single .py file in the plugins folder (~/.coldmap/plugins, see
+coldmap/plugins.py); the app adds files there. Each registry remembers where every entry
+came from (`origin(name)`): built in, a package, or a plugin file.
 """
 
 from __future__ import annotations
@@ -19,11 +23,15 @@ T = TypeVar("T")
 
 
 class Registry(Generic[T]):
+    ALL: list["Registry"] = []      # every registry, so tools can list all plugins
+
     def __init__(self, kind: str, group: str):
         self.kind = kind
         self.group = group          # entry-point group, e.g. "coldmap.detectors"
         self._items: dict[str, T] = {}
+        self._origin: dict[str, str] = {}
         self._loaded_entry_points = False
+        Registry.ALL.append(self)
 
     def register(self, obj: T | None = None, *, name: str | None = None):
         """Use as @registry.register or registry.register(obj, name=...)."""
@@ -38,15 +46,24 @@ class Registry(Generic[T]):
         return add(obj) if obj is not None else add
 
     def _load_plugins(self) -> None:
+        from .. import plugins  # plugin files in the plugins folder (cheap after the first load)
+        plugins.load_local()
         if self._loaded_entry_points:
             return
         self._loaded_entry_points = True
         for ep in entry_points(group=self.group):
             if ep.name not in self._items:
                 self.register(ep.load(), name=ep.name)
+                dist = getattr(ep, "dist", None)
+                self._origin[ep.name] = f"package {dist.name}" if dist else "package"
 
     def unregister(self, name: str) -> None:
         self._items.pop(name, None)
+        self._origin.pop(name, None)
+
+    def origin(self, name: str) -> str:
+        """Where a plugin came from: "built in", "package <name>" or "file <name>.py"."""
+        return self._origin.get(name, "built in")
 
     def get(self, name: str) -> T:
         self._load_plugins()

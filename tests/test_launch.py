@@ -37,7 +37,8 @@ def _two_state_sample(tmp_path):
     import pandas as pd
     cases, clearance = make_sample(tmp_path)
     df = pd.read_csv(cases)
-    other = df.assign(State="Otherstate", ID=df.ID.astype(str) + "x")
+    other = df.assign(State="Otherstate", ID=df.ID.astype(str) + "x",  # its own places, like real states
+                      CNTYFIPS=df.CNTYFIPS.str.replace(", SS", ", OS"), Agency=df.Agency + " (O)")
     pd.concat([df, other]).to_csv(cases, index=False)
     return cases, clearance
 
@@ -240,3 +241,67 @@ def test_busy_port_is_refused_not_shared():
             launch._Server(("127.0.0.1", a.server_address[1]), launch._handler(launch.App("map")))
     finally:
         a.server_close()
+
+
+# ---- plugins and nationwide ------------------------------------------------------------------
+def test_plugin_file_adds_notes_and_rebuilds(chome, tmp_path):
+    from coldmap import plugins
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    site = app.lib.build("Samplestate")
+    old = app.lib.stamp
+    r = app.plugin_action("example", {}, b"")
+    assert r["added"]["provides"] == [{"kind": "enricher", "name": "before-after"}]
+    assert "before-after" in plugins.enabled()["enrichers"]
+    assert app.lib.stamp != old and not app.lib.is_built("Samplestate")  # plugins changed: rebuild
+    site = app.lib.build("Samplestate")
+    rows = json.loads((site / "agg.json").read_text())["meta"]["findings"]["ensemble"]["0"]
+    notes = [n for r in rows for n in (r[13].get("plugins") or [])]
+    assert notes and all(n["by"] == "before-after" and "During:" in n["text"] for n in notes)
+
+    app.plugin_action("enable", {"kind": "enricher", "name": "before-after", "on": "0"}, b"")
+    assert "before-after" not in plugins.enabled()["enrichers"]
+    with pytest.raises(click.ClickException, match="rely on it"):
+        app.plugin_action("enable", {"kind": "enricher", "name": "county", "on": "0"}, b"")
+    app.plugin_action("remove", {"file": "before_after.py"}, b"")
+    assert plugins.files() == []
+
+
+def test_bad_plugin_files_are_refused_and_nothing_breaks(chome, tmp_path):
+    from coldmap import plugins
+    with pytest.raises(ValueError, match="valid Python"):
+        plugins.add("broken.py", "def (:\n")
+    with pytest.raises(ValueError, match="didn't register"):
+        plugins.add("empty.py", "x = 1\n")
+    with pytest.raises(ValueError, match="ImportError|ModuleNotFoundError"):
+        plugins.add("needs.py", "import not_a_real_module_xyz\n")
+    with pytest.raises(ValueError, match="simple name"):
+        plugins.add("../evil.py", "x = 1\n")
+    assert plugins.files() == [] and not list(plugins.folder().glob("*.py"))
+
+
+def test_starter_plugin_works_and_names_do_not_clash(chome):
+    from coldmap import plugins
+    from coldmap.enrichers import ENRICHERS
+    a = plugins.add(*plugins.starter())
+    b = plugins.add(*plugins.starter())
+    assert (a["file"], b["file"]) == ("my_plugin.py", "my_plugin_2.py")
+    assert {"my-plugin", "my-plugin-2"} <= set(ENRICHERS.names())
+    assert ENRICHERS.origin("my-plugin") == "file my_plugin.py"
+
+
+def test_nationwide_scan_ranks_every_state(chome, tmp_path, server):
+    cases, clearance = _two_state_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, post = server(app)
+    _wait(app)  # listing states
+    code, job = post("/api/national")
+    assert code == 202 and job["kind"] == "national"
+    done = _wait(app)
+    assert done.error is None and done.result["states"] == 2
+    st = json.loads(get("/api/status")[1])
+    assert st["national"]["findings"] == done.result["findings"] > 0
+    body = json.loads(get("/national.json")[1])
+    assert {r["state"] for r in body["findings"]} == {"Samplestate", "Otherstate"}
+    assert all(r["what"] for r in body["findings"])
+    assert "<title>coldmap</title>" in get("/national")[1] and "<title>coldmap</title>" in get("/plugins")[1]

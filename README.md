@@ -29,6 +29,11 @@ Your browser opens on the coldmap app straight away. It explains what coldmap do
 2. **Choose a state.** All of them are listed, with their case counts.
 3. **Build and explore.** coldmap searches the state (a few seconds for most, a minute or two for the largest), then opens the explorer. Each build is saved, so it opens instantly next time. The explorer's state menu switches states or goes back home.
 
+Two more pages sit in the header:
+
+- **Nationwide** scans every state in one pass (about 10 minutes on the national file) and ranks every flag together, with filters for victims, confidence, kind and state. Each flag opens in its state's explorer.
+- **Plugins** adds plugins from a file, a link or a starter template, and switches detectors and enrichers on or off. Start with the example, *Before & after*. See [PLUGINS.md](PLUGINS.md).
+
 Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
 
 Change what comes after `coldmap open` to do more (keep the `uvx --from ...` part in front):

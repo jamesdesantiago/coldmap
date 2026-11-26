@@ -25,6 +25,11 @@ class Enricher(ABC):
     def enrich(self, findings: list[Finding], data: Dataset) -> list[Finding]:
         ...
 
+    def note(self, finding: Finding, title: str, text: str) -> None:
+        """Add a plain-language note to a finding. explain() and the explorer show it under
+        "From plugins", credited to this enricher. Describe patterns, never people (ETHICS.md)."""
+        finding.extras.setdefault("notes", []).append({"by": self.name, "title": title, "text": text})
+
 
 ENRICHERS: Registry[type[Enricher]] = Registry("enricher", "coldmap.enrichers")
 DEFAULT_ENRICHERS = ("county", "kind", "coverage", "namus")
