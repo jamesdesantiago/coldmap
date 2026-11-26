@@ -13,7 +13,27 @@ from ..issues import apply_fixes
 WEAPONS = ["Gun", "Knife", "Beating/blunt", "Strangle/asphyxia", "Fire", "Other/unknown", "Not reported"]
 
 
-def build_site(df: pd.DataFrame, state: str, out_dir: Path) -> Path:
+def _scan_rows(df: pd.DataFrame, state: str, counties: list[str], reps: int) -> dict:
+    """Precompute strict-detector flags for the page: {sex: [[county_idx, agency|None, weapon_idx,
+    start, end, total, solved, baseline, q], ...]}."""
+    from ..scan import scan
+    ac = df[df.state == state].groupby("agency").county.agg(lambda s: s.mode().iat[0])
+    cidx = {c: i for i, c in enumerate(counties)}
+    out = {}
+    for sx, name in ((0, "Female"), (1, "Male")):
+        rows = []
+        for level in ("county", "agency"):
+            for f in scan(df, state=state, place=level, victim_sex=name, reps=reps, max_len=25):
+                county = f.place if level == "county" else ac.get(f.place)
+                if county not in cidx or f.weapon not in WEAPONS:
+                    continue
+                rows.append([cidx[county], f.place if level == "agency" else None, WEAPONS.index(f.weapon),
+                             f.start, f.end, f.total, f.solved, f.baseline, round(f.q_value, 4)])
+        out[sx] = rows
+    return out
+
+
+def build_site(df: pd.DataFrame, state: str, out_dir: Path, reps: int = 999) -> Path:
     d = df[df.state == state].copy()
     if d.empty:
         raise ValueError(f"No cases for state {state!r}. Use the full name, e.g. 'California'.")
@@ -44,7 +64,8 @@ def build_site(df: pd.DataFrame, state: str, out_dir: Path) -> Path:
     busiest = d.county.value_counts().index[0]
     meta = {"state": state, "years": [int(d.year.min()), int(d.year.max())],
             "counties": [c.removesuffix(strip) for c in counties],
-            "defaultCounty": busiest.removesuffix(strip), "weapons": WEAPONS, **lists}
+            "defaultCounty": busiest.removesuffix(strip), "weapons": WEAPONS, **lists,
+            "scan": _scan_rows(df, state, counties, reps)}
 
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "agg.json").write_text(json.dumps({"meta": meta, "agg": agg}, separators=(",", ":")))

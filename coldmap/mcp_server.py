@@ -49,15 +49,19 @@ def _data():
 
 
 @mcp.tool()
-def scan_clusters(state: str, victim_sex: str = "Female", level: str = "county",
-                  max_q: float = 0.10, min_cases: int = 8, top: int = 20) -> dict:
+def scan_clusters(state: str, method: str = "both", victim_sex: str = "Female",
+                  kind: str | None = "serial-pattern", max_q: float = 0.10, min_cases: int = 8,
+                  top: int = 20) -> dict:
     """Find places, methods and periods where far fewer killings were solved than in the rest
-    of the state at the time. state is a full name like 'California'. level is county, agency
-    or msa. Flags carry a Monte Carlo p-value, a false-discovery-rate q-value, and a kind:
-    'serial-pattern' or 'accountability' (a place solving fewer cases in general)."""
-    from .scan import scan
-    flags = scan(_data(), state=state, place=level, victim_sex=victim_sex, max_q=max_q,
-                 min_cases=min_cases, use_fixes=False)
+    of the state at the time. state is a full name like 'California'.
+    method: 'both' (default; strict and sensitive detectors merged), 'scan' (strict,
+    false-alarm controlled), 'window' (sensitive, catches more, more noise) or 'map'.
+    Each flag has confidence: high (both agree), strong (strict only), possible (sensitive only).
+    kind: 'serial-pattern', 'accountability' or None for both."""
+    from .combined import detect_all
+    flags = detect_all(_data(), method, state=state, victim_sex=victim_sex, kind=kind,
+                       scan_kw={"max_q": max_q, "min_cases": min_cases, "use_fixes": False},
+                       window_kw={"min_cases": min_cases, "use_fixes": False})
     if _clearance() is not None:
         from .coverage import add_coverage
         flags = add_coverage(flags, _data(), _clearance(), state)
@@ -115,7 +119,8 @@ def coverage_gaps(state: str, below: float = 0.8) -> list[dict]:
 @mcp.tool()
 def validation_report() -> list[dict]:
     """How the detector performs on known, adjudicated serial cases."""
-    return run_validation(_data(), scan={"max_len": 25}).to_dict(orient="records")
+    kw = {"max_len": 25}
+    return run_validation(_data(), scan=kw, both=kw).to_dict(orient="records")
 
 
 def main():

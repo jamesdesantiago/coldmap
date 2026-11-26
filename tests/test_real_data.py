@@ -10,6 +10,13 @@ def test_known_series_caught_by_at_least_one_detector(real):
         assert row.window != "missed" or row.scan != "missed", f"Both detectors missed {row.series}"
 
 
+def test_combined_mode_catches_every_known_series(real):
+    kw = {"reps": 499, "max_len": 25}
+    report = run_validation(real, detectors=("both",), both=kw)
+    missed = report[report.both == "missed"].series.tolist()
+    assert not missed, f"Combined mode missed: {missed}"
+
+
 def test_scan_catches_slow_series(real):
     vann = next(s for s in KNOWN_SERIES if s.agency == "Gary")
     report = run_validation(real, detectors=("scan",), scan={"reps": 499, "max_len": 25})

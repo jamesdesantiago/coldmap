@@ -38,6 +38,9 @@ class Flag:
     level: str = "county"           # agency, county or msa
     coverage: float | None = None   # share of the period's murders present in the case file
     kind: str | None = None         # serial-pattern or accountability (scan detector)
+    found_by: tuple[str, ...] = ()  # detectors that produced this flag (combined mode)
+    confidence: str | None = None   # high (both agree), strong (scan), possible (window)
+    county: str | None = None       # county the flag sits in (agency flags too)
 
     @property
     def unsolved(self) -> int:

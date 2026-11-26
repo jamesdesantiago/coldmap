@@ -64,6 +64,12 @@ def _hit(series: KnownSeries, flags: list[Flag]) -> list[Flag]:
 
 
 def _detect(df, series, detector, as_of=None, **kw):
+    if detector == "both":
+        from .combined import detect_all
+        d = df if as_of is None else df[df.year <= as_of]
+        levels = ("county", "agency") if series.agency else ("county",)
+        scan_kw = {k: v for k, v in kw.items() if k in ("reps", "max_len", "max_q", "min_cases")}
+        return detect_all(d, "both", state=series.state, levels=levels, scan_kw=scan_kw)
     if detector == "window":
         d = df if as_of is None else df[df.year <= as_of]
         return sliding_window(d, state=series.state, **kw)
@@ -74,7 +80,7 @@ def _detect(df, series, detector, as_of=None, **kw):
     return flags
 
 
-def run_validation(df: pd.DataFrame, detectors=("window", "scan"), **kw) -> pd.DataFrame:
+def run_validation(df: pd.DataFrame, detectors=("window", "scan", "both"), **kw) -> pd.DataFrame:
     """Did each detector flag each known series, using all data?"""
     rows = []
     cache: dict = {}
@@ -87,7 +93,8 @@ def run_validation(df: pd.DataFrame, detectors=("window", "scan"), **kw) -> pd.D
             hits = _hit(s, cache[key])
             best = max(hits, key=lambda f: f.unsolved) if hits else None
             row[det] = (f"{best.place}: {best.weapon} {best.start}-{best.end}, "
-                        f"{best.solved}/{best.total} solved" if best else "missed")
+                        f"{best.solved}/{best.total} solved"
+                        + (f" [{best.confidence}]" if best.confidence else "") if best else "missed")
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -105,6 +112,6 @@ def backtest(df: pd.DataFrame, series: KnownSeries, detector: str = "scan",
             "lead_time_years": (series.arrest - first) if first else None}
 
 
-def run_backtests(df: pd.DataFrame, detectors=("window", "scan"), **kw) -> pd.DataFrame:
+def run_backtests(df: pd.DataFrame, detectors=("window", "scan", "both"), **kw) -> pd.DataFrame:
     return pd.DataFrame([backtest(df, s, det, **kw.get(det, {}))
                          for s in KNOWN_SERIES for det in detectors])
