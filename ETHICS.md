@@ -14,7 +14,7 @@ Many flags have ordinary explanations: data entry errors, gang conflicts, an age
 
 ## Before you share a flag
 
-1. **Check the data issues.** Run `coldmap issues` and confirm the flag is not an artifact.
+1. **Check the data issues.** Run `coldmap plugins` to see the data fixes and caveats, read DATA_ISSUES.md, and confirm the finding is not an artifact.
 2. **Check whether it's already known.** Search public news for the county, method and years. Many flags are solved series.
 3. **Read the case rows.** Do the victims, dates and circumstances actually resemble each other?
 4. **Have a second person review it.**
