@@ -179,6 +179,29 @@ def shortlist() -> dict:
     return {"shortlist": out, "ethics": ETHICS}
 
 
+@mcp.tool()
+def local_datasets(place: str | None = None, start: int | None = None, end: int | None = None) -> dict:
+    """The researcher's own datasets about places and times (added in the coldmap app). Without
+    `place`, describes each one; with a place label as the case file writes it (e.g. "Multnomah, OR",
+    a state name or an agency), returns matching rows, optionally limited to years start..end.
+    They hold no personal identifiers: coldmap leaves those out on import."""
+    from .. import datasets
+    metas = datasets.all_meta()
+    if not place:
+        return {"datasets": metas, "ethics": ETHICS}
+    out = []
+    for m in metas:
+        df = datasets.load(m["slug"])
+        df = df[df.place == place]
+        if start is not None:
+            df = df[df.year >= start]
+        if end is not None:
+            df = df[df.year <= end]
+        if len(df):
+            out.append({"dataset": m["name"], "rows": df.head(200).to_dict(orient="records"), "matching": len(df)})
+    return {"place": place, "matches": out, "ethics": ETHICS}
+
+
 def main():
     mcp.run()
 

@@ -189,6 +189,17 @@ th[aria-sort]{color:var(--ink)}
 .tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--surf);font-size:12px;line-height:1.45;padding:7px 10px;border-radius:4px;z-index:60;max-width:320px;white-space:pre-line;box-shadow:0 6px 18px rgba(0,0,0,.2)}
 .tip b{font-weight:700}
 
+/* your datasets */
+.dsform{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin:12px 0}
+.dsform label{display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600}
+.dsform .wide{grid-column:1/-1}
+.dsform .inp,.dsform .sel{width:100%;max-width:none}
+.keep{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--ink);font-weight:400}
+.keep label{display:flex;gap:6px;align-items:center;color:var(--ink);font-weight:400;font-size:13px}
+.mine{border:1px solid var(--line);border-radius:6px;background:var(--surf);padding:10px 12px;margin:0 0 10px}
+.mine svg{display:block;width:100%;height:64px}
+.mine text{font:10px var(--mono);fill:var(--mute)}
+
 /* shortlist board */
 .board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
 .col{background:var(--side);border:1px solid var(--line);border-radius:6px;min-height:120px}
@@ -358,7 +369,7 @@ function renderStatus(){
  $('ctFlags').textContent=S.flags?nf.format(S.flags.filter(f=>(S.f.sex==='all'||f.sex===S.f.sex)&&f.confidence!=='possible').length):'';
  $('ctShort').textContent=kept||'';$('ctShort').classList.toggle('on',!!st.decisions.kept);
  $('ctModels').textContent=st.plugins.files?'+'+st.plugins.files:'';
- $('ctData').textContent=n&&n.stale?'update':'';
+ $('ctData').textContent=n&&n.stale?'update':st.datasets?'+'+st.datasets:'';
 }
 
 // ---- render ----------------------------------------------------------------------------------
@@ -470,6 +481,7 @@ async function renderFlag(id){
   ${decideBox(id,f,dec)}
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
   ${(f.plugins||[]).length?`<h3>From plugins</h3>${f.plugins.map(n=>`<div class="plug"><b>${esc(n.title)}</b> <span class="by">${esc(n.by)}</span><p style="margin:4px 0 0">${esc(n.text)}</p></div>`).join('')}`:''}
+  ${(d.datasets||[]).length?`<h3>Your data <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">from datasets you added, matched to this place</span></h3>${d.datasets.map(x=>mineView(x,f,d)).join('')}`:''}
   ${(f.data||[]).length?`<h3>Known problems in the data</h3><div class="notes"><ul>${f.data.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></div>`:''}
   ${f.cases?`<h3>Victims, in aggregate</h3><p>${esc(f.cases)}</p>`:''}
   ${f.namus?`<h3>NamUs</h3><p>${esc(f.namus)}</p>`:''}
@@ -577,6 +589,17 @@ document.addEventListener('mousedown',e=>{const t=e.target.closest('.hit');if(!t
 document.addEventListener('mouseover',e=>{if(!drag)return;const t=e.target.closest('.hit');if(t){drag.b=+t.dataset.hy;showDrag()}});
 document.addEventListener('mouseup',()=>{if(!drag)return;const w=wbOf(S.sel);w.y0=Math.min(drag.a,drag.b);w.y1=Math.max(drag.a,drag.b);w.limit=300;drag=null;renderWB(S.sel)});
 function showDrag(){const g=JSON.parse($('ch').dataset.geo||'{}'),r=$('selr');if(!r)return;const a=Math.min(drag.a,drag.b),b=Math.max(drag.a,drag.b);r.setAttribute('x',g.L+(a-g.Y0)*g.cw);r.setAttribute('width',(b-a+1)*g.cw)}
+
+// ---- your datasets on a flag ---------------------------------------------------------------
+function mineView(x,f,d){
+ const [Y0,Y1]=d.years,W=600,H=64,L=4,cw=(W-L*2)/(Y1-Y0+1),xx=y=>L+(y-Y0)*cw;
+ const charts=x.numeric.slice(0,2).map((col,ci)=>{const vals=x.series.map(r=>[r[0],r[1+ci]]).filter(r=>r[1]!=null),mx=Math.max(1,...vals.map(r=>Math.abs(r[1])));
+  return `<div style="margin:6px 0 2px"><span class="muted" style="font-size:12px">${esc(col)}, by year</span><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(col)} by year"><rect x="${xx(f.start)}" y="0" width="${(f.end-f.start+1)*cw}" height="${H-12}" fill="var(--hl)" opacity=".7"/>${vals.map(([y,v])=>`<rect x="${xx(y)+.5}" y="${H-12-(H-16)*Math.abs(v)/mx}" width="${Math.max(cw-1,1)}" height="${(H-16)*Math.abs(v)/mx}" fill="var(--accent)" data-tip="${esc(`<b>${y}</b>\n${col}: ${v}`)}"/>`).join('')}<line x1="0" x2="${W}" y1="${H-12}" y2="${H-12}" stroke="var(--line2)"/></svg></div>`}).join('');
+ const cols=x.columns;
+ const table=x.rows.length?`<div class="cases" style="max-height:220px;margin-top:6px"><table><thead><tr><th>Year</th><th>Mo.</th>${x.level!=='county'?'<th>Place</th>':''}${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${x.rows.map(r=>`<tr><td class="num">${r.year}</td><td>${r.month?MONTHS[r.month]:''}</td>${x.level!=='county'?`<td>${esc(r.place)}</td>`:''}${cols.map(c=>`<td>${esc(r[c]??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'';
+ return `<div class="mine"><div class="row"><b>${esc(x.name)}</b><span class="tag">${esc(x.level)}</span><span class="muted" style="font-size:12px">${nf.format(x.rows_total)} rows within ten years of the flag${x.all_rows>x.rows_total?`, ${nf.format(x.all_rows)} in all`:''}</span></div>
+  ${x.description?`<p class="muted" style="margin:4px 0 0;font-size:12.5px">${esc(x.description)}${x.source?` Source: ${esc(x.source)}`:''}</p>`:''}${charts}${table}</div>`;
+}
 
 // ---- shortlist -------------------------------------------------------------------------------
 function renderShortlist(){
@@ -738,7 +761,8 @@ function renderData(){
  const st=S.st,job=st.job,busy=job&&job.running,n=st.national,ck=st.data.check;
  const files=st.data.files.filter(f=>f.path).map(f=>`<tr><td>${esc(f.label)}</td><td><code>${esc(f.name)}</code></td><td class="n">${f.present?mb(f.size):'missing'}</td><td>${esc(day(f.downloaded))}</td></tr>`).join('');
  const jobHtml=job&&(busy||job.error)&&['download','national','setup'].includes(job.kind)?`<div class="box">${jobView(job)}</div>`:'';
- setMain('data:'+JSON.stringify([st.data,n,job&&job.id,job&&job.steps,S.checking]),`<div class="view"><div class="page">
+ if(!S.ds&&!S.dsLoading){S.dsLoading=1;api('/api/datasets').then(j=>{S.ds=j;S.dsLoading=0;render()})}
+ setMain('data:'+JSON.stringify([st.data,n,job&&job.id,job&&job.steps,S.checking,S.ds,S.imp&&{...S.imp,text:0}]),`<div class="view"><div class="page">
   <h1>Data</h1><p class="lede">Where coldmap's data comes from and how current it is. Everything stays in <code>${esc(st.home)}</code>.</p>
   ${jobHtml}
   <div class="box"><h2>Source files</h2><p class="muted">${st.mode==='map'?"The Murder Accountability Project's public files.":st.mode==='sample'?'The synthetic sample: invented data with one planted series.':'Your own files.'}</p>
@@ -747,9 +771,39 @@ function renderData(){
    ${ck&&ck.error?`<span class="msg err">${esc(ck.error)}</span>`:ck&&ck.updates?`<span class="msg warn">MAP has published newer files.</span><button class="btn primary" id="update"${busy?' disabled':''}>Download the update</button>`:ck?'<span class="muted">Up to date with MAP.</span>':''}</div>`:''}</div>
   <div class="box"><h2>National scan</h2>${n?`<p>${nf.format(n.findings)} flags in ${n.states} states, made ${esc(day(n.generated))}${n.stale?'. <b>Out of date:</b> the data or your models changed since.':'.'}</p>`:'<p class="muted">Not run yet.</p>'}
    <div class="row"><button class="btn${n&&n.stale?' primary':''}" id="rescan"${busy?' disabled':''}>Re-scan every state</button><span class="muted">about 5 minutes</span></div></div>
+  ${datasetsBox()}
   <p class="muted" style="font-size:12px">coldmap ${esc(st.version)}</p>
  </div></div>`);
 }
+
+function datasetsBox(){
+ const ds=S.ds||[],im=S.imp;
+ const list=ds.length?`<table style="margin-top:8px"><thead><tr><th>Dataset</th><th>Place level</th><th class="n">Rows</th><th class="n">Places</th><th>Years</th><th>Columns</th><th></th></tr></thead><tbody>${ds.map(m=>`<tr><td><b>${esc(m.name)}</b>${m.description?`<br><span class="muted" style="font-size:12px">${esc(m.description)}</span>`:''}${Object.keys(m.left_out||{}).length?`<br><span class="muted" style="font-size:12px">left out: ${esc(Object.keys(m.left_out).join(', '))}</span>`:''}</td><td>${esc(m.level)}</td><td class="n">${nf.format(m.rows)}</td><td class="n">${m.places}</td><td class="num">${m.years[0]}–${m.years[1]}</td><td>${esc(m.columns.join(', '))}</td><td><button class="btn" data-dsrm="${esc(m.slug)}">Remove</button></td></tr>`).join('')}</tbody></table>`:'<p class="muted" style="margin:8px 0 0">None yet.</p>';
+ let form='';
+ if(im&&!im.preview)form=`<div class="msg" style="margin-top:12px">${im.err?`<span style="color:var(--red)">${esc(im.err)}</span>`:'<span class="spin"></span> Reading the file…'}</div>`;
+ else if(im){const pv=im.preview,left=pv.columns.filter(c=>c.left_out),safe=pv.columns.filter(c=>!c.left_out),ck=im.check;
+  const opt=(sel)=>safe.map(c=>`<option${c.name===sel?' selected':''}>${esc(c.name)}</option>`).join('');
+  form=`<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><h2>Add “${esc(im.file)}”</h2><p class="muted">${nf.format(pv.rows)} rows. Check what coldmap found, then add it.</p>
+   ${left.length?`<p class="msg warn"><b>Left out, never stored:</b> ${left.map(c=>`<code>${esc(c.name)}</code> (${esc(c.left_out)})`).join(', ')}. Datasets describe places and times, never people.</p>`:''}
+   <div class="dsform">
+    <label class="wide">Name<input class="inp" id="dsName" value="${esc(im.name)}"></label>
+    <label>Place column<select class="sel" id="dsPlace">${opt(im.place)}</select></label>
+    <label>Places are<select class="sel" id="dsLevel">${['county','agency','state'].map(l=>`<option value="${l}"${l===im.level?' selected':''}>${l==='county'?'Counties':l==='agency'?'Police agencies':'States'}</option>`).join('')}</select></label>
+    <label>Time column (a year or a date)<select class="sel" id="dsTime">${opt(im.time)}</select></label>
+    <label>Source (optional)<input class="inp" id="dsSource" value="${esc(im.source||'')}" placeholder="Where it came from"></label>
+    <label class="wide">What it is (optional)<input class="inp" id="dsDesc" value="${esc(im.description||'')}" placeholder="e.g. Missing-person reports per county and year, from NamUs"></label>
+    <div class="wide"><span style="font-size:12px;color:var(--mute);font-weight:600">Columns to keep</span><div class="keep">${safe.filter(c=>c.name!==im.place&&c.name!==im.time).map(c=>`<label><input type="checkbox" data-dskeep="${esc(c.name)}"${im.keep.includes(c.name)?' checked':''}>${esc(c.name)}${c.numeric?' <span class="muted">(numbers)</span>':''}</label>`).join('')||'<span class="muted">None besides place and time.</span>'}</div></div>
+   </div>
+   ${ck?(ck.error?`<p class="msg err">${esc(ck.error)}</p>`:`<p class="msg ${ck.places_matched?'ok':'err'}"><b>${nf.format(ck.places_matched)} of ${nf.format(ck.rows)}</b> rows matched a place in the case file (${ck.places} places); <b>${nf.format(ck.times_read)}</b> have a readable time.${ck.unmatched_examples.length?` Not matched, for example: ${ck.unmatched_examples.map(x=>`<code>${esc(x)}</code>`).join(', ')}. Counties match as “Multnomah, OR” or “Multnomah County, Oregon”.`:''}</p>`):'<p class="muted"><span class="spin"></span> Checking places…</p>'}
+   <div class="cases" style="max-height:180px"><table><thead><tr>${safe.map(c=>`<th>${esc(c.name)}</th>`).join('')}</tr></thead><tbody>${pv.sample.map(r=>`<tr>${safe.map(c=>`<td>${esc(r[c.name])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+   <div class="row" style="margin-top:12px"><button class="btn primary" id="dsAdd"${ck&&ck.places_matched?'':' disabled'}>Add dataset</button><button class="btn" id="dsCancel">Cancel</button>${im.err?`<span style="color:var(--red)">${esc(im.err)}</span>`:''}</div></div>`;
+ }
+ return `<div class="box"><h2>Your datasets</h2>
+  <p class="muted">Data you add yourself about places and times: missing-person counts, events, agency changes, your own research notes. It stays on this computer, appears on every flag in the places it covers, and your models can use it (<code>data.aux["dataset:&lt;name&gt;"]</code>, see the <a href="/models/guide" data-nav>guide</a>). Columns that identify people are left out on import: names, addresses, phone numbers, emails, IP addresses, dates of birth, biometric or DNA records, licence plates and exact coordinates. coldmap connects patterns, never people.</p>
+  ${list}${im?form:`<div class="row" style="margin-top:12px"><input type="file" id="dsFile" accept=".csv,text/csv" hidden><button class="btn" id="dsPick">Add a dataset (CSV)…</button></div>`}</div>`;
+}
+async function dsCheck(){const im=S.imp;if(!im||!im.preview)return;im.check=null;render();
+ try{im.check=await post('/api/datasets/check',{text:im.text,place:im.place,level:im.level,time:im.time})}catch(e){im.check={error:e.message}}render()}
 
 // ---- events ----------------------------------------------------------------------------------
 document.addEventListener('click',async e=>{
@@ -779,6 +833,11 @@ document.addEventListener('click',async e=>{
  if(t.classList.contains('sw')){plugin('enable',{kind:t.dataset.kind,name:t.dataset.name,on:t.getAttribute('aria-checked')==='true'?'0':'1'});return}
  if(t.id==='pPick'){$('pFile').click();return}
  if(t.id==='pLink'){const u=$('pUrl').value.trim();if(u)plugin('link',{url:u});return}
+ if(t.id==='dsPick'){$('dsFile').click();return}
+ if(t.id==='dsCancel'){S.imp=null;render();return}
+ if(t.id==='dsAdd'){const im=S.imp;try{const m=await post('/api/datasets/add',{name:im.name,text:im.text,place:im.place,level:im.level,time:im.time,keep:im.keep,description:im.description||'',source:im.source||''});
+   S.imp=null;S.ds=await api('/api/datasets');S.detail={};toast(`Added ${m.name}: ${nf.format(m.rows)} rows`);poll()}catch(err){im.err=err.message;render()}return}
+ if(t.dataset.dsrm){if(confirm('Remove this dataset? Its copy in coldmap is deleted; your original file is untouched.')){try{await post('/api/datasets/remove?slug='+encodeURIComponent(t.dataset.dsrm));S.ds=await api('/api/datasets');S.detail={};poll()}catch(err){toast(err.message)}}return}
  if(t.id==='dlgClose'||t.id==='dlgBg'){document.querySelector('.dialog')?.remove();return}
  if(t.id==='dlgCopy'){navigator.clipboard.writeText(document.querySelector('.dialog pre').textContent).then(()=>toast('Copied'));return}
 });
@@ -810,9 +869,18 @@ document.addEventListener('change',e=>{
  if(t.id==='fSort'){S.f.sort=t.value;render()}
  if(t.id==='qState'){S.qState=t.value;S.quality=S.quality||{};if(t.value&&!S.quality[t.value])api('/api/quality?state='+encodeURIComponent(t.value)).then(j=>{S.quality[t.value]=j;render()}).catch(err=>toast(err.message));render()}
  if(t.id==='noteBox'){post('/api/note',{id:t.dataset.id,note:t.value}).then(()=>{refreshDecisions();toast('Note saved')}).catch(err=>toast(err.message))}
+ if(t.id==='dsFile'&&t.files[0]){const fl=t.files[0];t.value='';
+  if(fl.size>25*1024*1024){toast('That file is over 25 MB. Aggregate it by place and year first.');return}
+  S.imp={file:fl.name,name:fl.name.replace(/\.csv$/i,'').replace(/[_-]+/g,' '),keep:[]};render();
+  fl.text().then(async text=>{S.imp.text=text;try{const pv=await post('/api/datasets/preview',{text});const g=pv.guess;
+   Object.assign(S.imp,{preview:pv,place:g.place||pv.columns.find(c=>!c.left_out)?.name,level:g.level,time:g.time||pv.columns.filter(c=>!c.left_out)[1]?.name});
+   S.imp.keep=pv.columns.filter(c=>!c.left_out&&c.name!==S.imp.place&&c.name!==S.imp.time).map(c=>c.name);render();dsCheck()}catch(e){S.imp.err=e.message;render()}});return}
+ if(S.imp&&['dsPlace','dsLevel','dsTime'].includes(t.id)){const k={dsPlace:'place',dsLevel:'level',dsTime:'time'}[t.id];S.imp[k]=t.value;S.imp.keep=S.imp.keep.filter(c=>c!==S.imp.place&&c!==S.imp.time);dsCheck();return}
+ if(S.imp&&t.dataset.dskeep!=null){const c=t.dataset.dskeep;S.imp.keep=t.checked?[...S.imp.keep,c]:S.imp.keep.filter(x=>x!==c);return}
  if(t.id==='pFile'&&t.files[0]){const f=t.files[0];if(f.size>512*1024){toast('That file is too big for a model (over 512 KB).');return}f.text().then(text=>plugin('upload',null,{file:f.name,text}));t.value=''}
 });
-document.addEventListener('input',e=>{if(e.target.id==='fQ'){S.f.q=e.target.value;S.limit=200;render()}});
+document.addEventListener('input',e=>{if(e.target.id==='fQ'){S.f.q=e.target.value;S.limit=200;render()}
+ const k={dsName:'name',dsDesc:'description',dsSource:'source'}[e.target.id];if(k&&S.imp)S.imp[k]=e.target.value});
 document.addEventListener('keydown',e=>{
  if(document.querySelector('.dialog'))return;
  const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);

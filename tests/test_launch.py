@@ -58,7 +58,7 @@ def server():
             with urllib.request.urlopen(base + p) as r:
                 return r.geturl().removeprefix(base), r.read().decode()
 
-        def post(p, header=True, body=None):
+        def post(p, header=True, body=None):  # returns (status, json)
             data = json.dumps(body).encode() if body is not None else None
             req = urllib.request.Request(base + p, method="POST", data=data,
                                          headers={"X-Coldmap": "1", "Content-Type": "application/json"} if header else {})
@@ -336,3 +336,35 @@ def test_plugin_guide_ships_inside_the_app(chome, tmp_path, server):
     assert "class BeforeAfter(Enricher)" in get("/guide/before_after.py")[1]
     page = get("/models")[1]
     assert 'href="/models/guide"' in page and "PLUGINS.md" not in page
+
+
+def test_your_datasets_describe_places_never_people(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, post = server(app)
+    post("/api/setup")
+    _wait(app)
+    flags = json.loads(get("/api/flags")[1])["flags"]
+    f = next(x for x in flags if x.get("county"))
+    county = f["county"]
+    name, st = county.rsplit(", ", 1)
+    text = "County,Year,Missing reports,Reporter email,Note\n" + "\n".join(
+        f'"{name} County, Samplestate",{y},{y % 5},someone{y}@example.org,checked' for y in range(f["start"] - 2, f["end"] + 3))
+    pv = post("/api/datasets/preview", body={"text": text})[1]
+    left = {c["name"]: c["left_out"] for c in pv["columns"] if c["left_out"]}
+    assert list(left) == ["Reporter email"]
+    assert pv["guess"] == {"place": "County", "level": "county", "time": "Year"}
+    ck = post("/api/datasets/check", body={"text": text, "place": "County", "level": "county", "time": "Year"})[1]
+    assert ck["places_matched"] == ck["rows"] > 0
+    m = post("/api/datasets/add", body={"name": "Missing reports", "text": text, "place": "County", "level": "county",
+                                         "time": "Year", "keep": ["Missing reports", "Note", "Reporter email"]})[1]
+    assert m["columns"] == ["Missing reports", "Note"] and "Reporter email" in m["left_out"]  # never stored
+    stored = (chome / "datasets" / "missing-reports" / "data.csv").read_text()
+    assert "@" not in stored and "Reporter" not in stored
+    assert "dataset:missing-reports" in app.lib.data().aux  # models can use it
+    d = json.loads(get(f"/api/flag/{f['id']}")[1])
+    mine = d["datasets"][0]
+    assert mine["name"] == "Missing reports" and mine["rows_total"] > 0 and mine["series"]
+    assert json.loads(get("/api/status")[1])["national"]["stale"] is True  # models may use it: re-scan offered
+    post("/api/datasets/remove?slug=missing-reports")
+    assert json.loads(get("/api/datasets")[1]) == []

@@ -85,6 +85,29 @@ class Streak(Detector):
 
 Leave `query.state` alone: it's `None` in a nationwide scan, and `data.select` handles both cases. Before you share a detector, run the benchmark and the false-alarm controls ([CONTRIBUTING.md](../../CONTRIBUTING.md#add-a-detector)). A detector that catches more but invents more isn't an improvement.
 
+## Use your own data
+
+On the **Data** page you can add datasets of your own: a CSV keyed by a place (county, agency or state) and a time (a year or a date), with any measures or notes beside them. coldmap keeps a cleaned copy on this computer and hands it to every model:
+
+```python
+@ENRICHERS.register
+class MissingNearby(Enricher):
+    name = "missing-nearby"
+    summary = "Missing-person reports in the flag's county and years, from my dataset"
+
+    def enrich(self, findings, data):
+        reports = data.aux.get("dataset:missing-reports")   # columns: place, level, year, month, then yours
+        if reports is None:
+            return findings
+        for f in findings:
+            rows = reports[(reports.place == f.county) & reports.year.between(f.start, f.end)]
+            if len(rows):
+                self.note(f, "Missing-person reports", f"{int(rows['Missing reports'].sum())} in these years.")
+        return findings
+```
+
+Datasets describe places and times, never people. Columns that identify individuals (names, addresses, phone numbers, emails, IP addresses, dates of birth, biometric or DNA records, licence plates, exact coordinates) are left out when a file is added, and never stored.
+
 ## Try your changes
 
 Save the file, then build a state in the app; coldmap notices the plugin changed and rebuilds. If the file has an error, the Plugins page shows it next to the file name, and nothing else breaks. From a terminal:

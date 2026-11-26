@@ -29,6 +29,7 @@ Many flags have ordinary explanations: data entry errors, gang conflicts, an age
 - Contact victims' families, witnesses or possible suspects.
 - Publish a flag as a "serial killer" or name anyone as a suspect.
 - Combine this data with other sources to identify private individuals.
+  Your own datasets in the app describe places and times; coldmap leaves out columns that identify people (names, addresses, phone numbers, emails, IP addresses, dates of birth, biometric or DNA records, licence plates, exact coordinates).
 - Use the tool to profile neighborhoods or groups of people.
 
 ## For AI integrations

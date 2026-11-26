@@ -209,8 +209,9 @@ class Library:
     def data(self):
         with self._lock:
             if self._data is None:
-                from .. import load
+                from .. import datasets, load
                 self._data = load(self.cases, clearance_path=self.clearance)
+                datasets.attach(self._data)  # your own datasets, for models
             return self._data
 
     def cached_states(self) -> list[str] | None:
@@ -257,8 +258,8 @@ class Library:
     @property
     def national_stamp(self) -> str:
         """The nationwide results depend on the data and plugins, not on the explorer page."""
-        from .. import plugins
-        return _data_stamp(self.cases, self.clearance) + "|" + plugins.fingerprint()
+        from .. import datasets, plugins
+        return _data_stamp(self.cases, self.clearance) + "|" + plugins.fingerprint() + "|" + datasets.fingerprint()
 
     def national_summary(self, current_only: bool = False) -> dict | None:
         """What the last nationwide scan found, with `stale` set when the data or plugins changed
@@ -506,8 +507,34 @@ class App:
             if not saved:
                 raise KeyError(fid)
             r = {**saved["flag"], "id": fid, "archived": True}
-        return {"flag": r, "decision": research.decisions().get(fid),
-                **research.flag_detail(self._data(), r)}
+        from .. import datasets
+        detail = research.flag_detail(self._data(), r)
+        counties = r.get("counties") or ([r["county"]] if r.get("county") else [])
+        places = {"county": counties, "state": [r["state"]] if r.get("state") else [],
+                  "agency": [r["place"]] if r.get("level") == "agency" else []}
+        mine = datasets.for_place(counties, places, (r["start"] - 10, r["end"] + 10))
+        return {"flag": r, "decision": research.decisions().get(fid), **detail, "datasets": mine}
+
+    def dataset_action(self, action: str, q: dict, b: dict) -> dict:
+        from .. import datasets
+        try:
+            if action == "preview":
+                return datasets.preview(str(b.get("text", "")), self._data())
+            if action == "check":
+                return datasets.check(str(b.get("text", "")), self._data(), b.get("place", ""), b.get("level", ""),
+                                      b.get("time", ""))
+            if action == "add":
+                self._idle()
+                return datasets.add(str(b.get("name", "")), str(b.get("text", "")), self._data(), b.get("place", ""),
+                                    b.get("level", ""), b.get("time", ""), b.get("keep"),
+                                    str(b.get("description", "")), str(b.get("source", "")))
+            if action == "remove":
+                self._idle()
+                datasets.remove(q.get("slug", ""), self.lib._data if self.lib else None)
+                return {"ok": True}
+        except KeyError as e:
+            raise click.ClickException(f"Missing column {e}.") from None
+        raise click.ClickException("Unknown dataset action.")
 
     def _data(self):
         if self.lib is None:
@@ -534,6 +561,7 @@ class App:
                 "tools": [
                     ["research_flags", "The ranked national list of flags this app shows, with filters"],
                     ["shortlist", "Your kept flags, notes and review status"],
+                    ["local_datasets", "Your own datasets about places and times, and their rows for a place"],
                     ["triage_finding", "Why a place was flagged, in plain language"],
                     ["get_cases", "The case rows behind a flag (no names exist in the data)"],
                     ["scan_clusters", "Run any detectors or preset on a state"],
@@ -637,7 +665,7 @@ class App:
                           "path": str(p) if p else None, "present": present,
                           "size": st.st_size if st else None,
                           "downloaded": saved.get(key, {}).get("downloaded") if self.mode == "map" else None})
-        from .. import plugins
+        from .. import datasets, plugins
         from . import research
         lib = self.lib
         on = plugins.enabled()
@@ -649,6 +677,7 @@ class App:
                 "plugins": {"detectors": on["detectors"], "enrichers": on["enrichers"],
                             "files": len(plugins.files())},
                 "decisions": counts,
+                "datasets": len(datasets.all_meta()),
                 "job": self.job.view() if self.job else None}
 
 
@@ -677,7 +706,7 @@ def _handler(app: App):
 
         def _body(self) -> dict:
             n = int(self.headers.get("Content-Length") or 0)
-            raw = self.rfile.read(min(n, 2 * 1024 * 1024)) if n else b""
+            raw = self.rfile.read(min(n, 26 * 1024 * 1024)) if n else b""
             try:
                 return json.loads(raw or b"{}")
             except ValueError:
@@ -713,6 +742,8 @@ def _handler(app: App):
                 if u.path == "/api/forget":
                     research.forget(q.get("id", ""))
                     return self._json(200, {"ok": True})
+                if u.path.startswith("/api/datasets/"):
+                    return self._json(200, app.dataset_action(u.path.rsplit("/", 1)[1], q, self._body()))
                 if u.path.startswith("/api/plugins/"):
                     n = int(self.headers.get("Content-Length") or 0)
                     body = self.rfile.read(min(n, 2 * 1024 * 1024)) if n else b""
@@ -770,6 +801,9 @@ def _handler(app: App):
                     out = {n: {"summary": CHECKS.get(n).summary, "rows": json.loads(t.to_json(orient="records"))}
                            for n, t in report(app._data(), q.get("state") or None, top=10).items()}
                     return self._json(200, out)
+                if path == "/api/datasets":
+                    from .. import datasets
+                    return self._json(200, datasets.all_meta())
                 if path == "/api/ai":
                     return self._json(200, app.ai_setup())
                 if path == "/api/methods":
