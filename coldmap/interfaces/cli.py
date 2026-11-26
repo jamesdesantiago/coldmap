@@ -112,8 +112,9 @@ def scan(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, 
 @click.option("--preset", help="Score a preset's ensemble as 'ensemble'")
 @click.option("--series-file", type=click.Path(exists=True), help="Custom known-series JSON")
 @click.option("--backtest", is_flag=True, help="Also compute first year flagged (slower)")
+@click.option("--json", "json_out", type=click.Path(), help="Also write results as JSON (for the explorer)")
 def benchmark(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, detectors, params, preset,
-              series_file, backtest):
+              series_file, backtest, json_out):
     """Score detectors against known, adjudicated serial cases."""
     from ..benchmarks import backtest_all, evaluate, load_series
     data = _load(cases, source, clearance, skip_fix, namus_missing, namus_unidentified)
@@ -122,11 +123,19 @@ def benchmark(cases, source, clearance, skip_fix, namus_missing, namus_unidentif
     pdets, p = resolve(preset, None, parse_overrides(params))
     p["ensemble"] = {"params": dict(p), **({"detectors": pdets} if pdets else {})}
     series = load_series(series_file)
-    click.echo(evaluate(data, dets, p, series).to_string(index=False))
+    from ..benchmarks import evaluate_records
+    ev = evaluate(data, dets, p, series)
+    click.echo(ev.to_string(index=False))
+    bt = None
     if backtest:
+        bt = backtest_all(data, dets, p, series)
         click.echo("")
-        click.echo(backtest_all(data, dets, p, series).to_string(index=False))
+        click.echo(bt.to_string(index=False))
         click.echo("\nLead times are optimistic: any finding overlapping the series' years counts.")
+    if json_out:
+        out = {"detectors": list(dets), "series": evaluate_records(data, dets, p, series),
+               "backtest": json.loads(bt.to_json(orient="records")) if bt is not None else []}
+        Path(json_out).write_text(json.dumps(out, indent=1, default=str))
 
 
 @main.command()
@@ -150,8 +159,10 @@ def coverage(cases, source, clearance, skip_fix, namus_missing, namus_unidentifi
 @click.option("-p", "--param", "params", multiple=True, help="detector.param=value")
 @click.option("--runs", default=5, show_default=True, help="Shuffled datasets to run")
 @click.option("--all-kinds", is_flag=True, help="Count accountability findings too")
+@click.option("--json", "json_out", type=click.Path(), help="Write results as JSON (for the explorer); "
+              "runs both victim sexes")
 def controls(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, state, victim_sex,
-             detectors, params, runs, all_kinds):
+             detectors, params, runs, all_kinds, json_out):
     """Estimate false alarms: run detectors on data with unsolved cases shuffled across places."""
     from ..benchmarks.controls import false_alarms
     data = _load(cases, source, clearance, skip_fix, namus_missing, namus_unidentified)
@@ -161,6 +172,13 @@ def controls(cases, source, clearance, skip_fix, namus_missing, namus_unidentifi
                      detectors or (*DEFAULT_DETECTORS, "ensemble"), p, runs,
                      kind=None if all_kinds else "serial-pattern")
     click.echo(t.to_string(index=False))
+    if json_out:
+        other = "Male" if victim_sex == "Female" else "Female"
+        t2 = false_alarms(data, Query(state=state, victim_sex=other), detectors or (*DEFAULT_DETECTORS, "ensemble"),
+                          p, runs, kind=None if all_kinds else "serial-pattern")
+        recs = [{**r, "victim_sex": sx} for sx, tt in ((victim_sex, t), (other, t2))
+                for r in json.loads(tt.to_json(orient="records"))]
+        Path(json_out).write_text(json.dumps({"state": state, "runs": runs, "rows": recs}, indent=1))
     click.echo("\nnull_findings: average findings on shuffled data, where any finding is a false alarm.\n"
                "noise_share: rough share of real findings that would appear by chance.")
 
@@ -187,15 +205,19 @@ def quality(cases, source, clearance, skip_fix, namus_missing, namus_unidentifie
 @click.option("-d", "--detector", "detectors", multiple=True, help="Detectors to include (repeatable)")
 @click.option("-p", "--param", "params", multiple=True, help="detector.param=value")
 @click.option("--preset", help="Build from a preset")
+@click.option("--benchmark-json", type=click.Path(exists=True), help="From `coldmap benchmark --json`")
+@click.option("--controls-json", type=click.Path(exists=True), help="From `coldmap controls --json`")
+@click.option("--no-profiles", is_flag=True, help="Skip the age-band view (faster build)")
 @click.option("--out-dir", default="explorer_site", show_default=True)
 def explorer(cases, source, clearance, skip_fix, namus_missing, namus_unidentified, state, detectors, params,
-             preset, out_dir):
+             preset, benchmark_json, controls_json, no_profiles, out_dir):
     """Build the interactive explorer for one state."""
     from ..presets import resolve
     from .explorer.build import build_site
     dets, prm = resolve(preset, detectors, parse_overrides(params))
     path = build_site(_load(cases, source, clearance, skip_fix, namus_missing, namus_unidentified), state,
-                      Path(out_dir), dets or DEFAULT_DETECTORS, prm)
+                      Path(out_dir), dets or DEFAULT_DETECTORS, prm, profiles=not no_profiles,
+                      benchmark_file=benchmark_json, controls_file=controls_json)
     click.echo(f"Explorer written to {path}. Serve the folder (python -m http.server) and open index.html.")
 
 
