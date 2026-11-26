@@ -5,62 +5,63 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>coldmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* The coldmap app: the same console as the explorer, one column per page.
-   Home: three steps (data, state, build) with live progress; numbers carry the order.
-   Nationwide: every state's flags ranked together. Plugins: add, switch on and off. */
-:root{color-scheme:light dark;
---bg:light-dark(#eef1f4,#0b0f13);--surf:light-dark(#ffffff,#131920);--surf2:light-dark(#f5f7f9,#19212a);
---line:light-dark(#dde2e7,#242e38);--ink:light-dark(#111820,#e6ebef);--mute:light-dark(#5b6773,#8694a1);
---red:light-dark(#d4231b,#ff5d52);--blue:light-dark(#276887,#5fb0d6);--green:light-dark(#1f7a4d,#4cc38a);
---amber:light-dark(#a86200,#f0a440);--pale:light-dark(#edf1f4,#223040)}
+/* The coldmap app as a research desk: black ground, amber structure, mono numbers, hairlines.
+   Home: three steps (data, state, build). Nationwide: flags as quote lines, the gap first.
+   Plugins: add, switch on and off. A status bar carries where things stand. */
+:root{color-scheme:dark;
+--bg:#050608;--surf:#0d1014;--surf2:#13181d;--line:#232a31;--ink:#e8ecef;--mute:#8b96a0;
+--red:#ff5a4e;--blue:#4cc2e6;--green:#3ccf8e;--amber:#f5a524;--pale:#1b232b;
+--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
 *{box-sizing:border-box;min-width:0}
 html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif;min-height:100vh}
+body{background:var(--bg);color:var(--ink);font:13.5px/1.5 Archivo,system-ui,sans-serif;min-height:100vh;padding-bottom:30px}
 button,input,select{font:inherit;color:inherit}
 [hidden]{display:none!important}
 a{color:var(--blue);text-underline-offset:2px}
-code{font-family:"JetBrains Mono",monospace;font-size:.9em;overflow-wrap:anywhere}
-:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-::selection{background:color-mix(in oklab,var(--blue) 30%,transparent)}
-.num,.elapsed{font-variant-numeric:tabular-nums}
+code{font-family:var(--mono);font-size:.88em;overflow-wrap:anywhere}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+::selection{background:color-mix(in oklab,var(--amber) 35%,transparent)}
+.num,.elapsed,.bytes,.count,.kpis b{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:0}
 
-.bar{display:flex;align-items:center;gap:14px;height:56px;padding:0 16px;background:var(--surf);border-bottom:1px solid var(--line)}
-.logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.02em}
+.bar{display:flex;align-items:stretch;gap:14px;height:48px;padding:0 16px;background:var(--surf);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px;font-stretch:85%;letter-spacing:.01em}
 .grow{flex:1}
-.nav{display:flex;gap:2px;margin-left:10px}
-.nav a{color:var(--mute);text-decoration:none;font-weight:600;font-size:13px;padding:7px 11px;border-radius:8px;white-space:nowrap}
-.nav a:hover{color:var(--ink);background:var(--surf2)}
-.nav a[aria-current=page]{color:var(--ink);background:var(--surf2);box-shadow:inset 0 0 0 1px var(--line)}
-.chip{font-size:12px;font-weight:600;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:4px 10px;white-space:nowrap}
+.nav{display:flex;gap:0;margin-left:14px}
+.nav a{display:flex;align-items:center;color:var(--mute);text-decoration:none;font-weight:700;font-size:12px;font-stretch:88%;text-transform:uppercase;letter-spacing:.08em;padding:0 14px;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.nav a:hover{color:var(--ink)}
+.nav a[aria-current=page]{color:var(--amber);border-bottom-color:var(--amber)}
+.nav a:focus-visible{outline-offset:-2px}
+.chip{align-self:center;font:600 10.5px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--green);border:1px solid color-mix(in oklab,var(--green) 45%,var(--line));border-radius:2px;padding:6px 8px;white-space:nowrap}
 
-main{max-width:820px;margin:0 auto;padding:40px 20px 64px}
-h1{font-size:28px;line-height:1.2;letter-spacing:-.025em;margin:0 0 10px;text-wrap:balance}
-.lede{color:var(--mute);margin:0 0 32px;max-width:64ch}
+main{max-width:980px;margin:0 auto;padding:28px 20px 56px}
+h1{font-size:30px;line-height:1.1;font-weight:700;font-stretch:78%;letter-spacing:-.01em;margin:0 0 8px;text-wrap:balance}
+.lede{color:var(--mute);margin:0 0 22px;max-width:72ch}
 
-.steps{list-style:none;margin:0;padding:0;display:grid;gap:14px}
-.step{display:grid;grid-template-columns:32px minmax(0,1fr);gap:16px;background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.step{display:grid;grid-template-columns:28px minmax(0,1fr);gap:14px;background:var(--surf);border:1px solid var(--line);border-radius:2px;padding:16px 18px}
 .step[data-state=waiting]{background:transparent}
 .step[data-state=waiting] h2,.step[data-state=waiting] .badge{color:var(--mute)}
-.badge{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:14px;border:1.5px solid var(--line);background:var(--surf2)}
-.step[data-state=current] .badge{border-color:var(--ink);background:var(--ink);color:var(--surf)}
-.step[data-state=done] .badge{border-color:var(--green);background:var(--green);color:var(--surf)}
+.step[data-state=current]{border-color:color-mix(in oklab,var(--amber) 40%,var(--line))}
+.badge{width:28px;height:28px;border-radius:2px;display:grid;place-items:center;font:600 13px var(--mono);border:1px solid var(--line);background:var(--surf2)}
+.step[data-state=current] .badge{border-color:var(--amber);background:var(--amber);color:#0b0b0b}
+.step[data-state=done] .badge{border-color:color-mix(in oklab,var(--green) 60%,var(--line));background:transparent;color:var(--green)}
 .badge svg{width:15px;height:15px}
-h2{font-size:17px;letter-spacing:-.01em;margin:4px 0 6px}
+h2{font-size:12px;font-weight:700;font-stretch:88%;text-transform:uppercase;letter-spacing:.09em;color:var(--amber);margin:7px 0 10px}
 .step p{margin:0 0 12px;max-width:68ch}
 .step p:last-child{margin-bottom:0}
 .muted{color:var(--mute)}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px}
 
-.btn{border:1px solid var(--line);background:var(--surf2);border-radius:9px;min-height:38px;padding:0 14px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn{border:1px solid var(--line);background:var(--surf2);border-radius:2px;min-height:34px;padding:0 13px;cursor:pointer;font-size:12px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.06em;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;text-decoration:none;color:var(--ink)}
 .btn:hover{border-color:var(--mute)}
-.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--surf)}
-.btn.primary:hover{background:color-mix(in oklab,var(--ink) 86%,var(--surf))}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#0b0b0b}
+.btn.primary:hover{background:color-mix(in oklab,var(--amber) 85%,#fff)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn svg{width:14px;height:14px}
 
-.msg{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:12px 0 0;font-size:13px;max-width:68ch}
+.msg{border:1px solid var(--line);border-radius:2px;padding:10px 12px;margin:12px 0 0;font-size:13px;max-width:68ch}
 .msg.ok{border-color:color-mix(in oklab,var(--green) 45%,var(--line));background:color-mix(in oklab,var(--green) 8%,var(--surf))}
 .msg.warn{border-color:color-mix(in oklab,var(--amber) 50%,var(--line));background:color-mix(in oklab,var(--amber) 9%,var(--surf))}
 .msg.err{border-color:color-mix(in oklab,var(--red) 50%,var(--line));background:color-mix(in oklab,var(--red) 8%,var(--surf))}
@@ -83,7 +84,7 @@ h2{font-size:17px;letter-spacing:-.01em;margin:4px 0 6px}
 [data-state=error]>.ind{border-color:var(--red);background:var(--red);color:var(--surf)}
 @keyframes spin{to{transform:rotate(1turn)}}
 @media (prefers-reduced-motion:reduce){[data-state=active]>.ind{animation:none;border-color:var(--blue)}}
-.meter{height:6px;border-radius:99px;background:var(--pale);overflow:hidden;margin:8px 0 4px;max-width:420px}
+.meter{height:6px;border-radius:2px;background:var(--pale);overflow:hidden;margin:8px 0 4px;max-width:420px}
 .meter>i{display:block;height:100%;background:var(--blue);border-radius:inherit;transition:width .4s cubic-bezier(.16,1,.3,1)}
 .meter.indet>i{width:30%;animation:slide 1.4s cubic-bezier(.65,0,.35,1) infinite}
 @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(340%)}}
@@ -93,40 +94,41 @@ h2{font-size:17px;letter-spacing:-.01em;margin:4px 0 6px}
 /* states: a dense list, not cards */
 .tools{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:4px 0 12px}
 .search{position:relative;flex:1 1 220px;max-width:320px}
-.search input{width:100%;height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surf2);padding:0 12px 0 34px}
+.search input{width:100%;height:38px;border:1px solid var(--line);border-radius:2px;background:var(--surf2);padding:0 12px 0 34px}
 .search input::placeholder{color:var(--mute)}
 .search svg{position:absolute;left:11px;top:50%;width:14px;height:14px;transform:translateY(-50%);color:var(--mute);pointer-events:none}
 .count{font-size:12px;color:var(--mute)}
 .states{list-style:none;margin:0;padding:0 6px 0 0;max-height:min(50vh,430px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) transparent;align-content:start;border-bottom:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:20px;border-top:1px solid var(--line)}
 .states li{border-bottom:1px solid var(--line)}
-.st{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 10px;padding:9px 8px;cursor:pointer;border-radius:8px}
+.st{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:1px 10px;padding:7px 8px;cursor:pointer;border-radius:0}
 .st:hover{background:var(--surf2)}
-.st:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.st:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
 .st[aria-disabled=true]{cursor:not-allowed;opacity:.55}
 .st .n{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.st .c{grid-column:1;font-size:12px;color:var(--mute)}
-.st .s{grid-row:1/3;grid-column:2;font-size:11px;font-weight:700;color:var(--mute)}
-.st .s.ready{color:var(--green)}
-.st.current{background:color-mix(in oklab,var(--blue) 10%,transparent)}
+.st .c{grid-column:1;font:12px var(--mono);color:var(--mute)}
+.st .s{grid-row:1/3;grid-column:2;font-size:10.5px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.07em;color:var(--mute)}
+.st .s.ready{color:var(--amber)}
+.st.current{background:color-mix(in oklab,var(--amber) 12%,transparent)}
 .quick{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:2px 0 16px;font-size:13px}
 .quick .btn{text-decoration:none}
 .empty{padding:14px 8px;color:var(--mute);font-size:13px}
 
-.about{margin:0 0 28px;border:1px solid var(--line);border-radius:14px;background:var(--surf)}
-.about>summary{list-style:none;cursor:pointer;padding:14px 22px;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;border-radius:14px}
+.about{margin:0 0 28px;border:1px solid var(--line);border-radius:2px;background:var(--surf)}
+.about>summary{list-style:none;cursor:pointer;padding:14px 22px;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;border-radius:2px}
 .about>summary::-webkit-details-marker{display:none}
 .about>summary::after{content:"";width:7px;height:7px;border:solid var(--mute);border-width:0 1.6px 1.6px 0;transform:rotate(45deg);margin:-3px 0 0 2px;transition:transform .2s}
 .about[open]>summary::after{transform:rotate(-135deg);margin-top:3px}
 .about>summary:hover{background:var(--surf2)}
 .how{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 28px;margin:0;padding:4px 22px 20px}
-.how dt{font-weight:700;font-size:13.5px;margin:0 0 3px}
+.how dt{font-size:11px;font-weight:700;font-stretch:88%;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);margin:0 0 4px}
 .how dd{margin:0;color:var(--mute);font-size:13.5px;max-width:52ch}
 .how dd b{color:var(--ink);font-weight:600}
 .caveat{grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px;font-size:13px;color:var(--mute)}
 .caveat b{color:var(--ink)}
 /* panels on the Nationwide and Plugins pages: same surface as the steps */
-.panel{background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:0 0 16px}
+.panel{background:var(--surf);border:1px solid var(--line);border-radius:2px;padding:20px 22px;margin:0 0 16px}
 .panel>h2{margin-top:0}
+.panel{border-radius:2px}
 .panel>p{margin:0 0 12px;max-width:68ch}
 .sub{font-size:12px;color:var(--mute);font-weight:600;margin:0 0 4px}
 .rows{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
@@ -135,38 +137,47 @@ h2{font-size:17px;letter-spacing:-.01em;margin:4px 0 6px}
 .rows .t{font-weight:600;font-size:13.5px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .rows .d{grid-column:1;color:var(--mute);font-size:13px;max-width:62ch}
 .rows .a{grid-row:1/3;grid-column:2;display:flex;align-items:center;gap:8px}
-.tag{font-size:11px;font-weight:600;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:1px 8px;white-space:nowrap}
-.tag.mine{color:var(--blue);border-color:color-mix(in oklab,var(--blue) 40%,var(--line))}
+.tag{font:500 10.5px var(--mono);color:var(--mute);border:1px solid var(--line);border-radius:2px;padding:1px 6px;white-space:nowrap}
+.tag.mine{color:var(--amber);border-color:color-mix(in oklab,var(--amber) 45%,var(--line))}
 .urlrow{display:flex;gap:8px;flex-wrap:wrap}
-.urlrow input{flex:1 1 260px;height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surf2);padding:0 12px}
+.urlrow input{flex:1 1 260px;height:38px;border:1px solid var(--line);border-radius:2px;background:var(--surf2);padding:0 12px}
 .urlrow input::placeholder{color:var(--mute)}
-.sw{all:unset;box-sizing:border-box;width:40px;height:24px;border-radius:99px;background:var(--pale);border:1px solid var(--line);position:relative;cursor:pointer;flex:none;transition:background .2s}
-.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--mute);transition:transform .2s cubic-bezier(.16,1,.3,1),background .2s}
-.sw[aria-checked=true]{background:var(--green);border-color:var(--green)}
+.sw{all:unset;box-sizing:border-box;width:40px;height:24px;border-radius:2px;background:var(--pale);border:1px solid var(--line);position:relative;cursor:pointer;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:1px;background:var(--mute);transition:transform .2s cubic-bezier(.16,1,.3,1),background .2s}
+.sw[aria-checked=true]{background:var(--amber);border-color:var(--amber)}
 .sw[aria-checked=true]::after{transform:translateX(16px);background:var(--surf)}
-.sw:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.sw:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .sw:disabled{opacity:.55;cursor:not-allowed}
 .also{margin-top:4px}
 .also>summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mute);padding:6px 0}
 
 /* nationwide list */
-.kpis{display:flex;flex-wrap:wrap;gap:8px 22px;margin:0 0 14px;font-size:13px;color:var(--mute)}
-.kpis b{color:var(--ink);font-size:15px}
+.kpis{display:flex;flex-wrap:wrap;gap:6px 26px;margin:0 0 14px;padding:0 0 12px;border-bottom:1px solid var(--line);font-size:11px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.07em;color:var(--mute)}
+.kpis b{color:var(--ink);font-size:18px;font-weight:600;margin-right:4px}
 .filters{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 14px}
-.seg{display:inline-flex;background:var(--surf2);border:1px solid var(--line);border-radius:9px;padding:2px}
-.seg button{border:0;background:none;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;color:var(--mute);white-space:nowrap;min-height:32px}
-.seg button[aria-pressed=true]{background:var(--surf);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.18)}
-.sel{appearance:none;height:38px;border:1px solid var(--line);border-radius:9px;padding:0 30px 0 12px;font-size:13px;background:var(--surf2) no-repeat right 11px center/10px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238694a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");cursor:pointer;max-width:220px}
+.seg{display:inline-flex;background:var(--surf2);border:1px solid var(--line);border-radius:2px;padding:2px}
+.seg button{border:0;background:none;padding:6px 12px;border-radius:2px;cursor:pointer;font-size:13px;font-weight:600;color:var(--mute);white-space:nowrap;min-height:32px}
+.seg button[aria-pressed=true]{background:var(--amber);color:#0b0b0b}
+.sel{appearance:none;height:38px;border:1px solid var(--line);border-radius:2px;padding:0 30px 0 12px;font-size:13px;background:var(--surf2) no-repeat right 11px center/10px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238694a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");cursor:pointer;max-width:220px}
 .flags{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
 .flags>li{border-bottom:1px solid var(--line)}
-.frow{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:72px minmax(0,1.6fr) minmax(0,1.2fr) 92px 130px;gap:12px;align-items:center;padding:10px 8px;cursor:pointer;border-radius:8px;font-size:13px}
+.frow{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:70px minmax(0,1.5fr) minmax(0,1fr) 84px 118px 74px 92px;gap:12px;align-items:center;padding:8px 8px;cursor:pointer;border-radius:0;font-size:13px}
 .frow:hover{background:var(--surf2)}
-.frow:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.frow:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
 .frow[aria-expanded=true]{background:var(--surf2)}
 .frow .pl b{font-weight:600}
 .frow .pl span,.frow .mt{color:var(--mute)}
-.frow .un{text-align:right}
-.cf{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;justify-self:start;border:1px solid var(--line)}
+.frow .mt,.frow .pl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow .un,.frow .gp,.frow .sx{text-align:right;font-family:var(--mono);font-size:12.5px}
+.frow .gp{font-weight:600;color:var(--red)}.frow .gp.up{color:var(--blue)}
+.frow .sx{color:var(--mute)}
+.frow .yr{font-family:var(--mono);font-size:12.5px;color:var(--mute)}
+.thead{display:grid;grid-template-columns:70px minmax(0,1.5fr) minmax(0,1fr) 84px 118px 74px 92px;gap:12px;padding:0 8px 6px;font-size:10.5px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.07em;color:var(--mute)}
+.thead span:nth-child(n+5){text-align:right}
+.gbar{display:block;position:relative;height:3px;background:var(--pale);margin-top:5px}
+.gbar i{position:absolute;inset:0 auto 0 0;background:var(--blue)}
+.gbar b{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--amber)}
+.cf{font-size:10.5px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.06em;border-radius:2px;padding:2px 6px;justify-self:start;border:1px solid var(--line)}
 .cf.high{color:var(--red);border-color:color-mix(in oklab,var(--red) 45%,var(--line));background:color-mix(in oklab,var(--red) 9%,transparent)}
 .cf.strong{color:var(--amber);border-color:color-mix(in oklab,var(--amber) 45%,var(--line))}
 .cf.possible{color:var(--mute)}
@@ -177,17 +188,24 @@ h2{font-size:17px;letter-spacing:-.01em;margin:4px 0 6px}
 .fdet ul{margin:0;padding-left:18px}.fdet li{margin:3px 0;max-width:76ch}
 .fdet .by{color:var(--mute);font-size:12px}
 .more{display:flex;justify-content:center;padding:14px 0 0}
-footer{max-width:820px;margin:0 auto;padding:0 20px 40px;color:var(--mute);font-size:12px}
+footer{max-width:980px;margin:0 auto;padding:0 20px 24px;color:var(--mute);font-size:12px}
+.status{position:fixed;left:0;right:0;bottom:0;height:28px;display:flex;align-items:center;gap:0;background:var(--surf);border-top:1px solid var(--line);font:500 11px var(--mono);color:var(--mute);overflow:hidden;white-space:nowrap;z-index:5}
+.status span{padding:0 12px;border-right:1px solid var(--line);line-height:28px}
+.status b{color:var(--ink);font-weight:600}
+.status .k{color:var(--amber);font-weight:600;margin-right:6px}
+.status .live{margin-left:auto;border-right:0;border-left:1px solid var(--line);color:var(--green)}
 @media (max-width:760px){
  .frow{grid-template-columns:64px minmax(0,1fr) auto;row-gap:2px}
  .frow .mt{grid-column:2;grid-row:2}
- .frow .yr{grid-column:3;grid-row:1}
+ .frow .gp{grid-column:3;grid-row:1}
  .frow .un{grid-column:3;grid-row:2}
+ .frow .yr,.frow .sx,.thead{display:none}
  .fdet{padding:6px 8px 16px}
 }
 @media (max-width:640px){
  main{padding:24px 14px 48px}
  .bar{gap:6px;padding:0 10px}
+ .status span:not(.live):nth-child(n+3){display:none}
  .logo span{display:none}
  .nav{margin-left:2px}
  .nav a{padding:7px 9px}
@@ -249,6 +267,7 @@ footer{max-width:820px;margin:0 auto;padding:0 20px 40px;color:var(--mute);font-
  <div id="pBody"></div>
 </main>
 <footer id="foot"></footer>
+<div class="status" id="status" role="status" aria-label="Status"></div>
 <script>
 const $=id=>document.getElementById(id);
 const put=(id,html)=>{const el=$(id);if(el._h!==html){el.innerHTML=html;el._h=html;return true}return false};
@@ -353,7 +372,22 @@ function jobView(job,{retry}={}){
 
 function stepState(el,state){$(el).dataset.state=state;const b=$(el).querySelector('.badge');b.innerHTML=state==='done'?ICON.check:String(el.slice(1))}
 
+function renderStatus(){
+ const st=S.st;if(!st)return;
+ const c=st.data.files[0],states=st.states||[],built=states.filter(x=>x.built).length;
+ const cases=states.reduce((a,x)=>a+(x.cases||0),0);
+ const job=st.job&&st.job.running?st.job:null;
+ const plugs=st.plugins?st.plugins.enrichers.filter(n=>!['county','kind','coverage','namus'].includes(n)).concat(st.plugins.detectors.filter(n=>!['scan','window','map'].includes(n))):[];
+ put('status',[
+  `<span><span class="k">DATA</span>${st.mode==='map'?(c.present?`MAP ${esc(day(c.downloaded)||'')}`:'not downloaded'):st.mode==='sample'?'synthetic sample':'your files'}</span>`,
+  states.length?`<span><span class="k">CASES</span><b>${nf.format(cases)}</b></span><span><span class="k">STATES</span><b>${states.length}</b> · ${built} built</span>`:'',
+  `<span><span class="k">NATIONWIDE</span>${st.national?`<b>${nf.format(st.national.findings)}</b> flags`:'not scanned'}</span>`,
+  `<span><span class="k">PLUGINS</span>${plugs.length?esc(plugs.join(', ')):'built-ins'}</span>`,
+  job?`<span><span class="k">WORKING</span>${esc(job.title)} ${clock(job.elapsed)}</span>`:'',
+  `<span class="live">LOCAL ONLY</span>`].join(''));
+}
 function render(){
+ renderStatus();
  const pg=page();
  if(pg==='/national')return renderNational();
  if(pg==='/plugins')return renderPlugins();
@@ -371,6 +405,7 @@ function renderHome(){
   :'coldmap scans public homicide records for places where similar killings went unsolved far more often than they should. It runs on your computer. Setting it up takes three steps.';
  if(!S.aboutSet){S.aboutSet=true;$('about').open=!built}
  $('foot').innerHTML=`coldmap ${esc(st.version)} · data and builds are kept in <code>${esc(st.home)}</code>`;
+ renderStatus();
 
  // 1 · data
  stepState('s1',ready?'done':'current');
@@ -443,6 +478,8 @@ function renderHome(){
 // ---- Nationwide ---------------------------------------------------------------------------
 const NF={sex:'Female',conf:'all',kind:'all',state:'',limit:100,open:null};
 const CONF={high:'High',strong:'Strong',possible:'Possible'};
+const pctf=x=>Math.round(x*100)+'%';
+const gap=r=>r.expected==null||!r.total?null:Math.round((r.solved/r.total-r.expected)*100);
 async function loadNational(){
  if(S.natLoading)return;S.natLoading=true;
  try{const r=await fetch('/national.json',{cache:'no-store'});if(r.ok)S.nat=await r.json()}catch(e){}
@@ -453,9 +490,9 @@ function renderNational(){
  if(S.err||!st)return put('nBody',`<p class="msg err">${esc(S.err||'Loading…')}</p>`);
  const job=st.job,run=job&&job.running,nj=job&&job.kind==='national'?job:null;
  if(!st.data.ready)return put('nBody',`<div class="panel"><p>Get the data first. <a href="/" data-nav>Go to Home</a></p></div>`);
- if(nj&&(nj.running||nj.error))return put('nBody',`<div class="panel">${jobView(nj,{retry:'natGo'})}${nj.running?`<p class="muted" style="margin-top:12px">This takes about 10 minutes for the national file. You can look around the other pages meanwhile; building a state waits until this is done.</p>`:''}</div>`);
+ if(nj&&(nj.running||nj.error))return put('nBody',`<div class="panel">${jobView(nj,{retry:'natGo'})}${nj.running?`<p class="muted" style="margin-top:12px">This takes about 5 minutes for the national file. You can look around the other pages meanwhile; building a state waits until this is done.</p>`:''}</div>`);
  if(!st.national){
-  return put('nBody',`<div class="panel"><h2>Scan every state</h2><p>coldmap runs the same search as a state build in every state at once: ${st.plugins?esc(st.plugins.detectors.join(' and ')):'the detectors'} for women and men, then writes a plain-language reason for every flag. It takes about 10 minutes on the national file, and the result is saved until the data or your plugins change.</p>
+  return put('nBody',`<div class="panel"><h2>Scan every state</h2><p>coldmap runs the same search as a state build in every state at once: ${st.plugins?esc(st.plugins.detectors.join(' and ')):'the detectors'} for women and men, then writes a plain-language reason for every flag. It takes about 5 minutes on the national file, and the result is saved until the data or your plugins change.</p>
    ${S.actionErr?`<p class="msg err" role="alert">${esc(S.actionErr)}</p>`:''}
    <div class="row"><button class="btn primary" id="natGo"${run?' disabled':''}>Scan every state</button>${run?`<span class="muted">Waiting for: ${esc(job.title)}</span>`:''}</div></div>`);
  }
@@ -484,10 +521,13 @@ function renderNational(){
    <span class="cf ${esc(r.confidence)}">${CONF[r.confidence]||esc(r.confidence)}</span>
    <span class="pl"><b>${esc(r.place)}</b> <span>${esc(r.state||'')}</span></span>
    <span class="mt">${esc(String(r.weapon).toLowerCase())} · ${who}</span>
-   <span class="yr num">${r.start===r.end?r.start:r.start+'–'+r.end}</span>
-   <span class="un num">${nf.format(un)} of ${nf.format(r.total)} unsolved</span></button>${det}</li>`;
+   <span class="yr">${r.start===r.end?r.start:r.start+'–'+r.end}</span>
+   <span class="sx">${pctf(r.solved/r.total)} / ${r.expected!=null?pctf(r.expected):'—'}${r.expected!=null?`<span class="gbar" aria-hidden="true"><i style="width:${(r.solved/r.total*100).toFixed(1)}%"></i><b style="left:${(r.expected*100).toFixed(1)}%"></b></span>`:''}</span>
+   <span class="gp${gap(r)>0?' up':''}">${gap(r)==null?'—':(gap(r)<0?'\u2212':'+')+Math.abs(gap(r))}</span>
+   <span class="un">${nf.format(un)}/${nf.format(r.total)}</span></button>${det}</li>`;
  }).join('');
- put('nBody',`<div class="panel">${head}<ul class="flags">${list||'<li class="empty">No flags match these filters.</li>'}</ul>
+ const th=`<div class="thead" aria-hidden="true"><span>Conf.</span><span>Place</span><span>Method · victims</span><span>Years</span><span>Solved / exp.</span><span>Gap, pts</span><span>Unsolved</span></div>`;
+ put('nBody',`<div class="panel">${head}${th}<ul class="flags">${list||'<li class="empty">No flags match these filters.</li>'}</ul>
   ${rows.length>NF.limit?`<div class="more"><button class="btn" id="nfMore">Show ${Math.min(100,rows.length-NF.limit)} more</button></div>`:''}
   <div class="row"><button class="btn" id="natGo"${run?' disabled':''}>${ICON.refresh}Scan again</button><span class="muted">Only needed after new data or plugin changes; coldmap tells you when.</span></div></div>`);
 }

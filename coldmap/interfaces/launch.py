@@ -253,11 +253,17 @@ class Library:
     def national_dir(self) -> Path:
         return self.root / "_national"
 
+    @property
+    def national_stamp(self) -> str:
+        """The nationwide results depend on the data and plugins, not on the explorer page."""
+        from .. import plugins
+        return _data_stamp(self.cases, self.clearance) + "|" + plugins.fingerprint()
+
     def national_summary(self, stamp: str | None = None) -> dict | None:
         """What the last nationwide scan found, if it is current."""
         d = self.national_dir
         try:
-            if (d / ".coldmap-build").read_text() != (stamp or self.stamp):
+            if (d / ".coldmap-build").read_text() != (stamp or self.national_stamp):
                 return None
             return json.loads((d / "summary.json").read_text())
         except (OSError, ValueError):
@@ -267,7 +273,7 @@ class Library:
         from .. import plugins
         from .explorer.national import build_national
         with self._lock:
-            stamp = self.stamp
+            stamp = self.national_stamp
             if (s := self.national_summary(stamp)) and not self.rebuild:
                 return s
             on = plugins.enabled()
