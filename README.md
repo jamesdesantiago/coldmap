@@ -195,7 +195,7 @@ Tools: `list_plugins`, `scan_clusters` (any detectors, parameters or preset), `t
 
 ## Explorer
 
-`coldmap explorer` builds a static site for one state: a heatmap of solve rates by year and method, findings from every detector you ran (alone or combined), a "why this was flagged" panel, and the case records behind each. The page reads detector names from the data, so new plugins appear automatically.
+`coldmap explorer` builds a static web app for one state: a findings queue with confidence filters and search, a workspace with a heatmap of solve rates by year and method, a "why flagged" tab and the case records behind each finding, and an About panel on method and ethics. It adapts to phones (bottom tab bar) and to light or dark mode. The page reads detector names from the data, so new plugins appear automatically.
 
 ## Extending
 
