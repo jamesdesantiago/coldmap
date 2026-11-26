@@ -26,8 +26,42 @@ def _group(w: str) -> str:
     return w if w in WEAPONS else WEAPON_GROUPS.get(w, "Other/unknown")
 
 
+def plugin_catalog() -> dict:
+    """Everything registered, for the app's Plugins section."""
+    from ... import DETECTORS, ENRICHERS, FIXES, PRESETS, REGIONS, SOURCES
+    from ...quality import CHECKS
+    return {
+        "detectors": [c.describe() for _, c in DETECTORS],
+        "presets": [{"name": n, "summary": p.summary, "detectors": list(p.detectors), "params": p.params}
+                    for n, p in PRESETS],
+        "enrichers": [{"name": n, "summary": c.summary} for n, c in ENRICHERS],
+        "fixes": [{"name": n, "title": f.title, "summary": f.summary, "changes_data": f.apply is not None,
+                   "states": list(f.states), "years": list(f.years) if f.years else None} for n, f in FIXES],
+        "checks": [{"name": n, "summary": c.summary, "needs_clearance": c.needs_clearance} for n, c in CHECKS],
+        "regions": [{"name": n, "state": r.state, "note": r.note,
+                     "regions": {k: list(v) for k, v in r.regions.items()}} for n, r in REGIONS],
+        "sources": [{"name": n, "summary": c.summary} for n, c in SOURCES],
+    }
+
+
+def _quality(data: Dataset, state: str) -> dict:
+    from ...quality import CHECKS, report
+    out = {}
+    for name, t in report(data, state, top=8).items():
+        out[name] = {"summary": CHECKS.get(name).summary,
+                     "rows": json.loads(t.to_json(orient="records"))}
+    return out
+
+
+def _json_or_none(path):
+    return json.loads(Path(path).read_text()) if path and Path(path).exists() else None
+
+
 def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETECTORS,
-               params: dict | None = None) -> Path:
+               params: dict | None = None, profiles: bool = True,
+               benchmark_file: str | Path | None = None, controls_file: str | Path | None = None) -> Path:
+    """Build the app. benchmark_file / controls_file are JSON written by
+    `coldmap benchmark --json` and `coldmap controls --json` (optional; shown if given)."""
     params = params or {}
     d = data.cases[(data.cases.state == state) & data.cases.county.notna()].copy()
     if d.empty:
@@ -55,12 +89,20 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
     ens = Ensemble.from_names(detectors, params)
     names = [x.name for x in ens.detectors]
     views = {"ensemble": {}, **{n: {} for n in names}}
+    prof = None
+    if profiles:
+        from ...presets import resolve
+        pd_, pp_ = resolve("profiles")
+        prof = Ensemble.from_names(pd_, pp_)
+        views["profiles"] = {}
     for sx, sex in ((0, "Female"), (1, "Male")):
         q = Query(state=state, victim_sex=sex)
         found = {det.name: enrich(det.detect(data, q), data, ens.enrichers) for det in ens.detectors}
         views["ensemble"][sx] = ens.combine(copy.deepcopy(found))
         for n in names:
             views[n][sx] = Ensemble([x for x in ens.detectors if x.name == n]).combine(copy.deepcopy({n: found[n]}))
+        if prof:
+            views["profiles"][sx] = prof.run(data, q)
 
     busy = d.county.value_counts()
 
@@ -88,7 +130,20 @@ def build_site(data: Dataset, state: str, out_dir: Path, detectors=DEFAULT_DETEC
         "counties": [c.removesuffix(strip) for c in counties], "defaultCounty": busiest.removesuffix(strip),
         "weapons": WEAPONS, "confidence": CONF, "fixes": list(data.fixes), **lists,
         "detectors": [{"name": x.name, "summary": x.summary, "tier": x.tier} for x in ens.detectors],
+        "views": ([{"id": "ensemble", "label": "Balanced", "kind": "preset",
+                    "summary": "All detectors combined, labeled by agreement"}]
+                  + ([{"id": "profiles", "label": "By age band", "kind": "preset",
+                       "summary": "Combined, split by victim age band"}] if prof else [])
+                  + [{"id": x.name, "label": x.name, "kind": "detector", "tier": x.tier, "summary": x.summary}
+                     for x in ens.detectors]),
         "findings": {v: {sx: [r for r in map(row, fl) if r] for sx, fl in by.items()} for v, by in views.items()},
+        "plugins": plugin_catalog(),
+        "quality": _quality(data, state),
+        "benchmark": _json_or_none(benchmark_file),
+        "controls": _json_or_none(controls_file),
+        "namus": {k: len(v) for k, v in getattr(data, "aux", {}).items()},
+        "cases_total": int(len(d)),
+        "national_cases": int(len(data.cases)),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "agg.json").write_text(json.dumps({"meta": meta, "agg": agg}, separators=(",", ":"), default=str))

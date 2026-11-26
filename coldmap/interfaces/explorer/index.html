@@ -5,190 +5,324 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>coldmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* VOICE work: an investigator's console, calm, dense, exact
-   IDEA a case-management app: findings queue on the left, workspace on the right
-   PICTURE the solve-rate heatmap with flagged windows outlined, live with every selection
-   COLOUR dark slate console (light variant by day), red for unsolved/agreement, steel blue for solved
-   TYPE Inter throughout, tabular figures
-   LAYOUT top bar; 380px findings queue + workspace; phone: one pane with a bottom tab bar */
+   IDEA a case-management product: navigation rail, findings queue, workspace, evidence of how well it works
+   PICTURE the solve-rate heatmap with flagged windows outlined; benchmark timeline; reliability bars
+   COLOUR dark slate console (light by day), red for unsolved/agreement, steel blue for solved, green for hits
+   TYPE Inter, JetBrains Mono for code and plugin names
+   LAYOUT rail + top bar + section; phone: bottom bar, one pane at a time */
 :root{color-scheme:light dark;
---bg:light-dark(#eef1f4,#0d1115);--surf:light-dark(#ffffff,#151b21);--surf2:light-dark(#f6f8fa,#1b232a);
---line:light-dark(#dde2e7,#26303a);--ink:light-dark(#121820,#e6ebef);--mute:light-dark(#5b6773,#8794a0);
---red:light-dark(#d4231b,#ff5d52);--blue:light-dark(#2b6a8a,#5fa8cc);--pale:light-dark(#edf1f4,#1f2932);
---empty:light-dark(#f3f5f7,#141a20);--sel:light-dark(#fff4f3,#2a1717)}
+--bg:light-dark(#eef1f4,#0b0f13);--surf:light-dark(#ffffff,#131920);--surf2:light-dark(#f5f7f9,#19212a);
+--line:light-dark(#dde2e7,#242e38);--ink:light-dark(#111820,#e6ebef);--mute:light-dark(#5b6773,#8694a1);
+--red:light-dark(#d4231b,#ff5d52);--blue:light-dark(#276887,#5fb0d6);--green:light-dark(#1f7a4d,#4cc38a);
+--amber:light-dark(#a86200,#f0a440);--pale:light-dark(#edf1f4,#223040);--empty:light-dark(#f3f5f7,#121820);
+--sel:light-dark(#fff3f2,#2a1717);--glow:light-dark(rgba(212,35,27,.08),rgba(255,93,82,.12))}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,sans-serif;overflow:hidden}
 button,select,input{font:inherit;color:inherit}
-.app{display:grid;grid-template-columns:380px minmax(0,1fr);grid-template-rows:56px minmax(0,1fr);height:100%}
-.bar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;padding-top:env(safe-area-inset-top,0);background:var(--surf);border-bottom:1px solid var(--line)}
-.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;letter-spacing:-.01em;white-space:nowrap}
-.logo svg{flex:none}
-.state{font-size:13px;color:var(--mute);border-left:1px solid var(--line);padding-left:14px;white-space:nowrap}
-.seg{display:inline-flex;background:var(--surf2);border:1px solid var(--line);border-radius:8px;padding:2px}
-.seg button{border:0;background:none;padding:6px 11px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;color:var(--mute);white-space:nowrap;min-height:32px}
-.seg button[aria-pressed=true]{background:var(--surf);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
-.grow{flex:1}
-.iconbtn{border:1px solid var(--line);background:var(--surf2);border-radius:8px;height:36px;padding:0 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500}
+a{color:var(--blue)}
+code{font-family:"JetBrains Mono",monospace;font-size:.92em}
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.side{background:var(--surf);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
-.sidehead{padding:12px 14px 10px;border-bottom:1px solid var(--line);display:grid;gap:9px}
-.search{width:100%;height:36px;border:1px solid var(--line);border-radius:8px;background:var(--surf2);padding:0 10px;font-size:16px}
+.app{display:grid;grid-template-columns:76px minmax(0,1fr);grid-template-rows:56px minmax(0,1fr);height:100%}
+.bar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--surf);border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.02em;white-space:nowrap}
+.statechip{font-size:12px;font-weight:600;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:4px 10px;white-space:nowrap}
+.grow{flex:1}
+.seg{display:inline-flex;background:var(--surf2);border:1px solid var(--line);border-radius:9px;padding:2px}
+.seg button{border:0;background:none;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;color:var(--mute);white-space:nowrap;min-height:32px}
+.seg button[aria-pressed=true]{background:var(--surf);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.18)}
+.btn{border:1px solid var(--line);background:var(--surf2);border-radius:9px;height:36px;padding:0 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;white-space:nowrap}
+.btn.primary{background:var(--ink);color:var(--surf);border-color:var(--ink)}
+.rail{background:var(--surf);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:4px;padding:10px 8px;overflow:auto}
+.rail button{all:unset;cursor:pointer;display:grid;justify-items:center;gap:4px;padding:9px 4px;border-radius:10px;font-size:11px;font-weight:600;color:var(--mute);text-align:center}
+.rail button:hover{background:var(--surf2)}
+.rail button[aria-current=page]{background:var(--glow);color:var(--red)}
+.rail svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.view{overflow:auto;min-height:0}
+.view.full{overflow:hidden}
+.section{display:none;padding:18px 22px 40px;max-width:1440px;margin:0 auto}
+.section.on{display:block}
+.section.findings.on{display:grid;grid-template-columns:380px minmax(0,1fr);padding:0;max-width:none;height:100%}
+h1{font-size:26px;letter-spacing:-.025em;margin:0 0 4px;line-height:1.15}
+.lede{color:var(--mute);margin:0 0 18px;max-width:80ch}
+h2{font-size:15px;margin:0;letter-spacing:-.01em}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:14px}
+.cardhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:14px 16px 0;flex-wrap:wrap}
+.cardbody{padding:12px 16px 16px}
+.muted{color:var(--mute)}.small{font-size:12px}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.stat{padding:14px 16px}
+.stat .k{font-size:12px;color:var(--mute);font-weight:600}
+.stat .v{font-size:30px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.1;margin:6px 0 2px;white-space:nowrap}
+.stat .d{font-size:12px;color:var(--mute)}
+.v.red{color:var(--red)}.v.blue{color:var(--blue)}.v.green{color:var(--green)}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;border:1px solid var(--line);background:var(--surf2);white-space:nowrap}
+.tag.high{color:var(--red);border-color:color-mix(in oklab,var(--red) 45%,var(--line))}
+.tag.strong{color:var(--ink)}.tag.possible{color:var(--mute)}
+.tag.strict{color:var(--blue);border-color:color-mix(in oklab,var(--blue) 45%,var(--line))}
+.tag.sensitive{color:var(--amber);border-color:color-mix(in oklab,var(--amber) 45%,var(--line))}
+.tag.full{color:var(--green);border-color:color-mix(in oklab,var(--green) 45%,var(--line))}
+.tag.partial{color:var(--amber);border-color:color-mix(in oklab,var(--amber) 45%,var(--line))}
+.tag.miss{color:var(--mute)}
+.pipe{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:stretch}
+.stage{position:relative;background:var(--surf2);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;text-align:left;border-top:3px solid var(--blue)}
+.stage:hover{border-color:var(--blue)}
+.stage .n{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.stage .l{font-weight:700;font-size:13px}.stage .s{font-size:11.5px;color:var(--mute);margin-top:4px}
+.stage:not(:last-child)::after{content:"";position:absolute;right:-9px;top:50%;width:8px;height:2px;background:var(--line)}
+.stage.out{border-top-color:var(--red)}
+.leads{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.lead{all:unset;box-sizing:border-box;cursor:pointer;background:var(--surf);border:1px solid var(--line);border-left:4px solid var(--red);border-radius:10px;padding:12px;display:grid;gap:6px}
+.lead:hover{border-color:var(--red)}
+.lead .t{font-weight:700}.lead .m{font-size:12px;color:var(--mute)}
+.lead .big{font-size:20px;font-weight:800;color:var(--red);font-variant-numeric:tabular-nums}
+.queue{background:var(--surf);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;height:100%}
+.qhead{padding:12px 14px 10px;border-bottom:1px solid var(--line);display:grid;gap:9px}
+.search{width:100%;height:36px;border:1px solid var(--line);border-radius:9px;background:var(--surf2);padding:0 10px;font-size:16px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);background:var(--surf2);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;min-height:28px}
+.chip{border:1px solid var(--line);background:var(--surf2);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;min-height:28px}
 .chip[aria-pressed=true]{background:var(--ink);color:var(--surf);border-color:var(--ink)}
-.chip b{font-variant-numeric:tabular-nums;font-weight:600;margin-left:3px;opacity:.8}
-.count{font-size:12px;color:var(--mute)}
+.chip b{font-variant-numeric:tabular-nums;margin-left:3px;opacity:.75}
 .list{list-style:none;margin:0;padding:6px;overflow:auto;flex:1}
-.item{all:unset;box-sizing:border-box;display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:3px 10px;width:100%;padding:10px 10px 10px 0;border-radius:8px;cursor:pointer}
+.item{all:unset;box-sizing:border-box;display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:3px 10px;width:100%;padding:10px 10px 10px 0;border-radius:9px;cursor:pointer}
 .item:hover{background:var(--surf2)}.item[aria-current=true]{background:var(--sel)}
-.item .rail{grid-row:1/4;border-radius:2px;background:var(--mute)}
-.item.high .rail{background:var(--red)}.item.strong .rail{background:var(--ink)}.item.possible .rail{background:var(--line)}
-.item .t{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.item .n{font-variant-numeric:tabular-nums;font-weight:700;color:var(--red);text-align:right;white-space:nowrap}
-.item .m{grid-column:2/-1;font-size:12px;color:var(--mute);display:flex;gap:8px;flex-wrap:wrap}
-.tag{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--surf2);border:1px solid var(--line);white-space:nowrap}
-.tag.high{color:var(--red);border-color:color-mix(in oklab,var(--red) 40%,var(--line))}
+.item .rail2{grid-row:1/4;border-radius:2px;background:var(--line)}
+.item.high .rail2{background:var(--red)}.item.strong .rail2{background:var(--ink)}
+.item .t{font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .n{font-variant-numeric:tabular-nums;font-weight:800;color:var(--red);text-align:right}
+.item .m{grid-column:2/-1;font-size:12px;color:var(--mute);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .empty{padding:24px 14px;color:var(--mute);font-size:13px}
-.work{overflow:auto;padding:16px 20px 28px;display:grid;gap:14px;align-content:start}
-.card{background:var(--surf);border:1px solid var(--line);border-radius:12px}
+.work{overflow:auto;padding:16px 20px 30px;display:grid;gap:14px;align-content:start;height:100%}
 .workhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px}
-.workhead select{height:36px;border:1px solid var(--line);border-radius:8px;background:var(--surf2);padding:0 8px;font-weight:600;font-size:16px;max-width:100%}
+select.pick{height:36px;border:1px solid var(--line);border-radius:9px;background:var(--surf2);padding:0 8px;font-weight:700;font-size:16px;max-width:100%}
 .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--line)}
 .kpi{padding:10px 14px;border-right:1px solid var(--line)}.kpi:last-child{border-right:0}
-.kpi b{display:block;font-size:22px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kpi b{display:block;font-size:22px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
 .kpi span{font-size:12px;color:var(--mute)}
-.figcard{padding:12px 14px 10px}
-.fighead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px}
-.fighead h2{font-size:14px;margin:0}
 .fig{position:relative;height:300px}.fig svg{position:absolute;inset:0;width:100%;height:100%}
 svg text{font:12px Inter,sans-serif;fill:var(--mute)}
 .key{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--mute);margin-top:6px;align-items:center}
 .ramp{display:inline-block;width:90px;height:8px;border-radius:4px;vertical-align:middle;background:linear-gradient(90deg,var(--red),var(--pale),var(--blue))}
-.sw{display:inline-block;width:14px;height:9px;vertical-align:middle;margin-right:4px}
+.sw{display:inline-block;width:14px;height:9px;vertical-align:middle;margin-right:4px;border-radius:2px}
 .tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surf);font-size:12px;padding:5px 8px;border-radius:6px;white-space:nowrap;display:none;z-index:3}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:0 8px}
-.tabs button{border:0;background:none;padding:11px 12px;cursor:pointer;font-weight:600;font-size:13px;color:var(--mute);border-bottom:2px solid transparent;min-height:44px}
+.tabs button{border:0;background:none;padding:11px 12px;cursor:pointer;font-weight:700;font-size:13px;color:var(--mute);border-bottom:2px solid transparent;min-height:44px}
 .tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--red)}
-.panel{padding:14px}
-.dtitle{font-size:16px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em}
-.dsub{color:var(--mute);margin:0 0 12px;font-size:13px}
-.why p{margin:0 0 10px;max-width:80ch}.why .lead{font-weight:600}
-.why h4{font-size:12px;text-transform:none;color:var(--mute);margin:14px 0 6px;font-weight:600}
-.why ul,.why ol{margin:0;padding-left:18px}.why li{margin:3px 0;max-width:80ch}
+.panel{padding:16px}
+.dtitle{font-size:17px;font-weight:800;margin:0 0 6px;letter-spacing:-.01em}
+.dsub{color:var(--mute);margin:0 0 12px;font-size:13px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.why p{margin:0 0 10px;max-width:82ch}.why .leadp{font-weight:700;font-size:15px}
+.why h4{font-size:12px;color:var(--mute);margin:16px 0 6px;font-weight:700}
+.why ul,.why ol{margin:0;padding-left:18px}.why li{margin:3px 0;max-width:82ch}
+.compare{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:4px 0 14px;max-width:560px}
+.compare div{background:var(--surf2);border:1px solid var(--line);border-radius:10px;padding:10px}
+.compare b{display:block;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.compare span{font-size:12px;color:var(--mute)}
+.backbtn{display:none}
 .scroll{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:13px}
-th{text-align:left;font-size:12px;color:var(--mute);font-weight:600;border-bottom:1px solid var(--line);padding:7px 10px 7px 0;white-space:nowrap}
-td{border-bottom:1px solid var(--line);padding:7px 10px 7px 0;vertical-align:top}
+th{text-align:left;font-size:12px;color:var(--mute);font-weight:700;border-bottom:1px solid var(--line);padding:8px 12px 8px 0;white-space:nowrap}
+td{border-bottom:1px solid var(--line);padding:8px 12px 8px 0;vertical-align:top}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.st{font-weight:600;font-size:12px;white-space:nowrap}.st.no{color:var(--red)}.st.yes{color:var(--blue)}
-.tabbar{display:none}
-.sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+.st{font-weight:700;font-size:12px;white-space:nowrap}.st.no{color:var(--red)}.st.yes{color:var(--blue)}
+.mx td,.mx th{text-align:center;padding:10px 8px}.mx td:first-child,.mx th:first-child{text-align:left}
+.mx tr.series{cursor:pointer}.mx tr.series:hover td{background:var(--surf2)}
+.mx .note td{text-align:left;color:var(--mute);font-size:12.5px;background:var(--surf2)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle}
+.dot.full{background:var(--green)}.dot.partial{border:2px solid var(--amber)}.dot.miss{background:var(--line)}
+.bars{display:grid;gap:14px}
+.brow{display:grid;grid-template-columns:160px minmax(0,1fr);gap:12px;align-items:center}
+.brow .lbl{font-size:13px;font-weight:700}
+.btrack{display:grid;gap:4px}
+.bline{display:grid;grid-template-columns:minmax(0,1fr) 104px;gap:8px;align-items:center}
+.bfill{height:14px;border-radius:4px}
+.bfill.real{background:var(--blue)}
+.bfill.chance{background:repeating-linear-gradient(45deg,var(--red),var(--red) 3px,color-mix(in oklab,var(--red) 35%,transparent) 3px,color-mix(in oklab,var(--red) 35%,transparent) 6px)}
+.bval{font-size:12px;font-variant-numeric:tabular-nums;color:var(--mute);white-space:nowrap}
+.verdict{font-size:12px;font-weight:700}
+.pcard{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px}
+.pcard .top{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.nm{font-family:"JetBrains Mono",monospace;font-weight:500;font-size:14px}
+.pcard p{margin:8px 0;color:var(--mute);font-size:13px}
+.ptable td,.ptable th{font-size:12px;padding:5px 10px 5px 0}
+.cchips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.cchip{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--surf2);border:1px solid var(--line);white-space:nowrap}
+pre.code{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto;font:12.5px/1.6 "JetBrains Mono",monospace;margin:0}
+details summary{cursor:pointer;font-weight:700;font-size:13px;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"▸ ";color:var(--mute)}details[open] summary::before{content:"▾ "}
+.sectionhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:26px 0 10px}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
 .sheet.open{display:flex}
-.sheetbox{background:var(--surf);border:1px solid var(--line);border-radius:14px;max-width:720px;width:100%;max-height:min(86vh,820px);overflow:auto;padding:20px 22px}
-.sheetbox h2{margin:0 0 4px;font-size:20px;letter-spacing:-.01em}.sheetbox h3{font-size:14px;margin:18px 0 6px}
-.sheetbox p,.sheetbox li{color:var(--ink);max-width:70ch}.sheetbox .mute{color:var(--mute)}
-.sheethead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-a{color:var(--blue)}
-.loading{display:grid;place-items:center;height:100%;color:var(--mute)}
-@media(max-width:1100px){.bar .state{display:none}}
+.sheetbox{background:var(--surf);border:1px solid var(--line);border-radius:16px;max-width:720px;width:100%;max-height:min(86vh,820px);overflow:auto;padding:20px 22px}
+.sheetbox h2{font-size:20px}.sheetbox h3{margin:18px 0 6px;font-size:14px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surf);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;display:none;z-index:30}
+@media(max-width:1180px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.pipe{grid-template-columns:repeat(3,minmax(0,1fr))}.stage::after{display:none}}
+@media(max-width:900px){.g3,.g2{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:820px){
  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
- .bar{flex-wrap:wrap;gap:8px;padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top,0))}
- .bar .grow{display:none}.bar .logo{flex:1 1 auto;order:1}#aboutBtn{order:2}
- #det{order:3;flex:1 1 55%}#sex{order:4;flex:1 1 35%}.bar .seg button{flex:1;padding:6px 6px}
- .side,.work{grid-column:1;grid-row:2}
- .app[data-pane=work] .side{display:none}.app[data-pane=list] .work{display:none}
- .work{padding:12px 12px 20px}
+ .bar{gap:8px;padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top,0))}
+ .bar .grow,.statechip{display:none}.logo{flex:1}
+ .rail{grid-row:3;flex-direction:row;justify-content:space-around;border-right:0;border-top:1px solid var(--line);padding:4px 4px max(4px,env(safe-area-inset-bottom,0));overflow:visible}
+ .rail button{padding:6px 2px;font-size:10px;flex:1}
+ .rail svg{width:20px;height:20px}
+ .view{grid-row:2}
+ .section{padding:14px 12px 30px}
+ .section.findings.on{grid-template-columns:minmax(0,1fr)}
+ .section.findings[data-pane=work] .queue{display:none}.section.findings[data-pane=list] .work{display:none}
+ .backbtn{display:inline-flex}
+ .work{padding:12px}
  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.kpi:nth-child(3){border-right:0}.kpi:nth-child(n+4){border-top:1px solid var(--line)}
  .fig{height:260px}
- .tabbar{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);background:var(--surf);padding-bottom:env(safe-area-inset-bottom,0)}
- .tabbar button{border:0;background:none;padding:10px;font-weight:600;font-size:13px;color:var(--mute);min-height:52px}
- .tabbar button[aria-selected=true]{color:var(--red)}
- thead{display:none}tr{display:grid;padding:8px 0;border-bottom:1px solid var(--line)}td{display:flex;justify-content:space-between;gap:12px;border:0;padding:2px 0}td::before{content:attr(data-l);color:var(--mute);font-size:12px}.num{text-align:right}
+ .pipe{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .brow{grid-template-columns:minmax(0,1fr)}
+ .stat .v{font-size:24px}
+ .cases thead{display:none}.cases tr{display:grid;padding:8px 0;border-bottom:1px solid var(--line)}.cases td{display:flex;justify-content:space-between;gap:12px;border:0;padding:2px 0}.cases td::before{content:attr(data-l);color:var(--mute);font-size:12px}
 }
-@media(prefers-reduced-motion:no-preference){.item,.chip,.seg button{transition:background .12s}}
 </style>
 </head>
 <body>
-<div class="app" id="app" data-pane="list">
+<div class="app" id="app">
  <header class="bar">
-  <div class="logo"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="5" fill="var(--ink)"/><rect x="5" y="5" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="5" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="5" width="4" height="4" fill="var(--red)"/><rect x="5" y="9" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="9" y="9" width="4" height="4" fill="var(--red)"/><rect x="13" y="9" width="4" height="4" fill="var(--red)"/><rect x="5" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="13" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/></svg>coldmap</div>
-  <div class="state" id="stateLabel">Loading</div>
+  <div class="logo"><svg width="24" height="24" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="5" fill="var(--ink)"/><rect x="5" y="5" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="5" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="5" width="4" height="4" fill="var(--red)"/><rect x="5" y="9" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="9" y="9" width="4" height="4" fill="var(--red)"/><rect x="13" y="9" width="4" height="4" fill="var(--red)"/><rect x="5" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/><rect x="9" y="13" width="4" height="4" fill="var(--surf)" opacity=".6"/><rect x="13" y="13" width="4" height="4" fill="var(--surf)" opacity=".35"/></svg>coldmap</div>
+  <span class="statechip" id="stateChip">Loading</span>
   <div class="grow"></div>
-  <div class="seg" id="det" role="group" aria-label="Detector"></div>
   <div class="seg" id="sex" role="group" aria-label="Victims"><button data-v="0" aria-pressed="true">Women</button><button data-v="1" aria-pressed="false">Men</button></div>
-  <button class="iconbtn" id="aboutBtn" aria-haspopup="dialog">About</button>
+  <button class="btn" id="aboutBtn" aria-haspopup="dialog">About</button>
  </header>
-
- <aside class="side" aria-label="Findings">
-  <div class="sidehead">
-   <input class="search" id="q" type="search" placeholder="Filter by place or method" aria-label="Filter findings">
-   <div class="chips" id="conf" role="group" aria-label="Confidence"></div>
-   <div class="chips"><button class="chip" id="serial" aria-pressed="true">Serial patterns only</button></div>
-   <div class="count" id="count"></div>
-  </div>
-  <ul class="list" id="list"></ul>
- </aside>
-
- <main class="work" id="work">
-  <section class="card">
-   <div class="workhead"><select id="county" aria-label="County"></select><span class="count" id="ctx"></span></div>
-   <div class="kpis" id="kpis"></div>
+ <nav class="rail" id="rail" aria-label="Sections">
+  <button data-s="overview" aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</button>
+  <button data-s="findings" aria-current="false"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M8 11h6M11 8v6"/></svg>Findings</button>
+  <button data-s="bench" aria-current="false"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Benchmark</button>
+  <button data-s="rel" aria-current="false"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>Reliability</button>
+  <button data-s="quality" aria-current="false"><svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>Data</button>
+  <button data-s="plugins" aria-current="false"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/><path d="M11 7h4a2 2 0 012 2v4M13 17H9a2 2 0 01-2-2v-4"/></svg>Plugins</button>
+ </nav>
+ <main class="view" id="view">
+  <section class="section on" id="s-overview"></section>
+  <section class="section findings" id="s-findings" data-pane="list">
+   <div class="queue">
+    <div class="qhead">
+     <div class="chips" id="views" role="group" aria-label="View"></div>
+     <input class="search" id="q" type="search" placeholder="Filter by place or method" aria-label="Filter findings">
+     <div class="chips" id="conf" role="group" aria-label="Confidence"></div>
+     <div class="chips"><button class="chip" id="serial" aria-pressed="true">Serial patterns only</button></div>
+     <div class="muted small" id="count"></div>
+    </div>
+    <ul class="list" id="list"></ul>
+   </div>
+   <div class="work" id="work">
+    <section class="card">
+     <div class="workhead"><button class="btn backbtn" id="back">← Findings</button><select class="pick" id="county" aria-label="County"></select><span class="muted small" id="ctx"></span></div>
+     <div class="kpis" id="kpis"></div>
+    </section>
+    <section class="card" style="padding:12px 14px 10px">
+     <div class="cardhead" style="padding:0 0 6px"><h2>Share solved, by year and method</h2><label class="muted small"><input type="checkbox" id="adult" checked> Victims 12 and older</label></div>
+     <div class="fig" id="hm"><svg id="hmsvg" role="img" aria-label="Heatmap of share solved by year and method"></svg><div class="tip" id="tip"></div></div>
+     <div class="key"><span><span class="ramp"></span> none solved → all solved</span><span><span class="sw" style="border:3px solid var(--red)"></span>detectors agree</span><span><span class="sw" style="border:2px dashed var(--ink)"></span>strict</span><span><span class="sw" style="border:1.5px solid var(--red)"></span>sensitive</span></div>
+    </section>
+    <section class="card" id="detail">
+     <div class="tabs" role="tablist"><button role="tab" id="tWhy" aria-selected="true">Why flagged</button><button role="tab" id="tCases" aria-selected="false">Cases</button></div>
+     <div class="panel" id="panel"></div>
+    </section>
+   </div>
   </section>
-  <section class="card figcard">
-   <div class="fighead"><h2>Share solved, by year and method</h2><label class="count"><input type="checkbox" id="adult" checked> Victims 12 and older</label></div>
-   <div class="fig" id="hm"><svg id="hmsvg" role="img" aria-label="Heatmap of share solved by year and method"></svg><div class="tip" id="tip"></div></div>
-   <div class="key"><span><span class="ramp"></span> none solved → all solved</span><span><span class="sw" style="border:3px solid var(--red)"></span>detectors agree</span><span><span class="sw" style="border:2px dashed var(--ink)"></span>strict</span><span><span class="sw" style="border:1.5px solid var(--red)"></span>sensitive</span></div>
-  </section>
-  <section class="card" id="detail">
-   <div class="tabs" role="tablist"><button role="tab" id="tWhy" aria-selected="true">Why flagged</button><button role="tab" id="tCases" aria-selected="false">Cases</button></div>
-   <div class="panel" id="panel"></div>
-  </section>
+  <section class="section" id="s-bench"></section>
+  <section class="section" id="s-rel"></section>
+  <section class="section" id="s-quality"></section>
+  <section class="section" id="s-plugins"></section>
  </main>
-
- <nav class="tabbar" role="tablist"><button id="mList" role="tab" aria-selected="true">Findings</button><button id="mWork" role="tab" aria-selected="false">Workspace</button></nav>
 </div>
 
 <div class="sheet" id="about" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
  <div class="sheetbox">
-  <div class="sheethead"><div><h2 id="aboutTitle">About coldmap</h2><p class="mute" id="aboutData" style="margin:0"></p></div><button class="iconbtn" id="aboutClose">Close</button></div>
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><h2 id="aboutTitle">About coldmap</h2><p class="muted" id="aboutData" style="margin:4px 0 0"></p></div><button class="btn" id="aboutClose">Close</button></div>
   <h3>What a finding means</h3>
   <p>A finding is a place, method and period where far fewer killings were solved than expected. It is a pattern worth asking about, never evidence that cases are linked. Only investigators can link cases, through DNA, ballistics or other evidence.</p>
-  <h3>Confidence</h3>
-  <ul><li><b>Detectors agree:</b> two or more detectors found it. In false-alarm tests these rarely appear by chance in most states.</li>
-  <li><b>Strict:</b> only the strict detector found it, after correcting for testing many combinations.</li>
-  <li><b>Sensitive:</b> only a sensitive detector found it. Most findings like this appear by chance; treat them as weak leads.</li></ul>
-  <h3>How to read the data</h3>
-  <ul><li>Solved means police had identified an offender when they filed the report. Cases solved later still count as unsolved, so known serial killings still show.</li>
-  <li>Regional findings cover groups of neighboring counties, because offenders cross county lines.</li>
-  <li>Methods are grouped: all firearms together; beating includes blunt objects; strangulation includes asphyxiation.</li>
-  <li>Case lists cover women only. The data has no names or addresses.</li></ul>
-  <p id="aboutFixes" class="mute"></p>
   <h3>Use it responsibly</h3>
   <p>Send leads to the <a href="https://www.murderdata.org" rel="noopener">Murder Accountability Project</a> or the investigating agency. Never contact families, witnesses or possible suspects, and never publish a finding as a serial killer.</p>
-  <p class="mute">Data: Murder Accountability Project Supplementary Homicide Report file. Built with coldmap, open source under GPL-3.0.</p>
+  <h3>The data</h3>
+  <p>Murder Accountability Project Supplementary Homicide Report file. "Solved" means police had identified an offender when they filed the report, so cases solved later still count as unsolved. The data has no names or addresses; case lists cover women only.</p>
+  <p class="muted">Built with coldmap, an open-source framework (GPL-3.0). Not affiliated with the Murder Accountability Project.</p>
  </div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
 {
 const $=id=>document.getElementById(id);
-const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const MON=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const CONF={high:'Detectors agree',strong:'Strict',possible:'Sensitive'};
 const SHORT={'Gun':'Gun','Knife':'Knife','Beating/blunt':'Beating','Strangle/asphyxia':'Strangle','Fire':'Fire','Other/unknown':'Other','Not reported':'Not rep.'};
+const yr=(a,b)=>a===b?String(a):a+'–'+b;
+const fmt=n=>Number(n).toLocaleString('en-US'),pct=x=>Math.round(x*100)+'%';
+const SECTIONS=['overview','findings','bench','rel','quality','plugins'];
 let M,AGG,CASES,cube,ALL=[],SHOWN=[],Y0=1976,Y1=2025,NY=50;
-const S={view:'ensemble',sex:0,conf:'all',serial:true,q:'',sel:null,tab:'why',adult:true};
+const S={section:'overview',view:'ensemble',sex:0,conf:'all',serial:true,q:'',sel:null,tab:'why',adult:true};
 
 const same=(a,b)=>a&&b&&a.c===b.c&&a.w===b.w&&a.y0===b.y0&&a.y1===b.y1&&(a.agency||null)===(b.agency||null);
 const inArea=(f,c)=>f.cs?f.cs.includes(c):f.c===c;
 const placeOf=f=>f.cs?`${f.agency} (region)`:f.agency?`${f.agency}, ${M.counties[f.c]}`:M.counties[f.c];
-const pct=x=>Math.round(x*100)+'%';
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',1800)}
+function copy(txt,ok){if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(()=>toast(ok),()=>toast('Copy not available'));else toast('Copy not available')}
 
+function parse(rows){return (rows||[]).map(r=>({c:r[0],agency:r[1],w:r[2],y0:r[3],y1:r[4],t:r[5],s:r[6],exp:r[7],q:r[8],by:r[9].map(i=>M.detectors[i]?M.detectors[i].name:'?'),conf:M.confidence[r[10]],kind:r[11],namus:r[12]||null,ex:r[13]||null,band:r[14]||null,cs:r[15]||null}))}
+const viewRows=(v,sx)=>parse((M.findings[v]||{})[sx]);
+
+/* navigation */
+function go(sec){
+ S.section=sec;
+ for(const b of $('rail').querySelectorAll('button'))b.setAttribute('aria-current',b.dataset.s===sec?'page':'false');
+ for(const s of document.querySelectorAll('.section'))s.classList.toggle('on',s.id==='s-'+sec);
+ $('view').classList.toggle('full',sec==='findings');
+ if(sec==='findings')requestAnimationFrame(drawHM);
+ $('view').scrollTop=0;
+ try{history.replaceState(null,'','#'+sec)}catch(e){}
+}
+$('rail').addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.s)});
+
+/* overview */
+function renderOverview(){
+ const P=M.plugins,w=viewRows('ensemble',0),m=viewRows('ensemble',1);
+ const ser=a=>a.filter(f=>f.kind==='serial-pattern');
+ const agreeW=ser(w).filter(f=>f.conf==='high'),agreeM=ser(m).filter(f=>f.conf==='high');
+ const B=M.benchmark,C=M.controls;
+ let recov='—',recSub='Build with --benchmark-json to include';
+ if(B){const r=B.series.map(s=>s.results.ensemble);const full=r.filter(x=>x&&x.grade==='full').length,part=r.filter(x=>x&&x.grade==='partial').length;recov=`${full+part} of ${r.length}`;recSub=`known serial cases caught (${full} full, ${part} partial)`}
+ let rel='—',relSub='Build with --controls-json to include';
+ if(C){const row=C.rows.find(r=>r.victim_sex==='Female'&&r.detector==='ensemble: high');if(row){rel=`${row.null_findings}`;relSub=`chance findings among ${row.real_findings} where detectors agree (women)`}}
+ const issues=Object.values(M.quality).reduce((a,q)=>a+q.rows.length,0);
+ const stages=[['Sources',P.sources.length,'Files in','sources'],['Data fixes',P.fixes.length,'Problems corrected or flagged','fixes'],['Detectors',P.detectors.length,'Models that search','detectors'],['Enrichers',P.enrichers.length,'Context added','enrichers'],['Presets',P.presets.length,'Ways to combine detectors','presets'],['Findings',agreeW.length+agreeM.length,'Where detectors agree','out']];
+ $('s-overview').innerHTML=`
+ <h1>${esc(M.state)} · ${Y0}–${Y1}</h1>
+ <p class="lede">${fmt(M.cases_total)} killings in this state's case file, searched by ${P.detectors.length} detectors for places, methods and periods where far fewer were solved than expected. A finding is a pattern worth review, never evidence that cases are linked.</p>
+ <div class="grid g4">
+  <div class="card stat"><div class="k">Detectors agree · women</div><div class="v red">${agreeW.length}</div><div class="d">serial-pattern findings</div></div>
+  <div class="card stat"><div class="k">Detectors agree · men</div><div class="v red">${agreeM.length}</div><div class="d">serial-pattern findings</div></div>
+  <div class="card stat"><div class="k">Benchmark</div><div class="v green">${esc(recov)}</div><div class="d">${esc(recSub)}</div></div>
+  <div class="card stat"><div class="k">False alarms</div><div class="v blue">${esc(rel)}</div><div class="d">${esc(relSub)}</div></div>
+ </div>
+ <div class="sectionhead"><div><h2>Pipeline</h2><div class="muted small">Every stage is a plugin registry. Tap one to see what's installed.</div></div></div>
+ <div class="pipe">${stages.map(([l,n,s,k])=>`<button class="stage ${k==='out'?'out':''}" data-k="${k}"><div class="n">${n}</div><div class="l">${esc(l)}</div><div class="s">${esc(s)}</div></button>`).join('')}</div>
+ <div class="sectionhead"><div><h2>Strongest leads · women</h2><div class="muted small">Serial-pattern findings where detectors agree, most unsolved first</div></div><button class="btn" id="allFind">All findings →</button></div>
+ <div class="leads">${agreeW.slice(0,6).map((f,i)=>`<button class="lead" data-i="${i}"><div style="display:flex;justify-content:space-between;gap:8px"><span class="t">${esc(placeOf(f))}</span><span class="big">${f.t-f.s}</span></div><div class="m">${esc(M.weapons[f.w])}${f.band?' · ages '+esc(f.band):''} · ${yr(f.y0,f.y1)}</div><div class="m">${f.s} of ${f.t} solved${f.exp!=null?` vs ${pct(f.exp)} expected`:''} · ${esc(f.by.join(' + '))}</div></button>`).join('')||'<div class="empty">No agreed findings.</div>'}</div>
+ <div class="grid g2" style="margin-top:14px">
+  <div class="card"><div class="cardhead"><h2>Data quality</h2><span class="tag ${issues?'partial':'full'}">${issues} issues found</span></div><div class="cardbody"><p class="muted" style="margin:0 0 10px">Checks look for reporting problems that can create or hide findings.</p>${Object.entries(M.quality).map(([k,q])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line)"><code>${esc(k)}</code><b>${q.rows.length}</b></div>`).join('')}<button class="btn" style="margin-top:10px" data-go="quality">Open data quality →</button></div></div>
+  <div class="card"><div class="cardhead"><h2>NamUs</h2><span class="tag ${Object.keys(M.namus).length?'full':'miss'}">${Object.keys(M.namus).length?'Loaded':'Not loaded'}</span></div><div class="cardbody">${Object.keys(M.namus).length?`<p>${Object.entries(M.namus).map(([k,n])=>`${esc(k)}: ${fmt(n)} records`).join('<br>')}</p><p class="muted">Each finding shows missing people and unidentified remains in the same county, period and sex.</p>`:`<p class="muted" style="margin-top:0">Missing people and unidentified remains don't appear in homicide data. Export open Missing and Unidentified Persons cases from NamUs (free registration, Advanced Search, Export) and build with <code>--namus-missing</code> and <code>--namus-unidentified</code>. Each finding then shows how many match its county, years and sex. Names are dropped on load.</p>`}</div></div>
+ </div>`;
+ $('s-overview').querySelectorAll('.lead').forEach(b=>b.addEventListener('click',()=>{const f=agreeW[+b.dataset.i];S.view='ensemble';S.sex=0;S.conf='all';S.q='';$('q').value='';setSeg('sex',0);refresh();go('findings');select(SHOWN.find(x=>same(x,f))||f,{goWork:true})}));
+ $('allFind').addEventListener('click',()=>go('findings'));
+ $('s-overview').querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+ $('s-overview').querySelectorAll('.stage').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.k==='out'){go('findings');return}go('plugins');const t=$('p-'+b.dataset.k);if(t)t.scrollIntoView({block:'start'})}));
+}
+
+/* findings */
 function build(){
  const NC=M.counties.length,NW=M.weapons.length,t=new Float64Array(NC*NW*NY),s=new Float64Array(NC*NW*NY);
  for(const [c,sx,ad,w,y,tot,sol] of AGG){if(sx!==S.sex||(S.adult&&!ad))continue;const i=(c*NW+w)*NY+(y-Y0);t[i]+=tot;s[i]+=sol}
@@ -196,34 +330,27 @@ function build(){
 }
 const at=(c,w,y)=>(c*cube.NW+w)*NY+(y-Y0);
 const county=()=>+$('county').value;
-
-function loadFindings(){
- const rows=((M.findings[S.view]||{})[S.sex])||[];
- ALL=rows.map(r=>({c:r[0],agency:r[1],w:r[2],y0:r[3],y1:r[4],t:r[5],s:r[6],exp:r[7],q:r[8],by:r[9].map(i=>M.detectors[i].name),conf:M.confidence[r[10]],kind:r[11],namus:r[12]||null,ex:r[13]||null,band:r[14]||null,cs:r[15]||null}));
-}
+function renderViews(){$('views').innerHTML=M.views.map(v=>`<button class="chip" data-v="${esc(v.id)}" aria-pressed="${S.view===v.id}" title="${esc(v.summary)}">${esc(v.kind==='detector'?(v.tier==='strict'?'Strict':'Sensitive')+': '+v.label:v.label)}</button>`).join('')}
 function filterFindings(){
+ ALL=viewRows(S.view,S.sex);
  const q=S.q.trim().toLowerCase();
  let base=ALL.filter(f=>!S.serial||f.kind==='serial-pattern');
  if(q)base=base.filter(f=>(placeOf(f)+' '+M.weapons[f.w]).toLowerCase().includes(q));
- const counts={all:base.length,high:0,strong:0,possible:0};base.forEach(f=>counts[f.conf]++);
- $('conf').innerHTML=['all','high','strong','possible'].filter(k=>k==='all'||counts[k]).map(k=>`<button class="chip" data-k="${k}" aria-pressed="${S.conf===k}">${k==='all'?'All':CONF[k]}<b>${counts[k]}</b></button>`).join('');
+ const n={all:base.length,high:0,strong:0,possible:0};base.forEach(f=>n[f.conf]++);
+ if(S.conf!=='all'&&!n[S.conf])S.conf='all';
+ $('conf').innerHTML=['all','high','strong','possible'].filter(k=>k==='all'||n[k]).map(k=>`<button class="chip" data-k="${k}" aria-pressed="${S.conf===k}">${k==='all'?'All':CONF[k]}<b>${n[k]}</b></button>`).join('');
  SHOWN=S.conf==='all'?base:base.filter(f=>f.conf===S.conf);
 }
-
 function renderList(){
  $('count').textContent=SHOWN.length?`${SHOWN.length} finding${SHOWN.length>1?'s':''} · strongest first`:'';
- if(!SHOWN.length){$('list').innerHTML=`<li class="empty">No findings match. Try another detector, confidence level or filter.</li>`;return}
- $('list').innerHTML=SHOWN.slice(0,200).map((f,i)=>`<li><button class="item ${f.conf}" data-i="${i}" aria-current="${same(S.sel,f)}"><span class="rail"></span><span class="t">${esc(placeOf(f))}</span><span class="n">${f.t-f.s}</span><span class="m"><span class="tag ${f.conf}">${esc(CONF[f.conf])}</span><span>${esc(M.weapons[f.w])}${f.band?' · ages '+esc(f.band):''}</span><span>${f.y0}–${f.y1}</span><span>${f.s}/${f.t} solved</span></span></button></li>`).join('');
+ $('list').innerHTML=SHOWN.length?SHOWN.slice(0,250).map((f,i)=>`<li><button class="item ${f.conf}" data-i="${i}" aria-current="${same(S.sel,f)}"><span class="rail2"></span><span class="t">${esc(placeOf(f))}</span><span class="n">${f.t-f.s}</span><span class="m"><span class="tag ${f.conf}">${esc(CONF[f.conf])}</span><span>${esc(M.weapons[f.w])}${f.band?' · '+esc(f.band):''}</span><span>${yr(f.y0,f.y1)}</span><span>${f.s}/${f.t} solved</span></span></button></li>`).join(''):`<li class="empty">No findings match. Try another view, confidence level or filter.</li>`;
 }
-
 function renderKpis(){
  const c=county();let t=0,s=0,st=0,ss=0;
  for(let k=0;k<M.counties.length;k++)for(let w=0;w<cube.NW;w++)for(let y=Y0;y<=Y1;y++){const i=at(k,w,y);st+=cube.t[i];ss+=cube.s[i];if(k===c){t+=cube.t[i];s+=cube.s[i]}}
- const here=ALL.filter(f=>inArea(f,c)&&(!S.serial||f.kind==='serial-pattern')).length;
  $('ctx').textContent=`${S.sex?'Men':'Women'}${S.adult?' 12 and older':''}, ${Y0}–${Y1}`;
- $('kpis').innerHTML=[[t.toLocaleString('en-US'),'killings'],[t?pct(s/t):'—','solved'],[st?pct(ss/st):'—',`${M.state} average`],[(t-s).toLocaleString('en-US'),'unsolved'],[here,'findings here']].map(([b,l])=>`<div class="kpi"><b>${esc(b)}</b><span>${esc(l)}</span></div>`).join('');
+ $('kpis').innerHTML=[[fmt(t),'killings'],[t?pct(s/t):'—','solved'],[st?pct(ss/st):'—',`${M.state} average`],[fmt(t-s),'unsolved'],[SHOWN.filter(f=>inArea(f,c)).length,'findings here']].map(([b,l])=>`<div class="kpi"><b>${esc(b)}</b><span>${esc(l)}</span></div>`).join('');
 }
-
 function color(p){return p<.5?`color-mix(in oklab,var(--red) ${Math.round((1-p*2)*100)}%,var(--pale))`:`color-mix(in oklab,var(--blue) ${Math.round((p-.5)*200)}%,var(--pale))`}
 function drawHM(){
  const svg=$('hmsvg');const W=svg.clientWidth,H=svg.clientHeight;if(!W||!cube)return;
@@ -234,101 +361,205 @@ function drawHM(){
  ws.forEach((w,j)=>{const yy=T+j*ch;
   h+=`<text x="${L-8}" y="${yy+ch/2+4}" text-anchor="end">${esc(SHORT[M.weapons[w]]||M.weapons[w])}</text>`;
   for(let y=Y0;y<=Y1;y++){const n=cube.t[at(c,w,y)],s=cube.s[at(c,w,y)],x=L+(y-Y0)*cw;
-   h+=n?`<rect class="cell" data-w="${w}" data-y="${y}" x="${x+.5}" y="${yy+.5}" width="${Math.max(cw-1,1)}" height="${ch-1}" rx="1.5" fill="${color(s/n)}" fill-opacity="${(.35+.65*Math.sqrt(n/maxn)).toFixed(2)}" style="cursor:pointer"/>`:`<rect x="${x+.5}" y="${yy+.5}" width="${Math.max(cw-1,1)}" height="${ch-1}" rx="1.5" fill="var(--empty)"/>`}
- });
+   h+=n?`<rect class="cell" data-w="${w}" data-y="${y}" x="${x+.5}" y="${yy+.5}" width="${Math.max(cw-1,1)}" height="${ch-1}" rx="1.5" fill="${color(s/n)}" fill-opacity="${(.4+.6*Math.sqrt(n/maxn)).toFixed(2)}" style="cursor:pointer"/>`:`<rect x="${x+.5}" y="${yy+.5}" width="${Math.max(cw-1,1)}" height="${ch-1}" rx="1.5" fill="var(--empty)"/>`}});
  SHOWN.filter(f=>inArea(f,c)).forEach(f=>{const j=ws.indexOf(f.w),sel=same(S.sel,f);
   const st=f.conf==='high'?'stroke="var(--red)" stroke-width="3"':f.conf==='strong'?'stroke="var(--ink)" stroke-width="2" stroke-dasharray="5 3"':'stroke="var(--red)" stroke-width="1.5"';
-  h+=`<rect x="${L+(f.y0-Y0)*cw+1}" y="${T+j*ch+1}" width="${Math.max((f.y1-f.y0+1)*cw-2,2)}" height="${ch-2}" rx="3" fill="${sel?'color-mix(in oklab,var(--red) 12%,transparent)':'none'}" ${st} pointer-events="none"/>`});
+  h+=`<rect x="${L+(f.y0-Y0)*cw+1}" y="${T+j*ch+1}" width="${Math.max((f.y1-f.y0+1)*cw-2,2)}" height="${ch-2}" rx="3" fill="${sel?'color-mix(in oklab,var(--red) 14%,transparent)':'none'}" ${st} pointer-events="none"/>`});
  for(let y=Math.ceil(Y0/5)*5;y<=Y1;y+=narrow?10:5)h+=`<text x="${L+(y-Y0+.5)*cw}" y="${H-6}" text-anchor="middle">${y}</text>`;
  svg.innerHTML=h;
 }
-
 function casesFor(sel){
  const band=sel.band?sel.band.split(/[-+]/).map(Number):null;
  const inBand=a=>!band||(a<999&&a>=band[0]&&(!band[1]||a<=band[1]));
  const ai=sel.agency&&!sel.cs?M.agencies.indexOf(sel.agency):-1;
  return CASES.filter(r=>(sel.cs?sel.cs.includes(r[0]):r[0]===sel.c)&&r[7]===sel.w&&r[1]>=sel.y0&&r[1]<=sel.y1&&r[5]>=12&&(ai<0||r[3]===ai)&&inBand(r[5])).sort((a,b)=>a[4]-b[4]||a[1]-b[1]||a[2]-b[2]);
 }
-
 function renderDetail(){
  $('tWhy').setAttribute('aria-selected',S.tab==='why');$('tCases').setAttribute('aria-selected',S.tab==='cases');
  const p=$('panel'),sel=S.sel;
- if(!sel){p.innerHTML='<p class="dsub" style="margin:0">Select a finding, or a square on the heatmap, to see why it was flagged and the cases behind it.</p>';return}
+ if(!sel){p.innerHTML='<p class="muted" style="margin:0">Select a finding, or a square on the heatmap, to see why it was flagged and the cases behind it.</p>';return}
  const title=`${placeOf(sel)} · ${M.weapons[sel.w]} · ${sel.y0}${sel.y1!==sel.y0?'–'+sel.y1:''}`;
  if(S.tab==='why'){
   const e=sel.ex;
-  if(!e){p.innerHTML=`<h3 class="dtitle">${esc(title)}</h3><p class="dsub">Not flagged by any detector. See the Cases tab for the records.</p>`;return}
+  if(!e){p.innerHTML=`<h3 class="dtitle">${esc(title)}</h3><p class="dsub">Not flagged by any detector in this view. The Cases tab lists the records.</p>`;return}
   const li=a=>a.map(x=>`<li>${esc(x)}</li>`).join('');
-  p.innerHTML=`<div class="why"><h3 class="dtitle">${esc(title)}</h3><p class="dsub">${esc(CONF[sel.conf]||'')}${sel.by?' · found by '+esc(sel.by.join(' + ')):''}${sel.q!=null?' · q = '+(sel.q<0.001?'<0.001':sel.q.toFixed(3)):''}</p>
-   <p class="lead">${esc(e.what)}</p><p>${esc(e.agreement)}</p>${e.cases?`<h4>Victims</h4><p>${esc(e.cases)}</p>`:''}${e.namus?`<h4>NamUs</h4><p>${esc(e.namus)}</p>`:''}
+  p.innerHTML=`<div class="why"><h3 class="dtitle">${esc(title)}</h3>
+   <div class="dsub"><span class="tag ${sel.conf}">${esc(CONF[sel.conf])}</span>${sel.by.map(b=>`<span class="tag">${esc(b)}</span>`).join('')}${sel.q!=null?`<span>q = ${sel.q<0.001?'&lt;0.001':sel.q.toFixed(3)}</span>`:''}</div>
+   <div class="compare"><div><b style="color:var(--red)">${sel.t-sel.s}</b><span>unsolved of ${sel.t}</span></div><div><b>${pct(sel.s/sel.t)}</b><span>solved here</span></div><div><b style="color:var(--blue)">${sel.exp!=null?pct(sel.exp):'—'}</b><span>expected</span></div></div>
+   <p class="leadp">${esc(e.what)}</p><p>${esc(e.agreement)}</p>${e.cases?`<h4>Victims</h4><p>${esc(e.cases)}</p>`:''}${e.namus?`<h4>NamUs</h4><p>${esc(e.namus)}</p>`:''}
    ${e.data&&e.data.length?`<h4>Data notes</h4><ul>${li(e.data)}</ul>`:''}
-   <h4>Next steps</h4><ol><li>Search public news and court records for whether a series here is already known or solved.</li><li>Read the cases: do dates, ages and circumstances resemble each other?</li><li>If it still looks unexplained, send it to the Murder Accountability Project. Never contact families, witnesses or possible suspects.</li></ol></div>`;
+   <h4>Next steps</h4><ol><li>Search public news and court records: is a series here already known or solved?</li><li>Read the cases: do dates, ages and circumstances resemble each other?</li><li>If it still looks unexplained, send it to the Murder Accountability Project. Never contact families, witnesses or possible suspects.</li></ol>
+   <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="copyFinding">Copy summary</button><button class="btn" id="seeCases">See cases</button></div></div>`;
+  $('copyFinding').addEventListener('click',()=>copy(`${title}\n${e.what}\n${e.agreement}\n(coldmap finding: a pattern worth review, not evidence that cases are linked.)`,'Summary copied'));
+  $('seeCases').addEventListener('click',()=>{S.tab='cases';renderDetail()});
  } else {
   if(S.sex!==0){p.innerHTML=`<h3 class="dtitle">${esc(title)}</h3><p class="dsub">Case lists cover women only.</p>`;return}
   const rows=casesFor(sel);
-  p.innerHTML=`<h3 class="dtitle">${esc(title)}</h3><p class="dsub">${rows.length} killings, ${rows.filter(r=>!r[4]).length} unsolved. Unsolved first.</p><div class="scroll"><table><thead><tr><th>Date</th><th>Agency</th><th class="num">Age</th><th>Race</th><th>Weapon</th><th>Circumstance</th><th>Relationship</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr><td data-l="Date" class="num">${MON[r[2]]||''} ${r[1]}</td><td data-l="Agency">${esc(M.agencies[r[3]])}</td><td data-l="Age" class="num">${r[5]>=999?'Unknown':r[5]}</td><td data-l="Race">${esc(M.race[r[6]])}</td><td data-l="Weapon">${esc(M.weaponRaw[r[8]])}</td><td data-l="Circumstance">${esc(M.circ[r[9]])}</td><td data-l="Relationship">${esc(M.rel[r[10]])}</td><td data-l="Status"><span class="st ${r[4]?'yes':'no'}">${r[4]?'Solved':'Unsolved'}</span></td></tr>`).join('')}</tbody></table></div>`;
+  p.innerHTML=`<h3 class="dtitle">${esc(title)}</h3><p class="dsub">${rows.length} killings, ${rows.filter(r=>!r[4]).length} unsolved · unsolved first</p><div class="scroll"><table class="cases"><thead><tr><th>Date</th><th>Agency</th><th class="num">Age</th><th>Race</th><th>Weapon</th><th>Circumstance</th><th>Relationship</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr><td data-l="Date" class="num">${MON[r[2]]||''} ${r[1]}</td><td data-l="Agency">${esc(M.agencies[r[3]])}</td><td data-l="Age" class="num">${r[5]>=999?'Unknown':r[5]}</td><td data-l="Race">${esc(M.race[r[6]])}</td><td data-l="Weapon">${esc(M.weaponRaw[r[8]])}</td><td data-l="Circumstance">${esc(M.circ[r[9]])}</td><td data-l="Relationship">${esc(M.rel[r[10]])}</td><td data-l="Status"><span class="st ${r[4]?'yes':'no'}">${r[4]?'Solved':'Unsolved'}</span></td></tr>`).join('')}</tbody></table></div>`;
  }
 }
-
 function select(f,{tab='why',goWork=false}={}){
  S.sel=f;S.tab=f&&f.ex?tab:'cases';
- if(f&&!inArea(f,county())){$('county').value=String(f.c);build();renderKpis()}
- renderList();drawHM();renderDetail();save();
- if(goWork&&matchMedia('(max-width:820px)').matches)pane('work');
+ if(f&&!inArea(f,county())){$('county').value=String(f.c);build()}
+ renderKpis();renderList();drawHM();renderDetail();save();
+ if(goWork&&matchMedia('(max-width:820px)').matches){$('s-findings').dataset.pane='work';requestAnimationFrame(drawHM)}
 }
-
 function refresh({keepSel=false}={}){
- build();loadFindings();filterFindings();
+ build();renderViews();filterFindings();
  if(!keepSel||!SHOWN.some(f=>same(f,S.sel)))S.sel=SHOWN.find(f=>inArea(f,county()))||null;
- S.tab=S.sel&&S.sel.ex?S.tab:'why';
- renderList();renderKpis();drawHM();renderDetail();save();
+ S.tab='why';renderList();renderKpis();drawHM();renderDetail();save();
 }
-function pane(p){$('app').dataset.pane=p;$('mList').setAttribute('aria-selected',p==='list');$('mWork').setAttribute('aria-selected',p==='work');if(p==='work')requestAnimationFrame(drawHM)}
-function save(){try{localStorage.setItem('coldmap-app-'+M.state,JSON.stringify({view:S.view,sex:S.sex,serial:S.serial,county:$('county').value,adult:S.adult}))}catch(e){}}
+function save(){try{localStorage.setItem('coldmap-app2-'+M.state,JSON.stringify({view:S.view,sex:S.sex,serial:S.serial,county:$('county').value,adult:S.adult}))}catch(e){}}
 function setSeg(id,val){for(const b of $(id).querySelectorAll('button'))b.setAttribute('aria-pressed',b.dataset.v===String(val))}
 
-$('det').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.view=b.dataset.v;S.conf='all';setSeg('det',S.view);refresh()});
-$('sex').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.sex=+b.dataset.v;setSeg('sex',S.sex);refresh()});
-$('conf').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.conf=b.dataset.k;filterFindings();renderList();drawHM()});
+$('views').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.view=b.dataset.v;S.conf='all';refresh()});
+$('sex').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.sex=+b.dataset.v;setSeg('sex',S.sex);refresh();renderRel()});
+$('conf').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.conf=b.dataset.k;filterFindings();renderList();renderKpis();drawHM()});
 $('serial').addEventListener('click',()=>{S.serial=!S.serial;$('serial').setAttribute('aria-pressed',S.serial);refresh({keepSel:true})});
-$('q').addEventListener('input',e=>{S.q=e.target.value;filterFindings();renderList();drawHM()});
+$('q').addEventListener('input',e=>{S.q=e.target.value;filterFindings();renderList();renderKpis();drawHM()});
 $('list').addEventListener('click',e=>{const b=e.target.closest('button');if(b)select(SHOWN[+b.dataset.i],{goWork:true})});
-$('county').addEventListener('change',()=>{build();renderKpis();S.sel=SHOWN.find(f=>inArea(f,county()))||null;renderList();drawHM();renderDetail();save()});
+$('county').addEventListener('change',()=>{build();S.sel=SHOWN.find(f=>inArea(f,county()))||null;renderKpis();renderList();drawHM();renderDetail();save()});
 $('adult').addEventListener('change',e=>{S.adult=e.target.checked;build();renderKpis();drawHM();save()});
 $('tWhy').addEventListener('click',()=>{S.tab='why';renderDetail()});
 $('tCases').addEventListener('click',()=>{S.tab='cases';renderDetail()});
-$('mList').addEventListener('click',()=>pane('list'));$('mWork').addEventListener('click',()=>pane('work'));
+$('back').addEventListener('click',()=>{$('s-findings').dataset.pane='list'});
+const tip=$('tip');
+$('hmsvg').addEventListener('mousemove',e=>{const r=e.target.closest('.cell');if(!r){tip.style.display='none';return}
+ const w=+r.dataset.w,y=+r.dataset.y,i=at(county(),w,y),n=cube.t[i],s=cube.s[i];
+ tip.textContent=`${y} · ${M.weapons[w]}: ${s} of ${n} solved (${pct(s/n)})`;
+ const bb=$('hm').getBoundingClientRect();let x=e.clientX-bb.left+12;tip.style.display='block';
+ if(x+tip.offsetWidth>bb.width)x=e.clientX-bb.left-tip.offsetWidth-12;tip.style.left=Math.max(0,x)+'px';tip.style.top=(e.clientY-bb.top-34)+'px'});
+$('hmsvg').addEventListener('mouseleave',()=>tip.style.display='none');
+$('hmsvg').addEventListener('click',e=>{const r=e.target.closest('.cell');if(!r)return;const c=county(),w=+r.dataset.w,y=+r.dataset.y;
+ const f=SHOWN.find(f=>inArea(f,c)&&f.w===w&&y>=f.y0&&y<=f.y1);
+ select(f||{c,w,y0:y,y1:y,agency:null,by:[]},{tab:f?'why':'cases'});
+ $('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})});
+const ro=new ResizeObserver(()=>drawHM());ro.observe($('hm'));
+
+/* benchmarks */
+function renderBench(){
+ const B=M.benchmark,el=$('s-bench');
+ if(!B){el.innerHTML=`<h1>Benchmark</h1><p class="lede">Not included in this build. Run <code>coldmap benchmark CASES --backtest --json bench.json</code> and build with <code>--benchmark-json bench.json</code>.</p>`;return}
+ const D=B.detectors,label=d=>d==='ensemble'?'Combined':d;
+ const tot=d=>{const r=B.series.map(s=>s.results[d]);return{full:r.filter(x=>x&&x.grade==='full').length,part:r.filter(x=>x&&x.grade==='partial').length,n:r.length}};
+ const cell=r=>!r?'<span class="dot miss" title="missed"></span>':`<span class="dot ${r.grade}" title="${esc(r.grade)}: ${esc(r.place)}, ${esc(r.weapon)} ${r.start}–${r.end}"></span>`;
+ const bt=B.backtest.filter(x=>x.detector==='ensemble');
+ el.innerHTML=`<h1>Benchmark</h1><p class="lede">Every detector is scored against serial cases that were later solved in court. The data records whether a case was solved <i>when it was reported</i>, so these series still look unsolved, and a good detector should flag them. A <b>full</b> hit covers most of the series' years; a <b>partial</b> hit touches it but mostly describes something else.</p>
+ <div class="grid g4">${D.map(d=>{const t=tot(d);return `<div class="card stat"><div class="k">${esc(label(d))}${d==='ensemble'?'':' detector'}</div><div class="v ${d==='ensemble'?'green':''}">${t.full+t.part} of ${t.n}</div><div class="d">${t.full} full · ${t.part} partial</div></div>`}).join('')}</div>
+ <div class="card" style="margin-top:14px"><div class="cardhead"><h2>Known series</h2><span class="muted small"><span class="dot full"></span> full &nbsp; <span class="dot partial"></span> partial &nbsp; <span class="dot miss"></span> missed · tap a row for details</span></div>
+ <div class="cardbody scroll"><table class="mx"><thead><tr><th>Series</th><th>Years</th>${D.map(d=>`<th>${esc(label(d))}</th>`).join('')}</tr></thead><tbody>${B.series.map((s,i)=>{const e=s.results.ensemble;return `<tr class="series" data-i="${i}"><td><b>${esc(s.name)}</b><div class="muted small">${esc(s.county)}${s.victim_sex==='Male'?' · male victims':''}</div></td><td class="num">${s.start}–${s.end}</td>${D.map(d=>`<td>${cell(s.results[d])}${d==='ensemble'&&e&&e.confidence?` <span class="tag ${e.confidence}">${esc(CONF[e.confidence])}</span>`:''}</td>`).join('')}</tr><tr class="note" hidden data-n="${i}"><td colspan="${D.length+2}">${esc(s.note)}${e?` Combined detectors: ${esc(e.place)}, ${esc(e.weapon)} ${e.start}–${e.end}, ${e.solved} of ${e.total} solved.`:''}</td></tr>`}).join('')}</tbody></table></div></div>
+ ${bt.length?`<div class="card" style="margin-top:14px"><div class="cardhead"><h2>How early would it have flagged them?</h2><span class="muted small">Backtest: using only data available each year</span></div><div class="cardbody"><div class="fig" id="btfig" style="height:${Math.max(260,bt.length*40+40)}px"><svg id="btsvg"></svg></div><div class="key"><span><span class="sw" style="background:var(--line)"></span>series active</span><span><span class="sw" style="background:var(--red);border-radius:50%"></span>first flagged</span><span><span class="sw" style="background:var(--ink)"></span>arrest</span><span>Lead times are optimistic: any finding overlapping the series counts.</span></div></div></div>`:''}`;
+ el.querySelectorAll('tr.series').forEach(r=>r.addEventListener('click',()=>{const n=el.querySelector(`tr.note[data-n="${r.dataset.i}"]`);n.hidden=!n.hidden}));
+ if(bt.length){const draw=()=>drawBT(bt,B.series);draw();new ResizeObserver(draw).observe($('btfig'))}
+}
+function shortName(n){const base=n.split(/[,(]/)[0].trim(),w=base.split(/\s+/).filter(x=>x!=='Jr.');const last=w[w.length-1];return last==='Killer'?w.map(x=>x[0]).join(''):/Stranglers$/.test(last)?w[0]:last}
+function drawBT(bt,series){
+ const svg=$('btsvg');if(!svg)return;const W=svg.clientWidth,H=svg.clientHeight;if(!W)return;
+ const narrow=W<560,L=narrow?92:230,R=60,T=6,B=24,x0=1975,x1=2020,rh=(H-T-B)/bt.length,X=y=>L+(Math.min(y,x1)-x0)/(x1-x0)*(W-L-R);
+ let h='';for(let y=1980;y<=x1;y+=narrow?10:5)h+=`<line x1="${X(y)}" x2="${X(y)}" y1="${T}" y2="${H-B}" stroke="var(--line)"/><text x="${X(y)}" y="${H-6}" text-anchor="middle">${y}</text>`;
+ bt.forEach((b,i)=>{const s=series.find(x=>x.name===b.series)||{};const y=T+i*rh+rh/2;const nm=b.series.replace(/ \(.*\)/,'');
+  h+=`<text x="${L-10}" y="${y+4}" text-anchor="end" style="fill:var(--ink);font-weight:600">${esc(narrow?shortName(b.series):nm)}</text>`;
+  h+=`<rect x="${X(s.start)}" y="${y-5}" width="${Math.max(X(s.end+1)-X(s.start),3)}" height="10" rx="3" fill="var(--line)"/>`;
+  const ax=X(b.arrest);h+=`<rect x="${ax-5}" y="${y-5}" width="10" height="10" transform="rotate(45 ${ax} ${y})" fill="var(--ink)"/>`;
+  if(b.first_flagged){const fx=X(b.first_flagged);if(b.lead_time_years>0)h+=`<line x1="${fx}" x2="${ax}" y1="${y}" y2="${y}" stroke="var(--red)" stroke-width="2" stroke-dasharray="3 3"/>`;h+=`<circle cx="${fx}" cy="${y}" r="6" fill="var(--red)"/>`;
+   h+=`<text x="${Math.min(ax,W-R)+10}" y="${y+4}" style="fill:var(--red);font-weight:700">${b.lead_time_years>0?'+'+b.lead_time_years+' yrs':'0'}${b.arrest>x1?' ('+b.arrest+')':''}</text>`}});
+ svg.innerHTML=h;
+}
+
+/* reliability */
+function renderRel(){
+ const C=M.controls,el=$('s-rel');
+ if(!C){el.innerHTML=`<h1>Reliability</h1><p class="lede">Not included in this build. Run <code>coldmap controls CASES --state "${esc(M.state)}" --json controls.json</code> and build with <code>--controls-json controls.json</code>.</p>`;return}
+ const sex=S.sex?'Male':'Female',rows=C.rows.filter(r=>r.victim_sex===sex);
+ const order=[['ensemble: high','Detectors agree'],['ensemble: strong','Strict only'],['ensemble: possible','Sensitive only'],['scan','Strict detector (scan)'],['window','Sensitive detector (window)']];
+ const mx=Math.max(1,...rows.map(r=>Math.max(r.real_findings,r.null_findings)));
+ const verdict=r=>{const s=r.real_findings?r.null_findings/r.real_findings:1;return s<=.15?['Holds up','var(--green)']:s<=.5?['Some noise','var(--amber)']:['Mostly noise','var(--red)']};
+ el.innerHTML=`<h1>Reliability</h1><p class="lede">How often does a detector flag something when nothing is there? coldmap shuffles which cases were solved across places, keeping every statewide trend but destroying real clusters, then reruns the detectors (${C.runs} shuffles). Anything found on shuffled data is a false alarm by construction. Showing ${S.sex?'men':'women'} in ${esc(C.state)}; switch at the top.</p>
+ <div class="card"><div class="cardhead"><h2>Real findings vs findings by chance</h2><span class="muted small"><span class="sw" style="background:var(--blue)"></span>real &nbsp; <span class="sw" style="background:var(--red)"></span>on shuffled data (average)</span></div>
+ <div class="cardbody bars">${order.map(([k,l])=>{const r=rows.find(x=>x.detector===k);if(!r)return '';const [v,c]=verdict(r);return `<div class="brow"><div><div class="lbl">${esc(l)}</div><div class="verdict" style="color:${c}">${v}</div></div><div class="btrack"><div class="bline"><div class="bfill real" style="width:${Math.max(r.real_findings/mx*100,.5)}%"></div><span class="bval">${r.real_findings} real</span></div><div class="bline"><div class="bfill chance" style="width:${Math.max(r.null_findings/mx*100,.5)}%"></div><span class="bval">${r.null_findings} by chance</span></div></div></div>`}).join('')}</div></div>
+ <div class="grid g3" style="margin-top:14px">
+  <div class="card stat"><div class="k" style="color:var(--green)">Trust first</div><p style="margin:8px 0 0">Findings where detectors agree, and strict-only findings, rarely appear on shuffled data here. Start with those.</p></div>
+  <div class="card stat"><div class="k" style="color:var(--red)">Doubt</div><p style="margin:8px 0 0">Sensitive-only findings appear about as often by chance as for real. Treat them as weak leads.</p></div>
+  <div class="card stat"><div class="k">Check every state</div><p style="margin:8px 0 0">Results vary. Where one county holds most of a state's cases, even agreed findings get noisy. Run <code>coldmap controls</code> before trusting a new state.</p></div>
+ </div>`;
+}
+
+/* data quality */
+function renderQuality(){
+ const P=M.plugins,el=$('s-quality');
+ const relevant=P.fixes.filter(f=>!f.states.length||f.states.includes(M.state));
+ el.innerHTML=`<h1>Data quality</h1><p class="lede">Problems in the data can create false findings or hide real ones. Checks are plugins that look for them; fixes correct the ones we understand, and caveats flag the rest on every finding they touch. These checks ran on ${esc(M.state)}.</p>
+ <div class="grid g2">${Object.entries(M.quality).map(([k,q])=>`<div class="card"><div class="cardhead"><span class="nm" style="font-size:13px">${esc(k)}</span><span class="tag ${q.rows.length?'partial':'full'}">${q.rows.length?q.rows.length+' found':'clean'}</span></div><div class="cardbody"><p class="muted" style="margin:0 0 8px">${esc(q.summary)}</p>${q.rows.length?`<div class="scroll"><table><thead><tr><th>Where</th><th>When</th><th>Detail</th></tr></thead><tbody>${q.rows.map(r=>`<tr><td>${esc(r.where)}</td><td class="num">${esc(String(r.when).replace(/^(\d{4})-\1 \(1 yrs\)$/,'$1'))}</td><td>${esc(r.detail)}</td></tr>`).join('')}</tbody></table></div>`:''}</div></div>`).join('')}</div>
+ <div class="sectionhead"><div><h2>Fixes and caveats for ${esc(M.state)}</h2><div class="muted small">Fixes change the data on load; caveats appear on every finding they touch</div></div></div>
+ <div class="grid g2">${relevant.map(f=>`<div class="pcard"><div class="top"><span class="nm">${esc(f.name)}</span><span class="tag ${f.changes_data?'strict':'sensitive'}">${f.changes_data?'fix applied':'caveat'}</span></div><p style="color:var(--ink);font-weight:700;margin-bottom:4px">${esc(f.title)}</p><p>${esc(f.summary)}</p><div class="cchips">${f.states.length?f.states.map(s=>`<span class="cchip">${esc(s)}</span>`).join(''):'<span class="cchip">all states</span>'}${f.years?`<span class="cchip">${f.years[0]}${f.years[1]!==f.years[0]?'–'+f.years[1]:''}</span>`:'<span class="cchip">all years</span>'}</div></div>`).join('')}</div>`;
+}
+
+/* plugins */
+const SNIPPET=`from dataclasses import dataclass, field
+from coldmap import Detector, Finding
+from coldmap.detectors import DETECTORS
+
+@DETECTORS.register
+class MyDetector(Detector):
+    name = "mine"
+    summary = "What it looks for, in one line"
+    tier = "sensitive"   # "strict" if it controls false alarms
+
+    @dataclass
+    class Params:
+        min_cases: int = field(default=6, metadata={"help": "Minimum killings"})
+
+    def detect(self, data, query):
+        cases = data.select(query)   # state, sex, ages, cutoff year
+        ...
+        return [Finding(self.name, place, "county", query.victim_sex,
+                        weapon, start, end, total, solved, county=place)]
+
+# Ship it as a package: in pyproject.toml
+# [project.entry-points."coldmap.detectors"]
+# mine = "my_package:MyDetector"`;
+function renderPlugins(){
+ const P=M.plugins,el=$('s-plugins');
+ const params=ps=>ps.length?`<table class="ptable"><tbody>${ps.map(p=>`<tr><td><code>${esc(p.name)}</code></td><td class="num"><code>${esc(JSON.stringify(p.default))}</code></td><td class="muted">${esc(p.help)}</td></tr>`).join('')}</tbody></table>`:'<p>No parameters.</p>';
+ el.innerHTML=`<h1>Plugins</h1><p class="lede">coldmap is a framework: every stage is a registry of plugins. Built-ins register themselves; other packages register through Python entry points. Installing one is all it takes for it to appear here, in the command line and in AI assistants.</p>
+ <div class="pipe">${[['Sources',P.sources.length,'sources'],['Data fixes',P.fixes.length,'fixes'],['Detectors',P.detectors.length,'detectors'],['Enrichers',P.enrichers.length,'enrichers'],['Presets',P.presets.length,'presets'],['Regions',P.regions.length,'regions']].map(([l,n,k])=>`<button class="stage" data-k="${k}"><div class="n">${n}</div><div class="l">${esc(l)}</div></button>`).join('')}</div>
+ <div class="sectionhead" id="p-detectors"><div><h2>Detectors</h2><div class="muted small">Models that search for clusters. Strict ones control false alarms; sensitive ones catch more.</div></div></div>
+ <div class="grid g3">${P.detectors.map(d=>`<div class="pcard"><div class="top"><span class="nm">${esc(d.name)}</span><span class="tag ${esc(d.tier)}">${esc(d.tier)}</span></div><p>${esc(d.summary)}</p><details><summary>${d.params.length} parameters</summary><div class="scroll" style="margin-top:8px">${params(d.params)}</div></details></div>`).join('')}</div>
+ <div class="sectionhead" id="p-presets"><div><h2>Presets</h2><div class="muted small">Named combinations of detectors and settings</div></div></div>
+ <div class="grid g2">${P.presets.map(p=>`<div class="pcard"><div class="top"><span class="nm">${esc(p.name)}</span></div><p>${esc(p.summary)}</p><div class="cchips">${p.detectors.map(x=>`<span class="cchip">${esc(x)}</span>`).join('')}${Object.entries(p.params).flatMap(([d,kv])=>Object.entries(kv).map(([k,v])=>`<span class="cchip">${esc(d)}.${esc(k)} = ${esc(JSON.stringify(v))}</span>`)).join('')}</div></div>`).join('')}</div>
+ <div class="sectionhead" id="p-regions"><div><h2>Regions</h2><div class="muted small">Neighboring counties scanned as one place, because offenders cross county lines</div></div></div>
+ <div class="grid g2">${P.regions.map(r=>`<div class="pcard"><div class="top"><span class="nm">${esc(r.name)}</span><span class="tag">${esc(r.state)}</span></div><p>${esc(r.note)}</p>${Object.entries(r.regions).map(([n,cs])=>`<details style="margin-top:6px"><summary>${esc(n)} · ${cs.length} counties</summary><div class="cchips">${cs.map(c=>`<span class="cchip">${esc(c)}</span>`).join('')}</div></details>`).join('')}</div>`).join('')}</div>
+ <div class="grid g3" style="margin-top:26px">
+  <div id="p-enrichers"><h2 style="margin-bottom:10px">Enrichers</h2>${P.enrichers.map(e=>`<div class="pcard" style="margin-bottom:8px"><span class="nm">${esc(e.name)}</span><p>${esc(e.summary)}</p></div>`).join('')}</div>
+  <div id="p-sources"><h2 style="margin-bottom:10px">Sources</h2>${P.sources.map(e=>`<div class="pcard" style="margin-bottom:8px"><span class="nm">${esc(e.name)}</span><p>${esc(e.summary)}</p></div>`).join('')}</div>
+  <div id="p-fixes"><h2 style="margin-bottom:10px">Quality checks</h2>${P.checks.map(e=>`<div class="pcard" style="margin-bottom:8px"><span class="nm">${esc(e.name)}</span><p>${esc(e.summary)}</p></div>`).join('')}</div>
+ </div>
+ <div class="sectionhead"><div><h2>Build your own detector</h2><div class="muted small">One class. Score it on the benchmark and the false-alarm test before proposing it.</div></div><button class="btn primary" id="copySnip">Copy code</button></div>
+ <pre class="code"><code>${esc(SNIPPET)}</code></pre>
+ <p class="muted small" style="margin-top:10px">Then: <code>coldmap plugins</code> lists it · <code>coldmap benchmark CASES -d mine -d ensemble --backtest</code> scores it · <code>coldmap controls CASES --state California -d mine</code> tests it for false alarms.</p>`;
+ el.querySelectorAll('.stage').forEach(b=>b.addEventListener('click',()=>{const t=$('p-'+b.dataset.k);if(t)t.scrollIntoView({behavior:'smooth',block:'start'})}));
+ $('copySnip').addEventListener('click',()=>copy(SNIPPET,'Code copied'));
+}
+
+/* about */
 $('aboutBtn').addEventListener('click',()=>{$('about').classList.add('open');$('aboutClose').focus()});
 $('aboutClose').addEventListener('click',()=>$('about').classList.remove('open'));
 $('about').addEventListener('click',e=>{if(e.target===$('about'))$('about').classList.remove('open')});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')$('about').classList.remove('open')});
 
-const tip=$('tip');
-$('hmsvg').addEventListener('mousemove',e=>{const r=e.target.closest('.cell');if(!r){tip.style.display='none';return}
- const w=+r.dataset.w,y=+r.dataset.y,i=at(county(),w,y),n=cube.t[i],s=cube.s[i];
- tip.textContent=`${y} · ${M.weapons[w]}: ${s} of ${n} solved (${pct(s/n)})`;
- const b=$('hm').getBoundingClientRect();let x=e.clientX-b.left+12;tip.style.display='block';
- if(x+tip.offsetWidth>b.width)x=e.clientX-b.left-tip.offsetWidth-12;tip.style.left=Math.max(0,x)+'px';tip.style.top=(e.clientY-b.top-34)+'px'});
-$('hmsvg').addEventListener('mouseleave',()=>tip.style.display='none');
-$('hmsvg').addEventListener('click',e=>{const r=e.target.closest('.cell');if(!r)return;const c=county(),w=+r.dataset.w,y=+r.dataset.y;
- const f=SHOWN.find(f=>inArea(f,c)&&f.w===w&&y>=f.y0&&y<=f.y1);
- select(f||{c,w,y0:y,y1:y,agency:null},{tab:f?'why':'cases'});
- $('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})});
-const ro=new ResizeObserver(()=>drawHM());ro.observe($('hm'));
-
+/* boot */
 Promise.all([fetch('agg.json').then(r=>r.json()),fetch('cases.json').then(r=>r.json())]).then(([a,c])=>{
  M=a.meta;AGG=a.agg;CASES=c;Y0=M.years[0];Y1=M.years[1];NY=Y1-Y0+1;
- $('stateLabel').textContent=`${M.state} · ${Y0}–${Y1}`;
- $('aboutData').textContent=`${M.state}, ${Y0}–${Y1}. Detectors: ${M.detectors.map(d=>`${d.name} (${d.tier})`).join(', ')}.`;
- $('aboutFixes').textContent=M.fixes.length?`Data fixes applied: ${M.fixes.join(', ')}.`:'';
- $('det').innerHTML=`<button data-v="ensemble">All</button>`+M.detectors.map(d=>`<button data-v="${esc(d.name)}" title="${esc(d.summary)}">${esc(d.tier==='strict'?'Strict':d.tier==='sensitive'&&M.detectors.filter(x=>x.tier==='sensitive').length===1?'Sensitive':d.name)}</button>`).join('');
+ $('stateChip').textContent=`${M.state} · ${Y0}–${Y1}`;
+ $('aboutData').textContent=`${M.state}, ${Y0}–${Y1}. ${fmt(M.cases_total)} cases in this state's file. Detectors: ${M.detectors.map(d=>d.name).join(', ')}. Data fixes: ${M.fixes.join(', ')||'none'}.`;
  $('county').innerHTML=M.counties.map((n,i)=>`<option value="${i}">${esc(n)} County</option>`).join('');
  $('county').value=String(Math.max(0,M.counties.indexOf(M.defaultCounty)));
- let sv=null;try{sv=JSON.parse(localStorage.getItem('coldmap-app-'+M.state)||'null')}catch(e){}
+ let sv=null;try{sv=JSON.parse(localStorage.getItem('coldmap-app2-'+M.state)||'null')}catch(e){}
  if(sv){if(M.findings[sv.view])S.view=sv.view;S.sex=sv.sex===1?1:0;S.serial=sv.serial!==false;S.adult=sv.adult!==false;if(sv.county!=null&&M.counties[sv.county])$('county').value=sv.county}
- setSeg('det',S.view);setSeg('sex',S.sex);$('serial').setAttribute('aria-pressed',S.serial);$('adult').checked=S.adult;
- refresh();
-}).catch(()=>{$('stateLabel').textContent='Data failed to load';$('list').innerHTML='<li class="empty">The data did not load. Reload to try again.</li>'});
+ setSeg('sex',S.sex);$('serial').setAttribute('aria-pressed',S.serial);$('adult').checked=S.adult;
+ refresh();renderOverview();renderBench();renderRel();renderQuality();renderPlugins();
+ const h=location.hash.slice(1);go(SECTIONS.includes(h)?h:'overview');
+}).catch(err=>{console.error(err);$('stateChip').textContent='Data failed to load';$('s-overview').innerHTML='<p class="muted">The data did not load. Reload to try again.</p>'});
 }
 </script>
 </body>

@@ -107,6 +107,28 @@ def evaluate(data: Dataset, detectors=(*DEFAULT_DETECTORS, "ensemble"), params: 
     return pd.concat([out, pd.DataFrame([{"series": "RECOVERED", "years": "", **caught}])], ignore_index=True)
 
 
+def evaluate_records(data: Dataset, detectors=(*DEFAULT_DETECTORS, "ensemble"), params: dict | None = None,
+                     series: list[KnownSeries] | None = None) -> list[dict]:
+    """Like evaluate(), but structured: one record per series with a result per detector."""
+    params = params or {}
+    series = series or load_series()
+    cache, out = {}, []
+    for s in series:
+        rec = {"name": s.name, "state": s.state, "county": s.county, "victim_sex": s.victim_sex,
+               "start": s.start, "end": s.end, "arrest": s.arrest, "note": s.note, "results": {}}
+        for name in detectors:
+            key = (name, s.state, s.victim_sex)
+            if key not in cache:
+                cache[key] = _runner(name, params.get(name, {}))(data, Query(state=s.state, victim_sex=s.victim_sex))
+            best, g = best_hit(s, cache[key])
+            rec["results"][name] = None if best is None else {
+                "grade": g, "place": best.place, "level": best.level, "weapon": best.weapon,
+                "start": best.start, "end": best.end, "solved": best.solved, "total": best.total,
+                "confidence": best.confidence}
+        out.append(rec)
+    return out
+
+
 def backtest(data: Dataset, s: KnownSeries, detector: str = "ensemble", params: dict | None = None,
              years_after: int = 3) -> dict:
     """First year `detector` flags series `s` using only data up to that year."""
