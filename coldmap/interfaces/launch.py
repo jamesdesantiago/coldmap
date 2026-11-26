@@ -640,7 +640,13 @@ def _handler(app: App):
 
         def do_GET(self):
             path = urlsplit(self.path).path
-            if path in ("/", "/index.html", "/plugins", "/national"):
+            if path == "/guide.md":
+                from .. import plugins
+                return self._send(200, plugins.GUIDE.read_text(encoding="utf-8"), "text/markdown; charset=utf-8")
+            if path == "/guide/before_after.py":
+                from .. import plugins
+                return self._send(200, plugins.example()[1], "text/plain; charset=utf-8")
+            if path in ("/", "/index.html", "/plugins", "/national", "/guide"):
                 return self._send(200, SHELL.read_text(encoding="utf-8"), "text/html; charset=utf-8")
             if path == "/api/status":
                 return self._json(200, app.status())

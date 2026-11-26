@@ -7,7 +7,7 @@ first time it looks for plugins; whatever the file registers (@DETECTORS.registe
 lists and removes these files, and switches detectors and enrichers on or off.
 
 Packages still work too: `pip install` one that declares a coldmap entry point
-(examples/coldmap-streak). See PLUGINS.md for both routes.
+(examples/coldmap-streak). See the plugin guide (in the app: Plugins > Plugin guide; in the code: coldmap/docs/plugins.md) for both routes.
 
 A plugin is Python code and runs with your permissions. Add only files you trust.
 """
@@ -25,6 +25,7 @@ import threading
 from pathlib import Path
 
 EXAMPLE = Path(__file__).with_name("examples") / "before_after.py"
+GUIDE = Path(__file__).with_name("docs") / "plugins.md"  # shown in the app at /guide
 LOCKED_ENRICHERS = ("county", "kind")  # other steps rely on these
 MAX_BYTES = 512 * 1024
 _FILE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,60}\.py$")
@@ -229,7 +230,8 @@ build a state again (the app rebuilds when a plugin changes) to see your note un
 "From plugins" on any flag's Why flagged tab.
 
 It's an enricher: it adds information to each flag. A detector, which finds new flags,
-has the same shape; see PLUGINS.md and coldmap/examples/before_after.py.
+has the same shape; see the plugin guide (in the app: Plugins > Plugin guide)
+and coldmap/examples/before_after.py.
 
 Rules every plugin follows (ETHICS.md): describe patterns, never people. Don't call a flag
 a series or a "serial killer", name anyone, or suggest contacting anyone.

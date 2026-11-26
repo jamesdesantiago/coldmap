@@ -305,3 +305,15 @@ def test_nationwide_scan_ranks_every_state(chome, tmp_path, server):
     assert {r["state"] for r in body["findings"]} == {"Samplestate", "Otherstate"}
     assert all(r["what"] for r in body["findings"])
     assert "<title>coldmap</title>" in get("/national")[1] and "<title>coldmap</title>" in get("/plugins")[1]
+
+
+def test_plugin_guide_ships_inside_the_app(chome, tmp_path, server):
+    """The guide is served by the app itself, so its link works offline and before any merge."""
+    cases, clearance = make_sample(tmp_path)
+    get, _ = server(launch.App("files", cases, clearance))
+    assert "<title>coldmap</title>" in get("/guide")[1]
+    guide = get("/guide.md")[1]
+    assert guide.startswith("# Plugins") and "../examples/before_after.py" in guide
+    assert "class BeforeAfter(Enricher)" in get("/guide/before_after.py")[1]
+    page = get("/plugins")[1]
+    assert 'href="/guide"' in page and "PLUGINS.md" not in page

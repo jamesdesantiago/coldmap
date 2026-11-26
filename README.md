@@ -32,7 +32,7 @@ Your browser opens on the coldmap app straight away. It explains what coldmap do
 Two more pages sit in the header:
 
 - **Nationwide** scans every state in one pass (about 5 minutes on the national file) and ranks every flag together, with filters for victims, confidence, kind and state. Each flag opens in its state's explorer.
-- **Plugins** adds plugins from a file, a link or a starter template, and switches detectors and enrichers on or off. Start with the example, *Before & after*. See [PLUGINS.md](PLUGINS.md).
+- **Plugins** adds plugins from a file, a link or a starter template, and switches detectors and enrichers on or off. Start with the example, *Before & after*. See the [plugin guide](coldmap/docs/plugins.md), also in the app.
 
 Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
 

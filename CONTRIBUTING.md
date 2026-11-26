@@ -2,7 +2,7 @@
 
 Thanks for helping. Read [ETHICS.md](ETHICS.md) first. Then pick the kind of plugin you're adding.
 
-New to plugins? [PLUGINS.md](PLUGINS.md) is the friendly guide: adding plugins in the app, a line-by-line example, and writing your own as a single file.
+New to plugins? The [plugin guide](coldmap/docs/plugins.md) is the friendly one: adding plugins in the app, a line-by-line example, and writing your own as a single file.
 
 ## Add a detector
 
