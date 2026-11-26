@@ -1,6 +1,6 @@
 # Known data issues
 
-coldmap applies fixes automatically and reports which ones ran. Each issue here has an entry in `coldmap/issues.py` and a test.
+coldmap applies fixes automatically and reports which ones ran. Each issue here is a `Fix` plugin in `coldmap/fixes/` and has a test.
 
 ## solved-at-report (caveat, no fix)
 
@@ -16,13 +16,13 @@ A named relationship implies police knew who the offender was. Without a fix, Ca
 
 **Likely cause:** the FBI's 2021 move from summary reporting to NIBRS, which changed how offender details are converted into the Supplementary Homicide Report format.
 
-**Fix:** 2021 cases with a named relationship count as solved. Turn it off with `--no-fixes` or `apply_fixes(df, skip=("2021-relationship-coding",))`.
+**Fix:** 2021 cases with a named relationship count as solved. Skip it with `--skip-fix 2021-relationship-coding` or `coldmap.load(..., skip_fixes=("2021-relationship-coding",))`.
 
 **To do:** report to MAP and confirm the cause.
 
 ## case-file-coverage (caveat, measured per flag)
 
-The case file only contains murders agencies reported in detail. Some places report summary counts to the clearance file but few or no case details. Examples in the 2000s: Kane County, Illinois (1% of reported murders in the case file), Will County (2%), Peoria County (7%). Clusters in those places cannot be detected. `coldmap coverage` lists the gaps; `add_coverage` attaches a coverage figure to each flag.
+The case file only contains murders agencies reported in detail. Some places report summary counts to the clearance file but few or no case details. Examples in the 2000s: Kane County, Illinois (1% of reported murders in the case file), Will County (2%), Peoria County (7%). Clusters in those places cannot be detected. `coldmap coverage` lists the gaps; the `coverage` enricher attaches a coverage figure to each finding when clearance data is loaded.
 
 ## dade-county-name (fixed)
 
@@ -30,7 +30,7 @@ The clearance file uses both "Dade, FL" and "Miami-Dade, FL"; the case file uses
 
 ## Adding an issue
 
-1. Write a fix function in `coldmap/issues.py` (or `fix=None` for a caveat).
-2. Add an `Issue` entry.
+1. Register a `Fix` in `coldmap/fixes/` (or `apply=None` for a caveat).
+2. List the sources it applies to.
 3. Document it here: what, where found, size, likely cause, fix.
 4. Add a test that fails if the fix stops working.

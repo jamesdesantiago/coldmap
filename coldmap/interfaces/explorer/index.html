@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>coldmap explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE work: an investigator's analysis desk, sober and exact (coldmap explorer)
+   IDEA a case-board ledger: years run across, methods down, unsolved runs boxed in red
+   PICTURE heatmap of solved rate by year and method for one county, flagged windows outlined
+   COLOUR white ground, ink #121212, red #e3120b for flags, slate #2e6f8e for solved, pale #e3ecf0 panels
+   TYPE Source Serif 4 600 display + Inter
+   LAYOUT title and controls across the top, heatmap full width, then flags list beside the case file; stacks on phones */
+:root{color-scheme:light dark;--bg:light-dark(#fff,#10191e);--ink:light-dark(#121212,#e8edf0);--mute:light-dark(#5a6670,#9aa8b2);--red:light-dark(#e3120b,#ff5a4e);--slate:light-dark(#2e6f8e,#5fa8cc);--pale:light-dark(#e3ecf0,#1a2830);--rule:light-dark(#cfd8dd,#2c3c46);--empty:light-dark(#f3f6f8,#162229)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(20px,3vw,40px) max(4vw,16px)}
+.wrap{max-width:1240px;margin:0 auto}
+.tab{display:inline-block;background:var(--red);color:#fff;font:600 13px/1 Inter,sans-serif;padding:7px 10px;margin-bottom:14px}
+h1{font:600 clamp(30px,4.4vw,46px)/1.05 "Source Serif 4",Georgia,serif;letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h2{font:600 24px/1.15 "Source Serif 4",Georgia,serif;margin:0 0 6px;letter-spacing:-.01em}
+.lede{max-width:68ch;color:var(--mute);margin:0}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 18px;margin-top:22px;padding:14px;background:var(--pale)}
+.ctl label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
+select,input[type=number]{font:16px Inter,sans-serif;width:100%;min-height:44px;padding:8px;border:1px solid var(--rule);background:var(--bg);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--red);min-height:32px}
+.chks{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:0 24px}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;min-height:44px}
+.chk input{width:20px;height:20px;accent-color:var(--slate)}
+:focus-visible{outline:3px solid var(--slate);outline-offset:2px}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(10em,1fr));gap:0;border-top:2px solid var(--ink);margin-top:22px}
+.fg{padding:10px 14px 10px 0;border-right:1px solid var(--rule)}
+.fg:last-child{border-right:0}
+.fg b{display:block;font:600 clamp(26px,3vw,34px)/1.1 "Source Serif 4",serif;white-space:nowrap}
+.fg span{font-size:13px;color:var(--mute)}
+.fig{position:relative;height:330px;margin-top:14px}
+.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+svg text{font:13px Inter,sans-serif;fill:var(--ink)}
+.key{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:13px;color:var(--mute);margin-top:8px}
+.ramp{display:inline-block;width:120px;height:10px;vertical-align:middle;background:linear-gradient(90deg,var(--red),var(--pale),var(--slate))}
+.box{display:inline-block;width:16px;height:10px;border:2px solid var(--red);vertical-align:middle}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:13px;padding:6px 8px;white-space:nowrap;display:none;z-index:3}
+.cols{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:32px;border-top:1px solid var(--rule)}
+@media(max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+.list{list-style:none;margin:12px 0 0;padding:0;max-height:620px;overflow:auto;border-top:1px solid var(--rule)}
+.list button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;width:100%;padding:10px 6px;border-bottom:1px solid var(--rule);cursor:pointer;min-height:44px}
+.list button:hover,.list button[aria-pressed=true]{background:var(--pale)}
+.list button[aria-pressed=true]{box-shadow:inset 4px 0 0 var(--red)}
+.list .t{font-weight:600}
+.list .n{font-variant-numeric:tabular-nums;color:var(--red);font-weight:600;white-space:nowrap;text-align:right}
+.list .s{grid-column:1/-1;font-size:13px;color:var(--mute)}
+.badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 7px;margin-right:6px;border:1px solid currentColor;white-space:nowrap}
+.b-high{color:var(--red)}.b-strong{color:var(--ink)}.b-possible{color:var(--mute)}
+.box2{display:inline-block;width:16px;height:10px;border:2px dashed var(--ink);vertical-align:middle}
+.box3{display:inline-block;width:16px;height:10px;border:4px solid var(--red);vertical-align:middle}
+.empty{color:var(--mute);font-size:14px;padding:14px 0}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;margin-top:12px}
+th{text-align:left;font-size:13px;color:var(--mute);font-weight:600;border-bottom:2px solid var(--ink);padding:6px 8px 6px 0}
+td{border-bottom:1px solid var(--rule);padding:7px 8px 7px 0;vertical-align:top}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.st{white-space:nowrap;font-weight:600;font-size:13px}
+.st.no{color:var(--red)}.st.yes{color:var(--slate)}
+.notes{font-size:14px;color:var(--mute);border-top:2px solid var(--ink)}
+.notes h2{color:var(--ink)}
+.notes p{max-width:78ch;margin:8px 0}
+a{color:var(--slate)}
+.load{color:var(--mute);padding:40px 0}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:8px;border-bottom:1px solid var(--rule)}.stack td{display:flex;justify-content:space-between;gap:12px;border:0;padding:2px 0}.stack td::before{content:attr(data-l);color:var(--mute);font-size:12px}.fg{border-right:0;border-bottom:1px solid var(--rule)}}
+</style>
+</head>
+<body>
+<header class="band"><div class="wrap">
+<div class="tab" id="tabline">Murder Accountability Project data</div>
+<h1>Where unsolved killings bunch up</h1>
+<p class="lede">Each square is one year of killings in a county, by method. Red means few were solved. Outlines mark stretches of years that one or more detectors flagged as far below what was expected, the pattern used to point investigators at possible serial cases. Pick a detector to see its findings alone, or all of them combined.</p>
+<div class="ctl">
+ <div><label for="det">Detector</label><select id="det"></select></div>
+ <div><label for="county">County</label><select id="county"></select></div>
+ <div><label for="sex">Victims</label><select id="sex"><option value="0">Women</option><option value="1">Men</option></select></div>
+ <div class="chks"><span class="chk"><input id="serial" type="checkbox" checked><label for="serial" style="margin:0">Serial patterns only</label></span><span class="chk"><input id="adult" type="checkbox" checked><label for="adult" style="margin:0">Heatmap: victims 12 and older</label></span></div>
+</div>
+<p class="lede" id="detsum" style="font-size:14px;margin-top:10px"></p>
+</div></header>
+
+<section class="band" style="padding-top:0"><div class="wrap">
+<h2 id="ctitle">Loading</h2>
+<div class="figs" id="figs"></div>
+<div class="fig" id="hm"><svg id="hmsvg" role="img" aria-label="Heatmap of solved rate by year and method"></svg><div class="tip" id="tip"></div></div>
+<div class="key"><span><span class="ramp"></span> 0% solved to 100% solved</span><span><span class="box3"></span> detectors agree</span><span><span class="box2"></span> one strict detector</span><span><span class="box"></span> one sensitive detector</span><span>Click a square or a finding to open its case file.</span></div>
+</div></section>
+
+<section class="band"><div class="wrap cols" style="padding-top:20px">
+<div>
+ <h2 id="flagh">Findings</h2>
+ <p class="lede" id="flagsum" style="font-size:14px"></p>
+ <ul class="list" id="flags"></ul>
+</div>
+<div>
+ <h2 id="filet">Case file</h2>
+ <p class="lede" id="filesum" style="font-size:14px">Pick a finding or a square to list the cases behind it.</p>
+ <div class="scroll"><table class="stack" id="cases"></table></div>
+</div>
+</div></section>
+
+<section class="band"><div class="wrap notes">
+<h2>How to read this</h2>
+<p>A case counts as solved if police had identified an offender when they filed the report. Cases solved later still show as unsolved, which is why known serial killings, such as William Suff's in Riverside County, California (1986–1991), still light up red. A finding is a pattern worth asking about, not evidence that cases are linked. Only investigators can link cases, through DNA, ballistics or other evidence.</p>
+<p><b>Confidence.</b> Detectors are plug-ins and each is either strict (it controls false alarms) or sensitive (it catches more and is noisier). In the combined view a finding is <b>high</b> when two or more detectors agree, <b>strong</b> when only a strict detector found it, and <b>possible</b> when only a sensitive one did. The list of detectors comes from whatever was installed when this page was built.</p>
+<p id="fixnote"></p>
+<p>Methods are grouped (all firearms together; beating includes blunt objects and hands; strangulation includes asphyxiation). The case list covers women only. The data has no names or addresses.</p>
+<p>Source: <a href="https://www.murderdata.org/p/data-docs.html">Murder Accountability Project</a> Supplementary Homicide Report file, murders and non-negligent manslaughter only. Built with coldmap. Leads should go to MAP or the investigating agency, never to families or suspects.</p>
+</div></section>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MON=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const CONFLABEL={high:'Detectors agree',strong:'Strict',possible:'Sensitive'};
+let M=null,AGG=null,CASES=null,cube=null,FLAGS=[],Y0=1976,Y1=2025,NY=50,state={sel:null};
+const opt=()=>({c:+$('county').value,sex:+$('sex').value,view:$('det').value,serial:$('serial').checked,adult:$('adult').checked});
+const same=(a,b)=>a&&b&&a.c===b.c&&a.w===b.w&&a.y0===b.y0&&a.y1===b.y1&&(a.agency||null)===(b.agency||null);
+
+function build(o){
+ const NC=M.counties.length,NW=M.weapons.length,t=new Float64Array(NC*NW*NY),s=new Float64Array(NC*NW*NY);
+ for(const [c,sx,ad,w,y,tot,sol] of AGG){if(sx!==o.sex||(o.adult&&!ad))continue;const i=(c*NW+w)*NY+(y-Y0);t[i]+=tot;s[i]+=sol}
+ return {t,s,NW};
+}
+const at=(c,w,y)=>(c*cube.NW+w)*NY+(y-Y0);
+
+function flagsFor(o){
+ const rows=((M.findings[o.view]||{})[o.sex])||[];
+ let out=rows.map(r=>({c:r[0],agency:r[1],w:r[2],y0:r[3],y1:r[4],t:r[5],s:r[6],exp:r[7],q:r[8],by:r[9].map(i=>M.detectors[i].name),conf:M.confidence[r[10]],kind:r[11]}));
+ if(o.serial)out=out.filter(f=>f.kind==='serial-pattern');
+ return out;
+}
+
+function color(p){return p<.5?`color-mix(in oklab,var(--red) ${Math.round((1-p*2)*100)}%,var(--pale))`:`color-mix(in oklab,var(--slate) ${Math.round((p-.5)*200)}%,var(--pale))`}
+
+function drawHM(){
+ const svg=$('hmsvg'),o=opt();const W=svg.clientWidth,H=svg.clientHeight;if(!W||!cube)return;
+ const narrow=W<520,L=narrow?74:128,T=8,B=26,R=4,ws=M.weapons.map((n,i)=>i);
+ const cw=(W-L-R)/NY,ch=(H-T-B)/ws.length;
+ let maxn=1;for(const w of ws)for(let y=Y0;y<=Y1;y++)maxn=Math.max(maxn,cube.t[at(o.c,w,y)]);
+ const short={'Gun':'Gun','Knife':'Knife','Beating/blunt':'Beating','Strangle/asphyxia':'Strangle','Fire':'Fire','Other/unknown':'Other/unk.','Not reported':'Not rep.'};
+ let h='';
+ ws.forEach((w,j)=>{
+  const yy=T+j*ch;
+  h+=`<text x="${L-8}" y="${yy+ch/2+4}" text-anchor="end">${esc(narrow?short[M.weapons[w]]||M.weapons[w]:M.weapons[w])}</text>`;
+  for(let y=Y0;y<=Y1;y++){
+   const n=cube.t[at(o.c,w,y)],s=cube.s[at(o.c,w,y)],x=L+(y-Y0)*cw;
+   if(!n){h+=`<rect x="${x+.5}" y="${yy+.5}" width="${Math.max(cw-1,1)}" height="${ch-1}" fill="var(--empty)"/>`;continue}
+   h+=`<rect class="cell" data-w="${w}" data-y="${y}" x="${x+.5}" y="${yy+.5}" width="${Math.max(cw-1,1)}" height="${ch-1}" fill="${color(s/n)}" fill-opacity="${(.35+.65*Math.sqrt(n/maxn)).toFixed(2)}" style="cursor:pointer"/>`;
+  }
+ });
+ FLAGS.filter(f=>f.c===o.c).forEach(f=>{
+  const j=ws.indexOf(f.w),sel=same(state.sel,f);
+  const st=f.conf==='high'?'stroke="var(--red)" stroke-width="4"':f.conf==='strong'?'stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="5 3"':'stroke="var(--red)" stroke-width="2"';
+  h+=`<rect x="${L+(f.y0-Y0)*cw+1}" y="${T+j*ch+1}" width="${Math.max((f.y1-f.y0+1)*cw-2,2)}" height="${ch-2}" fill="none" ${st} ${sel?'style="filter:drop-shadow(0 0 3px var(--red))"':''} pointer-events="none"/>`;
+ });
+ for(let y=Math.ceil(Y0/5)*5;y<=Y1;y+=narrow?10:5)h+=`<text x="${L+(y-Y0+.5)*cw}" y="${H-8}" text-anchor="middle" fill="var(--mute)">${y}</text>`;
+ svg.innerHTML=h;
+}
+
+function figs(o){
+ let t=0,s=0,st=0,ss=0;
+ for(let c=0;c<M.counties.length;c++)for(let w=0;w<cube.NW;w++)for(let y=Y0;y<=Y1;y++){const i=at(c,w,y);st+=cube.t[i];ss+=cube.s[i];if(c===o.c){t+=cube.t[i];s+=cube.s[i]}}
+ const nf=FLAGS.filter(f=>f.c===o.c).length;
+ $('ctitle').textContent=`${M.counties[o.c]} County, killings of ${o.sex===0?'women':'men'}${o.adult?' 12 and older':''}`;
+ const fmt=x=>x.toLocaleString('en-US');
+ $('figs').innerHTML=[[fmt(t),`killings, ${Y0}–${Y1}`],[t?Math.round(s/t*100)+'%':'—','solved at time of report'],[st?Math.round(ss/st*100)+'%':'—',M.state+' average'],[fmt(t-s),'unsolved'],[nf,nf===1?'finding here':'findings here']].map(([b,l])=>`<div class="fg"><b>${esc(b)}</b><span>${esc(l)}</span></div>`).join('');
+}
+
+function listFlags(o){
+ const v=o.view==='ensemble'?'all detectors combined':`the ${o.view} detector`;
+ $('flagh').textContent='Findings across '+M.state;
+ const nh=FLAGS.filter(f=>f.conf==='high').length;
+ $('flagsum').textContent=FLAGS.length?`${FLAGS.length} findings in ${new Set(FLAGS.map(f=>f.c)).size} counties from ${v}${o.view==='ensemble'?`, ${nh} where detectors agree`:''}. Strongest first.`:'No findings for this view.';
+ $('flags').innerHTML=FLAGS.slice(0,150).map((f,i)=>{
+  const where=f.agency?`${f.agency} (${M.counties[f.c]})`:M.counties[f.c];
+  const by=f.by.join(' + ');
+  const exp=f.exp==null?'':`, against ${Math.round(f.exp*100)}% expected`;
+  const q=f.q==null?'':`; q = ${f.q<0.001?'<0.001':f.q.toFixed(3)}`;
+  return `<li><button data-i="${i}" aria-pressed="${same(state.sel,f)}"><span class="t"><span class="badge b-${f.conf}">${esc(CONFLABEL[f.conf])}</span>${esc(where)} · ${esc(M.weapons[f.w])} · ${f.y0}–${f.y1}</span><span class="n">${f.t-f.s} unsolved</span><span class="s">${f.s} of ${f.t} solved (${Math.round(f.s/f.t*100)}%)${esc(exp)}${esc(q)}. Found by ${esc(by)}.</span></button></li>`}).join('');
+}
+
+function showCases(sel){
+ state.sel=sel;const o=opt(),tb=$('cases');
+ $('filet').textContent=`${sel.agency?sel.agency+', ':''}${M.counties[sel.c]} · ${M.weapons[sel.w]} · ${sel.y0}${sel.y1!==sel.y0?'–'+sel.y1:''}`;
+ if(o.sex!==0){$('filesum').textContent='The case list covers women only. Switch Victims to Women to see the records.';tb.innerHTML='';listFlags(o);drawHM();return}
+ const ai=sel.agency?M.agencies.indexOf(sel.agency):-1;
+ const rows=CASES.filter(r=>r[0]===sel.c&&r[7]===sel.w&&r[1]>=sel.y0&&r[1]<=sel.y1&&r[5]>=12&&(!sel.agency||r[3]===ai)).sort((a,b)=>a[4]-b[4]||a[1]-b[1]||a[2]-b[2]);
+ $('filesum').textContent=`${rows.length} killings of women 12 and older, ${rows.filter(r=>!r[4]).length} unsolved. Unsolved cases are listed first.`;
+ tb.innerHTML='<thead><tr><th>Date</th><th>Agency</th><th>Age</th><th>Race</th><th>Weapon</th><th>Circumstance</th><th>Relationship</th><th>Status</th></tr></thead><tbody>'+rows.map(r=>`<tr><td data-l="Date" class="num">${MON[r[2]]||''} ${r[1]}</td><td data-l="Agency">${esc(M.agencies[r[3]])}</td><td data-l="Age" class="num">${r[5]>=999?'Unknown':r[5]}</td><td data-l="Race">${esc(M.race[r[6]])}</td><td data-l="Weapon">${esc(M.weaponRaw[r[8]])}</td><td data-l="Circumstance">${esc(M.circ[r[9]])}</td><td data-l="Relationship">${esc(M.rel[r[10]])}</td><td data-l="Status"><span class="st ${r[4]?'yes':'no'}">${r[4]?'Solved':'Unsolved'}</span></td></tr>`).join('')+'</tbody>';
+ listFlags(o);drawHM();
+}
+
+function update(){
+ const o=opt();cube=build(o);FLAGS=flagsFor(o);state.sel=null;
+ const d=M.detectors.find(x=>x.name===o.view);
+ $('detsum').textContent=d?`${d.name} (${d.tier}): ${d.summary}`:`Combining ${M.detectors.map(x=>`${x.name} (${x.tier})`).join(' and ')}.`;
+ figs(o);listFlags(o);drawHM();
+ const f=FLAGS.find(f=>f.c===o.c);
+ if(f)showCases(f);else{$('filet').textContent='Case file';$('filesum').textContent='Pick a finding or a square to list the cases behind it.';$('cases').innerHTML=''}
+ try{localStorage.setItem('coldmap-'+M.state,JSON.stringify({det:o.view,county:$('county').value,sex:$('sex').value,serial:o.serial,adult:o.adult}))}catch(e){}
+}
+
+const tip=$('tip');
+$('hmsvg').addEventListener('mousemove',e=>{
+ const r=e.target.closest('.cell');if(!r){tip.style.display='none';return}
+ const o=opt(),w=+r.dataset.w,y=+r.dataset.y,i=at(o.c,w,y),n=cube.t[i],s=cube.s[i];
+ tip.textContent=`${y} · ${M.weapons[w]}: ${s} of ${n} solved (${Math.round(s/n*100)}%)`;
+ const b=$('hm').getBoundingClientRect();let x=e.clientX-b.left+12;tip.style.display='block';
+ if(x+tip.offsetWidth>b.width)x=e.clientX-b.left-tip.offsetWidth-12;
+ tip.style.left=Math.max(0,x)+'px';tip.style.top=(e.clientY-b.top-36)+'px';
+});
+$('hmsvg').addEventListener('mouseleave',()=>tip.style.display='none');
+$('hmsvg').addEventListener('click',e=>{
+ const r=e.target.closest('.cell');if(!r)return;const o=opt(),w=+r.dataset.w,y=+r.dataset.y;
+ const f=FLAGS.find(f=>f.c===o.c&&f.w===w&&y>=f.y0&&y<=f.y1);
+ showCases(f||{c:o.c,w,y0:y,y1:y,agency:null});
+ $('filet').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+});
+$('flags').addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b)return;const f=FLAGS[+b.dataset.i];
+ if($('county').value!=f.c){$('county').value=f.c;const o=opt();cube=build(o);figs(o)}
+ showCases(f);if(innerWidth<860)$('filet').scrollIntoView({block:'start'});
+});
+['det','county','sex','serial','adult'].forEach(id=>$(id).addEventListener('change',update));
+const ro=new ResizeObserver(()=>drawHM());ro.observe($('hm'));
+
+Promise.all([fetch('agg.json').then(r=>r.json()),fetch('cases.json').then(r=>r.json())]).then(([a,c])=>{
+ M=a.meta;AGG=a.agg;CASES=c;Y0=M.years[0];Y1=M.years[1];NY=Y1-Y0+1;
+ $('tabline').textContent=`Murder Accountability Project data · ${M.state} ${Y0}–${Y1}`;
+ $('det').innerHTML=`<option value="ensemble">All combined</option>`+M.detectors.map(d=>`<option value="${esc(d.name)}">${esc(d.name)} (${esc(d.tier)})</option>`).join('');
+ $('county').innerHTML=M.counties.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
+ $('county').value=String(Math.max(0,M.counties.indexOf(M.defaultCounty)));
+ $('fixnote').textContent=M.fixes.length?`Data fixes applied: ${M.fixes.join(', ')} (see DATA_ISSUES.md in the coldmap repository).`:'';
+ let sv=null;try{sv=JSON.parse(localStorage.getItem('coldmap-'+M.state)||'null')}catch(e){}
+ if(sv){if([...$('det').options].some(x=>x.value===sv.det))$('det').value=sv.det;if(sv.county!=null)$('county').value=sv.county;if(sv.sex!=null)$('sex').value=sv.sex;$('serial').checked=sv.serial!==false;$('adult').checked=sv.adult!==false}
+ update();
+}).catch(()=>{$('ctitle').textContent='The data did not load. Reload the page to try again.'});
+}
+</script>
+</body>
+</html>

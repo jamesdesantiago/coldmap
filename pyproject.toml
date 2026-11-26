@@ -4,26 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coldmap"
-version = "0.1.0"
-description = "Open toolkit for finding clusters of unsolved homicides in public U.S. homicide data"
+version = "0.2.0"
+description = "An extensible framework for finding clusters of unsolved homicides in public U.S. homicide data"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
-dependencies = ["pandas>=2.0", "scipy>=1.10", "click>=8.0"]
+dependencies = ["pandas>=2.0", "numpy>=1.24", "scipy>=1.10", "click>=8.0"]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.2"]
 dev = ["pytest>=7"]
 
 [project.scripts]
-coldmap = "coldmap.cli:main"
-coldmap-mcp = "coldmap.mcp_server:main"
+coldmap = "coldmap.interfaces.cli:main"
+coldmap-mcp = "coldmap.interfaces.mcp_server:main"
+
+# Built-in plugins register themselves on import. Third-party plugins use these
+# entry-point groups: coldmap.sources, coldmap.fixes, coldmap.detectors, coldmap.enrichers.
 
 [tool.setuptools.packages.find]
 include = ["coldmap*"]
 
 [tool.setuptools.package-data]
-coldmap = ["explorer/*.html"]
+coldmap = ["interfaces/explorer/*.html", "benchmarks/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

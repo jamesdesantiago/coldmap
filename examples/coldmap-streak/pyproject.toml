@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coldmap-streak"
+version = "0.1.0"
+description = "Example coldmap plugin: flags runs of consecutive years with no solved cases"
+requires-python = ">=3.10"
+dependencies = ["coldmap>=0.2"]
+
+# This is the only wiring a plugin needs: coldmap finds it through this entry point.
+[project.entry-points."coldmap.detectors"]
+streak = "coldmap_streak:StreakDetector"
