@@ -553,6 +553,28 @@ class App:
         return self.start("cities", "Scanning cities",
                           [("scan", "Compare areas with the rest of each city")], work)
 
+    def city_get_wapo(self) -> Job:
+        """Download The Washington Post's homicide data and import it as coarse cells. The download
+        holds victims' names, so it goes to a temporary file that is deleted as soon as it's read."""
+        import tempfile
+        from .. import cities
+
+        def work(job: Job):
+            with tempfile.TemporaryDirectory(prefix="coldmap-") as tmp:
+                raw = Path(tmp) / "homicide-data.csv"
+                job.step("download", 0, None)
+                download(cities.wapo_url(), raw, "The Washington Post's data",
+                         progress=lambda d, t: job.step("download", d, t))
+                text = cities.decode(raw.read_bytes())
+                raw.unlink()
+            job.step("import", 0, 1)
+            meta = cities.add(cities.WAPO_NAME, text, cities.WAPO)
+            job.step("import", 1, 1)
+            job.finish({"rows": meta["rows"], "cities": meta["cities"]})
+        return self.start("cities-get", "Getting The Washington Post's data",
+                          [("download", "Download the data (about 4 MB)"),
+                           ("import", "Keep only ~1 km cells, year, month, sex and solved")], work)
+
     def city_action(self, action: str, q: dict, b: dict) -> dict:
         from .. import cities
         if action == "preview":
@@ -996,6 +1018,8 @@ def _handler(app: App):
                     return self._json(202, app.national().view())
                 if u.path == "/api/benchmark":
                     return self._json(202, app.benchmark().view())
+                if u.path == "/api/cities/wapo":
+                    return self._json(202, app.city_get_wapo().view())
                 if u.path == "/api/cities/scan":
                     return self._json(202, app.city_scan(q.get("periods") == "1").view())
                 if u.path.startswith("/api/cities/"):

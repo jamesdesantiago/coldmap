@@ -55,3 +55,25 @@ def test_scan_finds_the_planted_area_and_not_chance(tmp_path, monkeypatch):
     cities.remove("sample")
     cities.add("Null", city_csv(seed=1, planted=False))
     assert cities.scan(reps=199)["areas"] == []
+
+
+def test_get_the_post_data_in_one_click(tmp_path, monkeypatch):
+    import time
+    from coldmap.interfaces import launch
+    from coldmap.sample import make_sample
+    src = tmp_path / "homicide-data.csv"
+    src.write_text(city_csv(), encoding="latin-1")
+    monkeypatch.setenv("COLDMAP_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("COLDMAP_WAPO_URL", src.as_uri())
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    app.city_get_wapo()
+    while app.job.running:
+        time.sleep(0.05)
+    assert app.job.error is None
+    m = cities.all_meta()[0]
+    assert m["name"] == cities.WAPO_NAME and m["source"] == cities.WAPO and m["rows"] == 2400
+    home = tmp_path / "home"
+    for f in home.rglob("*"):
+        if f.is_file():
+            assert "JANE" not in f.read_text(encoding="utf-8", errors="ignore"), f   # names never kept

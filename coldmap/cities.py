@@ -40,6 +40,21 @@ MIN_CASES = 15       # smallest area reported
 MAX_Q = 0.10
 KEEP = ("city", "cell", "lat", "lon", "year", "month", "sex", "solved")
 WAPO = "The Washington Post, data-homicides (CC BY-NC-SA 4.0; non-commercial use, with credit)"
+WAPO_URL = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
+WAPO_NAME = "The Washington Post: 50 cities"
+
+
+def wapo_url() -> str:
+    import os
+    return os.environ.get("COLDMAP_WAPO_URL") or WAPO_URL
+
+
+def decode(raw: bytes) -> str:
+    """UTF-8, else Windows-1252/Latin-1 (the Post's file is Latin-1)."""
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
 
 _LAT = re.compile(r"^lat(itude)?$|^y$")
 _LON = re.compile(r"^lon(g|gitude)?$|^lng$|^x$")
