@@ -141,6 +141,49 @@ def add(filename: str, text: str, enable: bool = True) -> dict:
         return next(f for f in files() if f["file"] == filename)
 
 
+# What to point out before someone installs a plugin: things a model about patterns rarely needs.
+_RISKY = {
+    "network": ("urllib", "requests", "http", "socket", "httpx", "aiohttp", "ftplib", "smtplib", "websocket"),
+    "other programs": ("subprocess", "os.system", "os.popen", "os.exec", "os.spawn", "pty", "multiprocessing"),
+    "code it builds at run time": ("eval", "exec", "compile", "__import__", "importlib", "marshal", "pickle"),
+    "files outside coldmap": ("shutil", "os.remove", "os.unlink", "os.rmdir", "os.rename", "pathlib", "open"),
+    "the system": ("ctypes", "winreg", "sys.modules", "builtins"),
+}
+
+
+def review(text: str) -> dict:
+    """Read a plugin's source without running it: what it registers and what it reaches for."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError as e:
+        return {"valid": False, "error": f"Line {e.lineno}: {e.msg}", "flags": [], "registers": []}
+    names: set[str] = set()
+    registers = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+            names.update(f"{node.module}.{a.name}" for a in node.names)
+        elif isinstance(node, ast.Call):
+            f = node.func
+            if isinstance(f, ast.Name):
+                names.add(f.id)
+            elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
+                names.add(f"{f.value.id}.{f.attr}")
+        elif isinstance(node, ast.ClassDef):
+            for d in node.decorator_list:
+                src = ast.unparse(d)
+                if src.endswith(".register"):
+                    registers.append({"registry": src.removesuffix(".register"), "class": node.name})
+    flags = []
+    for what, hints in _RISKY.items():
+        hits = sorted({n for n in names for h in hints if n == h or n.startswith(h + ".")})
+        if hits:
+            flags.append({"what": what, "uses": hits[:8]})
+    return {"valid": True, "flags": flags, "registers": registers, "lines": text.count("\n") + 1}
+
+
 def remove(filename: str) -> None:
     with _lock:
         path = folder() / filename
@@ -321,7 +364,8 @@ def open_path(filename: str | None = None) -> str:
         target = folder()
         target.mkdir(parents=True, exist_ok=True)
     if sys.platform == "win32":
-        os.startfile(str(target))  # noqa: S606 (opening the user's own file, on their request)
+        # "edit", not the default action: for a .py file the default is often to run it with Python.
+        os.startfile(str(target), "edit" if filename else "open")  # noqa: S606 (the user's own file, on request)
     elif sys.platform == "darwin":
         subprocess.Popen(["open", str(target)])
     else:

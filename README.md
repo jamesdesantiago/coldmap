@@ -32,7 +32,7 @@ Your browser opens on the coldmap app straight away. The first time, it download
 - **AI assistants**: connect Claude or any MCP client. It reads the same flags and shortlist (`research_flags`, `shortlist`) and can triage flags, pull case rows and run models; the app gives you the exact config for this computer.
 - **Methods**: how a flag is made, confidence levels, data fixes, data quality by state, and how to improve the research.
 
-Your shortlist and notes are saved in `~/.coldmap/research`. Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
+Your shortlist and notes are saved in `~/.coldmap/research`. coldmap opens your browser with a link that carries a key for this session; other people and programs on the computer can't use the app without it. If you close the tab, open the link coldmap printed in its terminal again. Plugins from a file or a link are shown to you, code and all, before anything is installed. Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
 
 Change what comes after `coldmap open` to do more (keep the `uvx --from ...` part in front):
 

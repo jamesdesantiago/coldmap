@@ -57,14 +57,17 @@ def server():
         started.append(httpd)
         base = f"http://127.0.0.1:{httpd.server_address[1]}"
 
+        cookie = {"Cookie": f"coldmap_key_{httpd.server_address[1]}={app.key}"}
+
         def get(p):
-            with urllib.request.urlopen(base + p) as r:
+            with urllib.request.urlopen(urllib.request.Request(base + p, headers=cookie)) as r:
                 return r.geturl().removeprefix(base), r.read().decode()
 
         def post(p, header=True, body=None):  # returns (status, json)
             data = json.dumps(body).encode() if body is not None else None
             req = urllib.request.Request(base + p, method="POST", data=data,
-                                         headers={"X-Coldmap": "1", "Content-Type": "application/json"} if header else {})
+                                         headers={"X-Coldmap": "1", "Content-Type": "application/json", **cookie}
+                                         if header else cookie)
             with urllib.request.urlopen(req) as r:
                 return r.status, json.loads(r.read())
         return get, post
@@ -337,8 +340,9 @@ def test_plugin_guide_ships_inside_the_app(chome, tmp_path, server):
     guide = get("/guide.md")[1]
     assert guide.startswith("# Plugins") and "../examples/before_after.py" in guide
     assert "class BeforeAfter(Enricher)" in get("/guide/before_after.py")[1]
-    page = get("/models")[1]
+    page = get("/static/app.js")[1]
     assert 'href="/models/guide"' in page and "PLUGINS.md" not in page
+    assert "<script>" not in get("/models")[1]  # no inline scripts: the CSP allows only coldmap's own
 
 
 def test_your_datasets_describe_places_never_people(chome, tmp_path, server):
@@ -487,13 +491,15 @@ def test_a_broken_view_shows_its_error_not_a_crash(chome, tmp_path, server):
 def test_only_this_computers_app_can_use_the_server(chome, tmp_path):
     """DNS rebinding (a foreign Host), cross-site writes (a foreign Origin, no X-Coldmap) are refused."""
     cases, clearance = make_sample(tmp_path)
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(launch.App("files", cases, clearance)))
+    app = launch.App("files", cases, clearance)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(app))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     port = httpd.server_address[1]
     base = f"http://127.0.0.1:{port}"
+    key = {"Cookie": f"coldmap_key_{port}={app.key}"}
 
     def call(path, method="GET", **headers):
-        req = urllib.request.Request(base + path, method=method, headers=headers,
+        req = urllib.request.Request(base + path, method=method, headers={**key, **headers},
                                      data=b"{}" if method == "POST" else None)
         try:
             with urllib.request.urlopen(req) as r:
@@ -513,5 +519,68 @@ def test_only_this_computers_app_can_use_the_server(chome, tmp_path):
         assert code == 200 and "frame-ancestors 'none'" in h["Content-Security-Policy"]
         assert h["X-Content-Type-Options"] == "nosniff"
         assert call("/api/plugins/starter", "POST", Origin=base, **{"X-Coldmap": "1"})[0] == 200  # the app itself
+    finally:
+        httpd.shutdown()
+
+
+
+def test_other_methods_are_refused(chome, tmp_path, monkeypatch):
+    """HEAD used to fall through to the stdlib file server, answering for files in the launch folder."""
+    import http.client
+    (tmp_path / "secret.txt").write_text("x")
+    monkeypatch.chdir(tmp_path)
+    cases, clearance = make_sample(tmp_path)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(launch.App("files", cases, clearance)))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        for method in ("HEAD", "PUT", "DELETE", "OPTIONS", "PATCH"):
+            c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1])
+            c.request(method, "/secret.txt", headers={"Host": "attacker.example"})
+            assert c.getresponse().status == 405, method
+    finally:
+        httpd.shutdown()
+
+
+def test_plugins_are_reviewed_before_install(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    _, post = server(launch.App("files", cases, clearance))
+    bad = ("import subprocess\nfrom coldmap import ENRICHERS, Enricher\n@ENRICHERS.register\nclass X(Enricher):\n"
+           "    name = 'x'\n    def enrich(self, f, d):\n        subprocess.run(['calc'])\n        return f\n")
+    r = post("/api/plugins/review", body={"text": bad})[1]["review"]
+    assert r["registers"] == [{"registry": "ENRICHERS", "class": "X"}]
+    assert [f["what"] for f in r["flags"]] == ["other programs"]
+    assert not (chome / "plugins").exists()  # reviewing installs and runs nothing
+    with pytest.raises(urllib.error.HTTPError, match="400"):
+        post("/api/plugins/link?url=https://example.org/x.py")  # no install-from-link without review
+
+
+def test_only_the_browser_coldmap_opened_gets_in(chome, tmp_path):
+    """Other accounts and programs on this computer don't have the session key."""
+    import http.client
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(app))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+
+    def req(method, path, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", port)
+        c.request(method, path, body=b"{}" if method == "POST" else None,
+                  headers={"Host": f"127.0.0.1:{port}", **(headers or {})})
+        r = c.getresponse()
+        return r.status, dict(r.getheaders()), r.read()
+    try:
+        assert req("GET", "/api/status")[0] == 401                                   # no key
+        assert req("GET", "/flags")[0] == 401
+        assert req("POST", "/api/plugins/starter", {"X-Coldmap": "1"})[0] == 401
+        assert req("GET", "/api/status", {"Cookie": f"coldmap_key_{port}=wrong"})[0] == 401
+        assert req("GET", "/flags?key=wrong")[0] == 401
+        code, h, _ = req("GET", f"/flags?state=Ohio&key={app.key}")                  # the link coldmap opens
+        assert code == 303 and h["Location"] == "/flags?state=Ohio"                     # key leaves the address
+        assert "HttpOnly" in h["Set-Cookie"] and "SameSite=Strict" in h["Set-Cookie"]
+        cookie = {"Cookie": h["Set-Cookie"].split(";")[0]}
+        assert req("GET", "/api/status", cookie)[0] == 200
+        assert req("POST", "/api/plugins/starter", {"X-Coldmap": "1", **cookie})[0] == 200
+        assert launch.App("files", cases, clearance).key != app.key                    # a new key every run
     finally:
         httpd.shutdown()

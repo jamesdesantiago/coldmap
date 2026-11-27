@@ -39,6 +39,11 @@ MAP_FILES = {
 }
 LABELS = {"cases": "case file", "clearance": "clearance file"}
 APP_PAGE = Path(__file__).with_name("explorer") / "app.html"
+_VENDOR = APP_PAGE.with_name("vendor")
+STATIC = {"/static/app.js": APP_PAGE.with_name("app.js"), "/static/theme.js": APP_PAGE.with_name("theme.js"),
+          "/vendor/d3.v7.min.js": _VENDOR / "d3.v7.min.js",
+          "/vendor/topojson-client.min.js": _VENDOR / "topojson-client.min.js",
+          "/vendor/counties-10m.json": _VENDOR / "counties-10m.json"}
 
 
 from ..plugins import home  # noqa: E402  (data, builds, plugins and settings live here)
@@ -102,6 +107,8 @@ def fetch_plugin(url: str) -> tuple[str, str]:
     req = urllib.request.Request(url, headers={"User-Agent": "coldmap"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
+            if not r.geturl().startswith("https://"):  # a redirect to plain http could be tampered with
+                raise ValueError("The link redirected to an insecure (http) address.")
             raw = r.read(512 * 1024 + 1)
     except Exception as e:
         raise ValueError(f"Couldn't download that link: {e}") from None
@@ -393,6 +400,10 @@ class App:
         self.job: Job | None = None
         self.check: dict | None = None
         self._flags: tuple | None = None
+        import secrets
+        # Only the browser coldmap opens gets this, so other accounts and programs on this
+        # computer can't use the server (they could otherwise add a plugin that runs as you).
+        self.key = secrets.token_urlsafe(24)
         self._lock = threading.Lock()
         self.lib: Library | None = None
         self.reload()
@@ -697,9 +708,12 @@ class App:
             elif action == "upload":
                 j = json.loads(body or b"{}")
                 added = plugins.add(str(j.get("file", "")), str(j.get("text", "")))
-            elif action == "link":
+            elif action == "fetch":  # download for review; nothing is installed or run
                 name, text = fetch_plugin(q.get("url", ""))
-                added = plugins.add(name, text)
+                return {"file": name, "text": text, "review": plugins.review(text)}
+            elif action == "review":
+                j = json.loads(body or b"{}")
+                return {"review": plugins.review(str(j.get("text", "")))}
             else:
                 raise ValueError("Unknown plugin action.")
         except ValueError as e:
@@ -767,6 +781,42 @@ def _handler(app: App):
             port = self.server.server_address[1]
             return {f"127.0.0.1:{port}", f"localhost:{port}"}
 
+        def _cookie_name(self) -> str:
+            return f"coldmap_key_{self.server.server_address[1]}"  # cookies ignore ports; names don't
+
+        def _has_key(self) -> bool:
+            import hmac
+            from http.cookies import SimpleCookie
+            try:
+                jar = SimpleCookie(self.headers.get("Cookie") or "")
+            except Exception:
+                return False
+            got = jar.get(self._cookie_name())
+            return bool(got) and hmac.compare_digest(got.value, app.key)
+
+        def _key_gate(self) -> bool:
+            """True when the request may go on. A ?key= link (the one coldmap opens) sets the cookie
+            and redirects to the same page without the key in its address."""
+            import hmac
+            u = urlsplit(self.path)
+            q = parse_qs(u.query)
+            if "key" in q and hmac.compare_digest(q["key"][0], app.key):
+                rest = "&".join(f"{k}={v}" for k, vs in q.items() if k != "key" for v in vs)
+                self.send_response(303)
+                self.send_header("Set-Cookie", f"{self._cookie_name()}={app.key}; Path=/; HttpOnly; SameSite=Strict")
+                self.send_header("Location", u.path + (f"?{rest}" if rest else ""))
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return False
+            if self._has_key():
+                return True
+            self._send(401, "<!doctype html><meta charset=utf-8><title>coldmap</title>"
+                            "<body style='font:15px system-ui;padding:40px;max-width:60ch'><h1>Open coldmap from its link</h1>"
+                            "<p>For your safety this page only opens from the link coldmap prints in its terminal window "
+                            "(it contains a key for this session). Copy that link into this browser, or run <code>coldmap open</code> "
+                            "again.</p>", "text/html; charset=utf-8")
+            return False
+
         def _trusted(self, write: bool) -> bool:
             """Requests must name this server as their host, so a web page that re-points its own
             domain at 127.0.0.1 (DNS rebinding) is refused. Writes must also come from this app's
@@ -797,7 +847,7 @@ def _handler(app: App):
             if ctype.startswith("text/html"):
                 # The app's own scripts and data only; fonts from Google Fonts; no framing.
                 self.send_header("Content-Security-Policy",
-                                 "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                                 "default-src 'self'; script-src 'self'; "
                                  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                                  "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
                                  "connect-src 'self'; object-src 'none'; base-uri 'none'; "
@@ -822,9 +872,21 @@ def _handler(app: App):
             except ValueError:
                 return {}
 
+        def _refuse(self):
+            """Every method but GET and POST. The stdlib's HEAD would otherwise answer for files in the
+            folder coldmap was started from, past the host check."""
+            self.send_response(405)
+            self.send_header("Allow", "GET, POST")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        do_HEAD = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _refuse
+
         def do_POST(self):
             if not self._trusted(write=True):
                 return self._send(403, "Forbidden")
+            if not self._has_key():
+                return self._send(401, "Open coldmap from the link in its terminal window.")
             from . import research
             u = urlsplit(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
@@ -875,6 +937,8 @@ def _handler(app: App):
             from . import research
             if not self._trusted(write=False):
                 return self._send(403, "Forbidden")
+            if not self._key_gate():
+                return
             u = urlsplit(self.path)
             path, q = u.path, {k: v[0] for k, v in parse_qs(u.query).items()}
             if path == "/guide.md":
@@ -886,19 +950,18 @@ def _handler(app: App):
                 if name in plugins.EXAMPLES:
                     return self._send(200, plugins.example(name)[1], "text/plain; charset=utf-8")
                 return self._send(404, "Not found")
-            if path.startswith("/vendor/"):  # the map's libraries and county shapes, shipped with coldmap
-                name = path.rsplit("/", 1)[1]
-                f = APP_PAGE.with_name("vendor") / name
-                if name in ("d3.v7.min.js", "topojson-client.min.js", "counties-10m.json") and f.exists():
-                    ctype = "application/json" if name.endswith(".json") else "text/javascript; charset=utf-8"
-                    b = f.read_bytes()
-                    self.send_response(200)
-                    self.send_header("Content-Type", ctype)
-                    self.send_header("Content-Length", str(len(b)))
-                    self.send_header("Cache-Control", "max-age=86400")
-                    self.end_headers()
-                    self.wfile.write(b)
-                    return
+            if path in STATIC:  # the app's scripts, libraries and county shapes: a fixed list, nothing else
+                f = STATIC[path]
+                ctype = "application/json" if f.suffix == ".json" else "text/javascript; charset=utf-8"
+                b = f.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(b)))
+                self.send_header("Cache-Control", "no-cache" if path.startswith("/static/") else "max-age=86400")
+                self.end_headers()
+                self.wfile.write(b)
+                return
+            if path.startswith(("/static/", "/vendor/")):
                 return self._send(404, "Not found")
             if not path.startswith("/api/"):
                 return self._send(200, APP_PAGE.read_text(encoding="utf-8"), "text/html; charset=utf-8")
@@ -976,10 +1039,13 @@ def serve(app: App, port: int, open_browser: bool, path: str = "/") -> None:
     except OSError:
         httpd = _Server(("127.0.0.1", 0), handler)  # port busy: pick a free one
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    click.echo(f"\ncoldmap is running at {url}  (only on this computer)\n"
+    sep = "&" if "?" in path else "?"
+    link = url.rstrip("/") + path + f"{sep}key={app.key}"
+    click.echo(f"\ncoldmap is running on this computer only. Open it with this link (it carries a key for this session):\n"
+               f"  {link}\n"
                f"Everything else happens in the browser. Press Ctrl+C here to stop.")
     if open_browser:
-        threading.Timer(0.3, webbrowser.open, args=(url.rstrip("/") + path,)).start()
+        threading.Timer(0.3, webbrowser.open, args=(link,)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
