@@ -51,7 +51,7 @@ Each registry has an entry-point group:
 | REGIONS | `coldmap.regions` |
 | PRESETS | `coldmap.presets` |
 
-Built-ins register on import. Entry points load the first time a registry is queried.
+Built-ins register on import. Entry points load the first time a registry is queried, and so do plugin files: every `.py` file in the plugins folder (`~/.coldmap/plugins`, see `coldmap/plugins.py`). Each registry records where an entry came from (`origin(name)`: built in, a package, or a file). `coldmap/plugins.py` also keeps which detectors and enrichers the app uses (`~/.coldmap/settings.json`); a build's cache key includes them, so switching a plugin on or off rebuilds.
 
 ## Design rules
 

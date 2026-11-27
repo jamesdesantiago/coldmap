@@ -10,6 +10,7 @@ non-statistician can act on:
                 missing weapons, unsolved cases that still name a known offender
     cases       who the victims were in aggregate (no names exist in the data)
     namus       missing / unidentified context, if NamUs data is loaded
+    plugins     notes added by enrichers (Enricher.note), each with its title and author
     next        what to do with it
 """
 
@@ -111,6 +112,9 @@ def explain(f: Finding, data: Dataset) -> dict:
                          ". Most common circumstance among unsolved: " +
                          ", ".join(f"{c.lower()} ({n})" for c, n in circ.items()) + ".")
 
+    if f.extras.get("notes"):
+        out["plugins"] = [dict(n) for n in f.extras["notes"]]
+
     nm = []
     for key, label in (("namus-missing", "missing"), ("namus-unidentified", "unidentified")):
         v = f.extras.get(key)
@@ -136,6 +140,8 @@ def explain(f: Finding, data: Dataset) -> dict:
         lines += ["", f"Cases: {out['cases']}"]
     if "namus" in out:
         lines += ["", f"NamUs: {out['namus']}"]
+    for n in out.get("plugins", []):
+        lines += ["", f"{n['title']} (plugin {n['by']}): {n['text']}"]
     lines += ["", "Next steps:", *[f"{i}. {s}" for i, s in enumerate(out["next"], 1)],
               "", "_A finding is a pattern worth review, not evidence that cases are linked._"]
     out["text"] = "\n".join(lines)

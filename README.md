@@ -20,19 +20,27 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 Close and reopen the terminal, then run:
 
 ```bash
-uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip coldmap open California
+uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/tags/v0.5.0.zip coldmap open
 ```
 
-The first time, coldmap downloads the Murder Accountability Project's public files (about 365 MB), searches the state and opens the explorer in your browser. **Every state in the file is in the menu at the top of the page**; one you haven't opened before takes a few seconds to build, then it's saved. After the first run everything opens in seconds. Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
+Your browser opens on the coldmap app straight away. The first time, it downloads the Murder Accountability Project's public files (about 365 MB) and scans every state once (about 5 minutes), with progress for each step. After that it opens straight to your research:
+
+- **Flags**: every flag in the country, ranked, narrowed by state, county, victims, confidence and kind. Each row leads with the gap between how often killings were solved and how often they were expected to be. Select one to see why it was flagged, the trend chart, the case rows, the data's known problems and notes from models. Keyboard: arrow keys move, `s` keeps, `x` dismisses, `/` searches.
+- **Shortlist**: flags you kept, on their way to MAP: your notes, the second person's review (required by the [ethics rules](ETHICS.md) before anything leaves), and an export for MAP.
+- **Places**: every state and county: killings, share solved, a heatmap by method and year, and the flags there.
+- **Models**: add detectors and enrichers from a file, a link or a starter template, and switch them on or off. See the [plugin guide](coldmap/docs/plugins.md), also in the app.
+- **AI assistants**: connect Claude or any MCP client. It reads the same flags and shortlist (`research_flags`, `shortlist`) and can triage flags, pull case rows and run models; the app gives you the exact config for this computer.
+- **Methods**: how a flag is made, confidence levels, data fixes, data quality by state, and how to improve the research.
+
+Your shortlist and notes are saved in `~/.coldmap/research`. coldmap opens your browser with a link that carries a key for this session; other people and programs on the computer can't use the app without it. If you close the tab, open the link coldmap printed in its terminal again. Plugins from a file or a link are shown to you, code and all, before anything is installed. Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
 
 Change what comes after `coldmap open` to do more (keep the `uvx --from ...` part in front):
 
-- Start on another state: `coldmap open Texas`. Leave the state off and it asks.
+- Start building a state right away: `coldmap open Texas`.
 - Just looking? `coldmap open --sample` opens a synthetic example (invented data, no download).
-- MAP released new data? `coldmap open California --refresh`.
-- Already have the files? `coldmap open California --cases SHR76_25a.csv --clearance UCR65_25.csv`.
+- Already have the files? `coldmap open --cases SHR76_25a.csv --clearance UCR65_25.csv`.
 
-To type just `coldmap open California` from then on, install it once with `uv tool install https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip`. Data and built explorers live in `~/.coldmap` (change it with the `COLDMAP_HOME` environment variable).
+To type just `coldmap open` from then on, install it once with `uv tool install https://github.com/jamesdesantiago/coldmap/archive/refs/tags/v0.5.0.zip`. Data and built explorers live in `~/.coldmap` (change it with the `COLDMAP_HOME` environment variable).
 
 ## The pipeline
 

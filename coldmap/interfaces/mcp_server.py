@@ -145,6 +145,83 @@ def benchmark(detectors: list[str] | None = None) -> list[dict]:
     return evaluate(_data(), tuple(detectors or (*DEFAULT_DETECTORS, "ensemble"))).to_dict(orient="records")
 
 
+# ---- the research workspace the coldmap app keeps (COLDMAP_HOME) ------------------------------
+@mcp.tool()
+def research_flags(state: str | None = None, victim_sex: str = "Female", confidence: str = "strong",
+                   kind: str | None = None, top: int = 25) -> dict:
+    """The ranked national list of flags the coldmap app shows (from its last nationwide scan).
+    confidence: "high" (detectors agree), "strong" (high + strong) or "all". state: full name."""
+    import json
+    from ..plugins import home
+    from .research import with_ids
+    path = home() / "sites" / "_national" / "national.json"
+    if not path.exists():
+        return {"error": "No nationwide scan yet. Open the coldmap app (coldmap open) to run one.",
+                "ethics": ETHICS}
+    rows = with_ids(json.loads(path.read_text())["findings"])
+    keep = {"high": ("high",), "strong": ("high", "strong")}.get(confidence, ("high", "strong", "possible"))
+    rows = [r for r in rows if r["sex"] == victim_sex and r["confidence"] in keep
+            and (not state or r["state"] == state) and (not kind or r["kind"] == kind)]
+    cols = ("id", "state", "place", "level", "weapon", "start", "end", "total", "solved", "expected",
+            "confidence", "kind", "what")
+    return {"flags": [{k: r.get(k) for k in cols} for r in rows[:top]], "matching": len(rows), "ethics": ETHICS}
+
+
+@mcp.tool()
+def shortlist() -> dict:
+    """Flags the researcher kept in the coldmap app, with their notes and review status
+    (kept, reviewed by a second person, sent to MAP). Dismissed flags are left out."""
+    from .research import decisions
+    out = [{"id": d["id"], "status": d.get("status"), "note": d.get("note"), "reviewer": d.get("reviewer"),
+            "flag": {k: d["flag"].get(k) for k in ("state", "place", "weapon", "start", "end", "total",
+                                                    "solved", "expected", "confidence", "what")}}
+           for d in decisions().values() if d.get("status") != "dismissed"]
+    return {"shortlist": out, "ethics": ETHICS}
+
+
+@mcp.tool()
+def local_datasets(place: str | None = None, start: int | None = None, end: int | None = None) -> dict:
+    """The researcher's own datasets about places and times (added in the coldmap app). Without
+    `place`, describes each one; with a place label as the case file writes it (e.g. "Multnomah, OR",
+    a state name or an agency), returns matching rows, optionally limited to years start..end.
+    They hold no personal identifiers: coldmap leaves those out on import."""
+    from .. import datasets
+    metas = datasets.all_meta()
+    if not place:
+        return {"datasets": metas, "ethics": ETHICS}
+    out = []
+    for m in metas:
+        df = datasets.load(m["slug"])
+        df = df[df.place == place]
+        if start is not None:
+            df = df[df.year >= start]
+        if end is not None:
+            df = df[df.year <= end]
+        if len(df):
+            out.append({"dataset": m["name"], "rows": df.head(200).to_dict(orient="records"), "matching": len(df)})
+    return {"place": place, "matches": out, "ethics": ETHICS}
+
+
+@mcp.tool()
+def app_views(name: str | None = None, inputs: dict | None = None) -> dict:
+    """Pages that plugins add to the coldmap app. Without `name`, lists them and their inputs;
+    with a name (and optional inputs such as {"state": "Ohio"}), returns that page's blocks:
+    text, numbers, tables and charts as data."""
+    from ..views import VIEWS, Context, render
+    from .research import decisions, with_ids
+    from ..plugins import home
+    import json
+    pages = {n: v for n, v in VIEWS if v.place == "page"}
+    if not name:
+        return {"pages": [v.describe() for v in pages.values()], "ethics": ETHICS}
+    if name not in pages:
+        return {"error": f"No page called {name!r}.", "pages": list(pages)}
+    path = home() / "sites" / "_national" / "national.json"
+    flags = with_ids(json.loads(path.read_text())["findings"]) if path.exists() else []
+    return {"page": name, "blocks": render(pages[name], Context(_data(), flags, decisions()), **(inputs or {})),
+            "ethics": ETHICS}
+
+
 def main():
     mcp.run()
 

@@ -2,6 +2,8 @@
 
 Thanks for helping. Read [ETHICS.md](ETHICS.md) first. Then pick the kind of plugin you're adding.
 
+New to plugins? The [plugin guide](coldmap/docs/plugins.md) is the friendly one: adding plugins in the app, a line-by-line example, and writing your own as a single file.
+
 ## Add a detector
 
 ```python
@@ -48,7 +50,7 @@ Subclass `coldmap.quality.Check`, implement `run(data, state=None)` returning a 
 
 ## Add an enricher
 
-Subclass `coldmap.enrichers.Enricher`, implement `enrich(findings, data)`, register it. Enrichers must not drop findings.
+Subclass `coldmap.enrichers.Enricher`, implement `enrich(findings, data)`, register it. Enrichers must not drop findings. Use `self.note(finding, title, text)` to attach a plain-language note; `explain()`, the explorer and the Nationwide page show it under "From plugins". See [`coldmap/examples/before_after.py`](coldmap/examples/before_after.py).
 
 ## Add a region set
 
@@ -71,6 +73,8 @@ profile = "coldmap_profile:ProfileDetector"
 ```
 
 `pip install` it and `coldmap plugins` will list it. See [`examples/coldmap-streak`](examples/coldmap-streak).
+
+Or skip packaging: a single `.py` file in `~/.coldmap/plugins` is loaded too, and the `coldmap open` app adds files there from a file picker or a link ([PLUGINS.md](PLUGINS.md)).
 
 ## Tests
 

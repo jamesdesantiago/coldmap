@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coldmap"
-version = "0.4.0"
+version = "0.5.0"
 description = "An extensible framework for finding clusters of unsolved homicides in public U.S. homicide data"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
-dependencies = ["pandas>=2.0", "numpy>=1.24", "scipy>=1.10", "click>=8.0"]
+dependencies = ["pandas>=2.0", "numpy>=1.24", "scipy>=1.10", "click>=8.0", "pyarrow>=14"]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.2"]
@@ -26,7 +26,7 @@ coldmap-mcp = "coldmap.interfaces.mcp_server:main"
 include = ["coldmap*"]
 
 [tool.setuptools.package-data]
-coldmap = ["interfaces/explorer/*.html", "benchmarks/*.json"]
+coldmap = ["interfaces/explorer/*.html", "interfaces/explorer/*.js", "interfaces/explorer/*.css", "benchmarks/*.json", "examples/*.py", "docs/*.md", "interfaces/explorer/vendor/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,4 +1,16 @@
-"""`coldmap open`: data download, cached builds, state matching."""
+"""`coldmap open`: the local app (download, check for updates, list states, build with progress)."""
+
+import json
+import os
+import sys
+import shutil
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from http.server import ThreadingHTTPServer
+from pathlib import Path
 
 import click
 import pytest
@@ -6,6 +18,7 @@ from click.testing import CliRunner
 
 from coldmap.interfaces import launch
 from coldmap.interfaces.cli import main
+from coldmap.interfaces.explorer.build import BUILD_STEPS
 from coldmap.sample import make_sample
 
 
@@ -13,6 +26,54 @@ from coldmap.sample import make_sample
 def chome(tmp_path, monkeypatch):
     monkeypatch.setenv("COLDMAP_HOME", str(tmp_path / "home"))
     return tmp_path / "home"
+
+
+def _wait(app, timeout=120):
+    end = time.time() + timeout
+    while app.job and app.job.running:
+        assert time.time() < end, "job never finished"
+        time.sleep(0.05)
+    return app.job
+
+
+def _two_state_sample(tmp_path):
+    """The sample plus a copy of it relabelled as a second state."""
+    import pandas as pd
+    cases, clearance = make_sample(tmp_path)
+    df = pd.read_csv(cases)
+    other = df.assign(State="Otherstate", ID=df.ID.astype(str) + "x",  # its own places, like real states
+                      CNTYFIPS=df.CNTYFIPS.str.replace(", SS", ", OS"), Agency=df.Agency + " (O)")
+    pd.concat([df, other]).to_csv(cases, index=False)
+    return cases, clearance
+
+
+@pytest.fixture
+def server():
+    started = []
+
+    def start(app):
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(app))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        started.append(httpd)
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+
+        cookie = {"Cookie": f"coldmap_key_{httpd.server_address[1]}={app.key}"}
+
+        def get(p):
+            with urllib.request.urlopen(urllib.request.Request(base + p, headers=cookie)) as r:
+                return r.geturl().removeprefix(base), r.read().decode()
+
+        def post(p, header=True, body=None):  # returns (status, json)
+            data = json.dumps(body).encode() if body is not None else None
+            req = urllib.request.Request(base + p, method="POST", data=data,
+                                         headers={"X-Coldmap": "1", "Content-Type": "application/json", **cookie}
+                                         if header else cookie)
+            with urllib.request.urlopen(req) as r:
+                return r.status, json.loads(r.read())
+        return get, post
+    yield start
+    for h in started:
+        h.shutdown()
 
 
 def test_prepare_builds_once_then_reuses(chome, tmp_path):
@@ -30,13 +91,21 @@ def test_unknown_state_suggests(chome, tmp_path):
         launch.prepare("Sampelstate", cases, clearance)
 
 
+def test_build_reports_every_step(chome, tmp_path):
+    cases, clearance = make_sample(tmp_path)
+    seen = []
+    launch.Library(cases, clearance).build("Samplestate", progress=seen.append)
+    assert seen == [k for k, _ in BUILD_STEPS]
+
+
 def test_ensure_data_downloads_then_skips(chome, monkeypatch):
     calls = []
 
-    def fake(url, dest, label):
+    def fake(url, dest, label, progress=None):
         calls.append(dest.name)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text("x")
+        return {"size": 1, "etag": "v1"}
 
     monkeypatch.setattr(launch, "download", fake)
     cases, clearance = launch.ensure_data()
@@ -46,7 +115,7 @@ def test_ensure_data_downloads_then_skips(chome, monkeypatch):
 
 
 def test_failed_case_download_explains_manual_route(chome, monkeypatch):
-    def boom(url, dest, label):
+    def boom(url, dest, label, progress=None):
         raise OSError("no network")
 
     monkeypatch.setattr(launch, "download", boom)
@@ -54,65 +123,138 @@ def test_failed_case_download_explains_manual_route(chome, monkeypatch):
         launch.ensure_data()
 
 
-def test_clearance_is_optional(chome, monkeypatch):
-    def partial(url, dest, label):
+def test_open_does_no_work_before_the_page(chome, monkeypatch):
+    """`coldmap open` starts the app at once: no download, no prompt, no build."""
+    monkeypatch.setattr(launch, "download", lambda *a, **k: pytest.fail("downloaded before the page opened"))
+    served = {}
+    monkeypatch.setattr(launch, "serve", lambda app, port, open_browser, path="/": served.update(
+        app=app, path=path, b=open_browser))
+    r = CliRunner().invoke(main, ["open", "--no-browser"])
+    assert r.exit_code == 0, r.output
+    assert "not evidence that cases are linked" in r.output
+    assert served["path"] == "/" and served["b"] is False
+    assert served["app"].mode == "map" and served["app"].lib is None
+
+    r = CliRunner().invoke(main, ["open", "--sample", "--no-browser"])
+    assert r.exit_code == 0, r.output
+    assert served["path"] == "/" and served["app"].mode == "sample"
+    assert not (chome / "sites").exists()  # the app runs setup, with progress
+
+    r = CliRunner().invoke(main, ["open", "California", "--no-browser"])
+    assert served["path"] == "/?state=California"
+
+
+def test_download_job_with_progress(chome, tmp_path, monkeypatch):
+    cases, clearance = make_sample(tmp_path / "src")
+    ticks = []
+
+    def fake(url, dest, label, progress=None):
+        src = cases if "SHR" in dest.name else clearance
+        progress(0, src.stat().st_size)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src, dest)
+        progress(src.stat().st_size, src.stat().st_size)
+        ticks.append(dest.name)
+        return {"size": src.stat().st_size, "etag": f"etag-{dest.name}"}
+
+    monkeypatch.setattr(launch, "download", fake)
+    app = launch.App("map")
+    assert app.status()["data"]["ready"] is False
+    app.setup()
+    job = _wait(app)
+    assert job.error is None and job.result["findings"] > 0
+    assert [s["key"] for s in job.steps][:3] == ["dl-cases", "dl-clearance", "load"]
+    assert all(s["state"] == "done" for s in job.steps)
+    assert ticks == ["SHR76_25a.csv", "UCR65_25.csv"]
+    st = app.status()
+    assert st["data"]["ready"] and st["national"]["findings"] == job.result["findings"]
+    assert st["data"]["files"][0]["downloaded"] and not st["national"]["stale"]
+
+    # update check compares ETags without downloading
+    monkeypatch.setattr(launch, "remote_info", lambda url: {"size": 1, "etag": "etag-SHR76_25a.csv"
+                                                            if "SHR" in url else "etag-UCR65_25.csv"})
+    monkeypatch.setattr(launch, "_url", lambda key: launch.MAP_FILES[key][0])
+    assert app.check_updates()["updates"] is False
+    monkeypatch.setattr(launch, "remote_info", lambda url: {"size": 1, "etag": "new"})
+    assert app.check_updates()["updates"] is True
+
+
+def test_failed_clearance_download_is_a_note(chome, tmp_path, monkeypatch):
+    cases, _ = make_sample(tmp_path / "src")
+
+    def partial(url, dest, label, progress=None):
         if "UCR" in dest.name:
             raise OSError("moved")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text("x")
+        shutil.copy(cases, dest)
+        return {"size": 1, "etag": None}
 
     monkeypatch.setattr(launch, "download", partial)
-    cases, clearance = launch.ensure_data()
-    assert cases.exists() and clearance is None
+    app = launch.App("map")
+    app.download()
+    job = _wait(app)
+    assert job.error is None and "clearance" in job.notes[0]
+    assert app.lib.clearance is None
 
 
-def test_open_sample_serves(chome, monkeypatch):
-    served = {}
-    monkeypatch.setattr(launch, "serve",
-                        lambda lib, state, port, open_browser: served.update(lib=lib, state=state, b=open_browser))
-    r = CliRunner().invoke(main, ["open", "--sample", "--no-browser"])
-    assert r.exit_code == 0, r.output
-    assert "not evidence that cases are linked" in r.output
-    assert served["state"] == "Samplestate" and served["b"] is False
-    assert (served["lib"].site("Samplestate") / "index.html").exists()
-
-
-def _two_state_sample(tmp_path):
-    """The sample plus a copy of it relabelled as a second state."""
-    import pandas as pd
-    cases, clearance = make_sample(tmp_path)
-    df = pd.read_csv(cases)
-    other = df.assign(State="Otherstate", ID=df.ID.astype(str) + "x")
-    pd.concat([df, other]).to_csv(cases, index=False)
-    return cases, clearance
-
-
-def test_server_lists_and_builds_every_state_on_request(chome, tmp_path):
-    import json
-    import threading
-    import urllib.request
-    from http.server import ThreadingHTTPServer
-
+def test_research_flow_from_flag_to_export(chome, tmp_path, server):
+    """Setup scans every state; then a flag's evidence, keep, second review, export."""
     cases, clearance = _two_state_sample(tmp_path)
-    lib = launch.Library(cases, clearance)
-    assert lib.states() == ["Otherstate", "Samplestate"]
-    lib.build("Samplestate")
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(lib, "Samplestate"))
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{httpd.server_address[1]}"
-    get = lambda p: urllib.request.urlopen(base + p).read().decode()
-    try:
-        assert "<title>coldmap</title>" in get("/")  # redirects to the first state
-        states = json.loads(get("/states.json"))["states"]
-        assert [s["slug"] for s in states] == ["otherstate", "samplestate"]
-        assert "Building Otherstate" in get("/otherstate/")  # not built yet: progress page
-        urllib.request.urlopen(urllib.request.Request(base + "/build?state=Otherstate", method="POST"))
-        assert "<title>coldmap</title>" in get("/otherstate/")
-        assert json.loads(get("/otherstate/agg.json"))["meta"]["state"] == "Otherstate"
-        with pytest.raises(urllib.error.HTTPError):
-            get("/nowhere/")
-    finally:
-        httpd.shutdown()
+    app = launch.App("files", cases, clearance)
+    get, post = server(app)
+    for page in ("/", "/flags", "/flags/abc", "/shortlist", "/places/samplestate", "/models", "/ai", "/methods"):
+        assert "<title>coldmap</title>" in get(page)[1]
+    assert json.loads(get("/api/status")[1])["national"] is None
+    with pytest.raises(urllib.error.HTTPError, match="403"):
+        post("/api/setup", header=False)
+    code, job = post("/api/setup")
+    assert code == 202 and job["kind"] == "setup"
+    assert _wait(app).error is None
+
+    flags = json.loads(get("/api/flags")[1])["flags"]
+    assert {f["state"] for f in flags} == {"Samplestate", "Otherstate"} and all(f["id"] for f in flags)
+    f = flags[0]
+    d = json.loads(get(f"/api/flag/{f['id']}")[1])
+    assert d["flag"]["id"] == f["id"] and d["series"] and d["cases_total"] == len(d["cases"]) > 0
+    assert d["decision"] is None
+
+    with pytest.raises(urllib.error.HTTPError, match="400"):  # export needs a second review
+        post("/api/decide", body={"id": f["id"], "status": "sent"})
+    post("/api/decide", body={"id": f["id"], "status": "kept"})
+    post("/api/note", body={"id": f["id"], "note": "Checked local news; no known series."})
+    with pytest.raises(urllib.error.HTTPError, match="400"):
+        post("/api/decide", body={"id": f["id"], "status": "reviewed"})  # needs the reviewer's name
+    post("/api/decide", body={"id": f["id"], "status": "reviewed", "reviewer": "A.B."})
+    md = get(f"/api/export?id={f['id']}")[1]
+    assert md.startswith("# Lead for review:") and "Reviewed by A.B." in md
+    assert "not evidence that cases are linked" in md and "Checked local news" in md
+    assert json.loads(get("/api/status")[1])["decisions"]["reviewed"] == 1
+
+    places = json.loads(get("/api/places?sex=Female")[1])
+    assert {p["state"] for p in places} == {"Samplestate", "Otherstate"}
+    both = {p["state"]: p for p in json.loads(get("/api/places?sex=all")[1])}
+    women = {p["state"]: p for p in places}
+    assert both["Samplestate"]["killings"] > women["Samplestate"]["killings"]  # men and women together
+    assert both["Samplestate"]["flags"] >= women["Samplestate"]["flags"]
+    prof = json.loads(get("/api/place?state=Samplestate&sex=Female")[1])
+    county = prof["counties"][0]["county"]
+    cp = json.loads(get(f"/api/place?state=Samplestate&county={urllib.parse.quote(county)}&sex=Female")[1])
+    assert cp["cells"] and cp["killings"] > 0
+    ai = json.loads(get("/api/ai")[1])
+    assert ai["desktop"]["mcpServers"]["coldmap"]["env"]["COLDMAP_CASES"] == str(cases)
+    assert "research_flags" in [t[0] for t in ai["tools"]]
+
+
+def test_one_job_at_a_time(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    gate = threading.Event()
+    app.start("national", "Waiting", [("x", "Wait")], lambda job: gate.wait(10))
+    _, post = server(app)
+    with pytest.raises(urllib.error.HTTPError, match="409"):
+        post("/api/national")
+    gate.set()
+    _wait(app)
 
 
 def test_states_list_is_cached_without_loading(chome, tmp_path, monkeypatch):
@@ -120,4 +262,365 @@ def test_states_list_is_cached_without_loading(chome, tmp_path, monkeypatch):
     launch.Library(cases, clearance).states()
     lib = launch.Library(cases, clearance)
     monkeypatch.setattr(lib, "data", lambda: pytest.fail("loaded the case file"))
-    assert lib.states() == ["Samplestate"]
+    assert lib.states() == ["Samplestate"] and lib.counts["Samplestate"] > 0
+
+
+def test_busy_port_is_refused_not_shared():
+    """On Windows the stdlib server would share a busy port; ours must fail so serve() falls back."""
+    a = launch._Server(("127.0.0.1", 0), launch._handler(launch.App("map")))
+    try:
+        with pytest.raises(OSError):
+            launch._Server(("127.0.0.1", a.server_address[1]), launch._handler(launch.App("map")))
+    finally:
+        a.server_close()
+
+
+# ---- plugins and nationwide ------------------------------------------------------------------
+def test_plugin_file_adds_notes_and_rebuilds(chome, tmp_path):
+    from coldmap import plugins
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    site = app.lib.build("Samplestate")
+    old = app.lib.stamp
+    r = app.plugin_action("example", {}, b"")
+    assert r["added"]["provides"] == [{"kind": "enricher", "name": "before-after"}]
+    assert "before-after" in plugins.enabled()["enrichers"]
+    assert app.lib.stamp != old and not app.lib.is_built("Samplestate")  # plugins changed: rebuild
+    site = app.lib.build("Samplestate")
+    rows = json.loads((site / "agg.json").read_text())["meta"]["findings"]["ensemble"]["0"]
+    notes = [n for r in rows for n in (r[13].get("plugins") or [])]
+    assert notes and all(n["by"] == "before-after" and "During:" in n["text"] for n in notes)
+
+    app.plugin_action("enable", {"kind": "enricher", "name": "before-after", "on": "0"}, b"")
+    assert "before-after" not in plugins.enabled()["enrichers"]
+    with pytest.raises(click.ClickException, match="rely on it"):
+        app.plugin_action("enable", {"kind": "enricher", "name": "county", "on": "0"}, b"")
+    app.plugin_action("remove", {"file": "before_after.py"}, b"")
+    assert plugins.files() == []
+
+
+def test_bad_plugin_files_are_refused_and_nothing_breaks(chome, tmp_path):
+    from coldmap import plugins
+    with pytest.raises(ValueError, match="valid Python"):
+        plugins.add("broken.py", "def (:\n")
+    with pytest.raises(ValueError, match="didn't register"):
+        plugins.add("empty.py", "x = 1\n")
+    with pytest.raises(ValueError, match="ImportError|ModuleNotFoundError"):
+        plugins.add("needs.py", "import not_a_real_module_xyz\n")
+    with pytest.raises(ValueError, match="simple name"):
+        plugins.add("../evil.py", "x = 1\n")
+    assert plugins.files() == [] and not list(plugins.folder().glob("*.py"))
+
+
+def test_starter_plugin_works_and_names_do_not_clash(chome):
+    from coldmap import plugins
+    from coldmap.enrichers import ENRICHERS
+    a = plugins.add(*plugins.starter())
+    b = plugins.add(*plugins.starter())
+    assert (a["file"], b["file"]) == ("my_plugin.py", "my_plugin_2.py")
+    assert {"my-plugin", "my-plugin-2"} <= set(ENRICHERS.names())
+    assert ENRICHERS.origin("my-plugin") == "file my_plugin.py"
+
+
+def test_models_change_marks_the_scan_out_of_date(chome, tmp_path):
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    app.national()
+    assert _wait(app).error is None and app.status()["national"]["stale"] is False
+    app.plugin_action("example", {}, b"")
+    assert app.status()["national"]["stale"] is True  # still shown, with a re-scan offer
+    assert app.flags()[1]
+
+
+def test_plugin_guide_ships_inside_the_app(chome, tmp_path, server):
+    """The guide is served by the app itself, so its link works offline and before any merge."""
+    cases, clearance = make_sample(tmp_path)
+    get, _ = server(launch.App("files", cases, clearance))
+    assert "<title>coldmap</title>" in get("/guide")[1]
+    guide = get("/guide.md")[1]
+    assert guide.startswith("# Plugins") and "../examples/before_after.py" in guide
+    assert "class BeforeAfter(Enricher)" in get("/guide/before_after.py")[1]
+    page = get("/static/app.js")[1]
+    assert 'href="/models/guide"' in page and "PLUGINS.md" not in page
+    assert "<script>" not in get("/models")[1]  # no inline scripts: the CSP allows only coldmap's own
+
+
+def test_your_datasets_describe_places_never_people(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, post = server(app)
+    post("/api/setup")
+    _wait(app)
+    flags = json.loads(get("/api/flags")[1])["flags"]
+    f = next(x for x in flags if x.get("county"))
+    county = f["county"]
+    name, st = county.rsplit(", ", 1)
+    text = "County,Year,Missing reports,Reporter email,Note\n" + "\n".join(
+        f'"{name} County, Samplestate",{y},{y % 5},someone{y}@example.org,checked' for y in range(f["start"] - 2, f["end"] + 3))
+    pv = post("/api/datasets/preview", body={"text": text})[1]
+    left = {c["name"]: c["left_out"] for c in pv["columns"] if c["left_out"]}
+    assert list(left) == ["Reporter email"]
+    assert pv["guess"] == {"place": "County", "level": "county", "time": "Year"}
+    ck = post("/api/datasets/check", body={"text": text, "place": "County", "level": "county", "time": "Year"})[1]
+    assert ck["places_matched"] == ck["rows"] > 0
+    m = post("/api/datasets/add", body={"name": "Missing reports", "text": text, "place": "County", "level": "county",
+                                         "time": "Year", "keep": ["Missing reports", "Note", "Reporter email"]})[1]
+    assert m["columns"] == ["Missing reports", "Note"] and "Reporter email" in m["left_out"]  # never stored
+    stored = (chome / "datasets" / "missing-reports" / "data.csv").read_text()
+    assert "@" not in stored and "Reporter" not in stored
+    assert "dataset:missing-reports" in app.lib.data().aux  # models can use it
+    d = json.loads(get(f"/api/flag/{f['id']}")[1])
+    mine = d["datasets"][0]
+    assert mine["name"] == "Missing reports" and mine["rows_total"] > 0 and mine["series"]
+    assert json.loads(get("/api/status")[1])["national"]["stale"] is True  # models may use it: re-scan offered
+    post("/api/datasets/remove?slug=missing-reports")
+    assert json.loads(get("/api/datasets")[1]) == []
+
+
+def test_map_places_counties_and_ships_its_assets(chome, tmp_path, server):
+    from coldmap.interfaces import research
+    assert research.county_fips("Multnomah, OR") == "41051"
+    assert research.county_fips("Baltimore city, MD") == "24510" and research.county_fips("Baltimore, MD") == "24005"
+    assert research.county_fips("De Kalb, GA") == "13089" and research.county_fips("Dona Ana, NM") == "35013"
+    assert research.county_fips("District of Columbia") == "11001"
+    cases, clearance = make_sample(tmp_path)
+    get, _ = server(launch.App("files", cases, clearance))
+    assert "d3js.org" in get("/vendor/d3.v7.min.js")[1][:200]
+    assert '"counties"' in get("/vendor/counties-10m.json")[1][:400]
+    with pytest.raises(urllib.error.HTTPError, match="404"):
+        get("/vendor/../launch.py")
+    m = json.loads(get("/api/map?sex=all")[1])
+    assert set(m) == {"counties", "fips", "unmatched"}
+
+
+def test_one_click_ai_connection(chome, tmp_path, monkeypatch):
+    from coldmap.interfaces import connect
+    cfg = tmp_path / "Claude" / "claude_desktop_config.json"
+    cfg.parent.mkdir()
+    # The mistake people make: a second {...} pasted below the first.
+    cfg.write_text('{\n  "preferences": {"sidebarMode": "chat"}\n}\n\n{\n  "mcpServers": {"other": {"command": "x"}}\n}\n')
+    monkeypatch.setattr(connect, "desktop_path", lambda: cfg)
+    server = {"command": "coldmap-mcp", "args": [], "env": {"COLDMAP_HOME": "h"}}
+    assert "more than one JSON object" in connect.desktop_status(server)["problem"]
+    r = connect.connect_desktop(server)
+    assert r["repaired"] and Path(r["backup"]).exists()
+    fixed = json.loads(cfg.read_text())  # one valid object now
+    assert fixed["preferences"] == {"sidebarMode": "chat"}
+    assert fixed["mcpServers"] == {"other": {"command": "x"}, "coldmap": server}
+    st = connect.desktop_status(server)
+    assert st["connected"] and st["current"] and st["problem"] is None
+
+
+def test_ai_check_starts_the_real_server(chome, tmp_path):
+    import shutil as sh
+    from coldmap.interfaces import connect
+    exe = Path(sys.executable).with_name("coldmap-mcp.exe" if os.name == "nt" else "coldmap-mcp")
+    if not exe.exists() or sh.which(str(exe)) is None and not exe.exists():
+        pytest.skip("coldmap-mcp isn't installed in this environment")
+    pytest.importorskip("mcp")
+    cases, _ = make_sample(tmp_path)
+    r = connect.test_server({"command": str(exe), "args": [], "env": {"COLDMAP_CASES": str(cases),
+                                                                        "COLDMAP_HOME": str(chome)}})
+    assert r["ok"], r
+    assert {"research_flags", "shortlist", "local_datasets"} <= set(r["tools"])
+
+
+def test_manage_models_settings_and_code(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, post = server(app)
+    view = json.loads(get("/api/plugins")[1])
+    scan = next(i for g in view["groups"] if g["kind"] == "detector" for i in g["items"] if i["name"] == "scan")
+    assert scan["doc"] and "Helper class" not in scan["doc"] and {p["name"] for p in scan["params"]} >= {"max_q", "levels"}
+    post("/api/plugins/param?detector=scan&name=max_q&value=0.05")
+    post("/api/plugins/param?detector=scan&name=levels&value=county,%20agency,%20msa")
+    from coldmap import plugins
+    assert plugins.enabled()["params"] == {"scan": {"max_q": 0.05, "levels": ["county", "agency", "msa"]}}
+    with pytest.raises(urllib.error.HTTPError, match="400"):
+        post("/api/plugins/param?detector=scan&name=max_q&value=lots")
+    app.national()
+    assert _wait(app).error is None  # the scan runs with the changed settings
+    assert json.loads((chome / "sites" / "_national" / "national.json").read_text())["meta"]["params"]["scan"]["max_q"] == 0.05
+    post("/api/plugins/reset?detector=scan")
+    assert plugins.enabled()["params"] == {}
+    assert json.loads(get("/api/status")[1])["national"]["stale"] is True
+    code = json.loads(get("/api/plugins/source?kind=detector&name=window")[1])
+    assert "class SlidingWindow" in code["code"]
+    with pytest.raises(urllib.error.HTTPError, match="400"):
+        post("/api/plugins/open?file=..%5Cevil.py")  # only files in the models folder
+
+
+def test_plugins_add_pages_and_flag_sections(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, post = server(app)
+    post("/api/setup")
+    _wait(app)
+    assert json.loads(get("/api/views")[1]) == []
+    before = app.status()["national"]
+    post("/api/plugins/example?name=agency_report.py")
+    views = {v["name"]: v for v in json.loads(get("/api/views")[1])}
+    assert views["agencies"]["place"] == "page" and views["agency-record"]["place"] == "flag"
+    assert app.status()["national"]["stale"] is before["stale"] is False  # views never make flags out of date
+    page = json.loads(get("/api/view/agencies?state=Samplestate&victims=all&min_killings=5")[1])
+    assert [b["type"] for b in page["blocks"]][:4] == ["stats", "text", "bars", "table"]
+    assert "<title>coldmap</title>" in get("/x/agencies")[1]
+    f = json.loads(get("/api/flags")[1])["flags"][0]
+    sec = json.loads(get(f"/api/flag/{f['id']}")[1])["sections"]
+    assert sec[0]["title"] == "Agency record" and sec[0]["blocks"][0]["type"] in ("table", "text")
+    post("/api/plugins/enable?kind=view&name=agencies&on=0")
+    assert [v["name"] for v in json.loads(get("/api/views")[1])] == ["agency-record"]
+    with pytest.raises(urllib.error.HTTPError, match="404"):
+        get("/api/view/agencies")
+
+
+def test_a_broken_view_shows_its_error_not_a_crash(chome, tmp_path, server):
+    from coldmap import plugins
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, _ = server(app)
+    plugins.add("broken_page.py", "from coldmap import VIEWS, View\n@VIEWS.register\nclass B(View):\n"
+                "    name = 'broken'\n    title = 'Broken'\n    def render(self, ctx):\n        return 1 / 0\n")
+    out = json.loads(get("/api/view/broken")[1])
+    assert out["blocks"][0]["type"] == "note" and "ZeroDivisionError" in out["blocks"][0]["text"]
+    page = plugins.add(*plugins.starter("page"))
+    assert page["provides"] == [{"kind": "view", "name": "my-page"}]
+    assert json.loads(get("/api/view/my-page?state=Samplestate")[1])["blocks"][0]["type"] == "stats"
+
+
+def test_only_this_computers_app_can_use_the_server(chome, tmp_path):
+    """DNS rebinding (a foreign Host), cross-site writes (a foreign Origin, no X-Coldmap) are refused."""
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(app))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
+    key = {"Cookie": f"coldmap_key_{port}={app.key}"}
+
+    def call(path, method="GET", **headers):
+        req = urllib.request.Request(base + path, method=method, headers={**key, **headers},
+                                     data=b"{}" if method == "POST" else None)
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, dict(r.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers)
+    try:
+        assert call("/api/status")[0] == 200
+        assert call("/api/status", Host=f"localhost:{port}")[0] == 200
+        assert call("/api/status", Host=f"attacker.example:{port}")[0] == 403          # rebinding
+        assert call("/", Host="attacker.example")[0] == 403
+        assert call("/api/plugins/starter", "POST", Host=f"attacker.example:{port}", **{"X-Coldmap": "1"})[0] == 403
+        assert call("/api/plugins/starter", "POST", Origin="https://attacker.example", **{"X-Coldmap": "1"})[0] == 403
+        assert call("/api/plugins/starter", "POST")[0] == 403                              # no X-Coldmap
+        assert not (chome / "plugins").exists()                                            # nothing was written
+        code, h = call("/flags")
+        assert code == 200 and "frame-ancestors 'none'" in h["Content-Security-Policy"]
+        assert h["X-Content-Type-Options"] == "nosniff"
+        assert call("/api/plugins/starter", "POST", Origin=base, **{"X-Coldmap": "1"})[0] == 200  # the app itself
+    finally:
+        httpd.shutdown()
+
+
+
+def test_other_methods_are_refused(chome, tmp_path, monkeypatch):
+    """HEAD used to fall through to the stdlib file server, answering for files in the launch folder."""
+    import http.client
+    (tmp_path / "secret.txt").write_text("x")
+    monkeypatch.chdir(tmp_path)
+    cases, clearance = make_sample(tmp_path)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(launch.App("files", cases, clearance)))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        for method in ("HEAD", "PUT", "DELETE", "OPTIONS", "PATCH"):
+            c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1])
+            c.request(method, "/secret.txt", headers={"Host": "attacker.example"})
+            assert c.getresponse().status == 405, method
+    finally:
+        httpd.shutdown()
+
+
+def test_plugins_are_reviewed_before_install(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    _, post = server(launch.App("files", cases, clearance))
+    bad = ("import subprocess\nfrom coldmap import ENRICHERS, Enricher\n@ENRICHERS.register\nclass X(Enricher):\n"
+           "    name = 'x'\n    def enrich(self, f, d):\n        subprocess.run(['calc'])\n        return f\n")
+    r = post("/api/plugins/review", body={"text": bad})[1]["review"]
+    assert r["registers"] == [{"registry": "ENRICHERS", "class": "X"}]
+    assert [f["what"] for f in r["flags"]] == ["other programs"]
+    assert not (chome / "plugins").exists()  # reviewing installs and runs nothing
+    with pytest.raises(urllib.error.HTTPError, match="400"):
+        post("/api/plugins/link?url=https://example.org/x.py")  # no install-from-link without review
+
+
+def test_only_the_browser_coldmap_opened_gets_in(chome, tmp_path):
+    """Other accounts and programs on this computer don't have the session key."""
+    import http.client
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(app))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+
+    def req(method, path, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", port)
+        c.request(method, path, body=b"{}" if method == "POST" else None,
+                  headers={"Host": f"127.0.0.1:{port}", **(headers or {})})
+        r = c.getresponse()
+        return r.status, dict(r.getheaders()), r.read()
+    try:
+        assert req("GET", "/api/status")[0] == 401                                   # no key
+        assert req("GET", "/flags")[0] == 401
+        assert req("POST", "/api/plugins/starter", {"X-Coldmap": "1"})[0] == 401
+        assert req("GET", "/api/status", {"Cookie": f"coldmap_key_{port}=wrong"})[0] == 401
+        assert req("GET", "/flags?key=wrong")[0] == 401
+        code, h, _ = req("GET", f"/flags?state=Ohio&key={app.key}")                  # the link coldmap opens
+        assert code == 303 and h["Location"] == "/flags?state=Ohio"                     # key leaves the address
+        assert "HttpOnly" in h["Set-Cookie"] and "SameSite=Strict" in h["Set-Cookie"]
+        cookie = {"Cookie": h["Set-Cookie"].split(";")[0]}
+        assert req("GET", "/api/status", cookie)[0] == 200
+        assert req("POST", "/api/plugins/starter", {"X-Coldmap": "1", **cookie})[0] == 200
+        assert launch.App("files", cases, clearance).key != app.key                    # a new key every run
+    finally:
+        httpd.shutdown()
+
+
+def test_round_three_hardening(chome, tmp_path, server, monkeypatch):
+    from coldmap import datasets, plugins
+    # The browser is started with a private local file, never the key-carrying link.
+    opened = []
+    monkeypatch.setattr(launch.webbrowser, "open", lambda u: opened.append(u))
+    uri = launch._opener("http://127.0.0.1:1/?key=SECRET")
+    assert uri.startswith("file:") and "SECRET" not in uri
+    page = (chome / "open.html").read_text()
+    assert "SECRET" in page and 'http-equiv="refresh"' in page
+    if os.name != "nt":
+        assert (chome / "open.html").stat().st_mode & 0o077 == 0  # this user only
+    # Spreadsheet formulas in a shared dataset are stored as text.
+    assert datasets._no_formula("=HYPERLINK(\"http://x\",\"y\")") == "'=HYPERLINK(\"http://x\",\"y\")"
+    assert datasets._no_formula("ok") == "ok" and datasets._no_formula("-cmd") == "'-cmd"
+    # A plugin that replaces part of coldmap is pointed out in the review.
+    r = plugins.review("import coldmap.datasets as ds\nds.identifying = lambda df: {}\n")
+    assert r["flags"] and r["flags"][0]["what"].startswith("coldmap itself")
+    # Fonts come from coldmap; the page may load nothing from anywhere else.
+    cases, clearance = make_sample(tmp_path)
+    get, _ = server(launch.App("files", cases, clearance))
+    assert "@font-face" in get("/static/fonts.css")[1]
+    html = get("/flags")[1]
+    assert "googleapis" not in html and "/static/fonts.css" in html
+
+
+def test_bundled_third_party_files_are_unchanged():
+    """D3, topojson-client, the county shapes and the fonts must match their recorded checksums."""
+    import hashlib
+    vendor = Path(launch.__file__).with_name("explorer") / "vendor"
+    sums = json.loads((vendor / "SHA256SUMS.json").read_text())
+    for name, want in sums.items():
+        if name.startswith("_"):
+            continue
+        b = (vendor / name).read_bytes()
+        if name.endswith((".js", ".json")):
+            b = b.replace(b"\r\n", b"\n")
+        assert hashlib.sha256(b).hexdigest() == want, f"{name} changed"
+    assert set(launch.STATIC.values()) >= {vendor / n for n in sums if not n.startswith("_")}

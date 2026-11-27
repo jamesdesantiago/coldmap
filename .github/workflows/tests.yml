@@ -1,0 +1,40 @@
+# Runs the test suite (including the security tests in tests/test_launch.py) on every push and
+# pull request. Read-only: this workflow can't write to the repository or publish anything.
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e ".[dev,mcp]"
+      - run: python -m pytest -q
+
+  # Known vulnerabilities in coldmap's dependencies (PyPI advisory database). Fails the check if any.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install ".[mcp]" pip-audit
+      - run: pip-audit --skip-editable
