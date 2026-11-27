@@ -85,6 +85,40 @@ class Streak(Detector):
 
 Leave `query.state` alone: it's `None` in a nationwide scan, and `data.select` handles both cases. Before you share a detector, run the benchmark and the false-alarm controls ([CONTRIBUTING.md](../../CONTRIBUTING.md#add-a-detector)). A detector that catches more but invents more isn't an improvement.
 
+## Add a page or a section to the app
+
+A **view** adds to the app itself: a new page in the sidebar (`place = "page"`), or a new section on every flag's page (`place = "flag"`). You write it in Python and return building blocks; the app draws them in its own style, so a view needs no web code and can't run scripts in the app.
+
+```python
+from coldmap import VIEWS, View, blocks as b
+
+@VIEWS.register
+class Agencies(View):
+    name = "agencies"
+    title = "Agencies"                                   # what the sidebar shows
+    summary = "Police agencies ranked by their gap below the state"
+    place = "page"                                       # or "flag"
+    group = "Research"                                   # or "Extend"
+    inputs = [b.state(default="Ohio"), b.choice("victims", ["Female", "Male"], "Female")]
+
+    def render(self, ctx, state="Ohio", victims="Female"):
+        c = ctx.cases[(ctx.cases.state == state) & (ctx.cases.vic_sex == victims)]
+        g = c.groupby("agency").solved.agg(["size", "mean"]).sort_values("mean").head(10)
+        return [
+            b.stats([("Agencies", len(g)), ("Killings", len(c))]),
+            b.bars([(a, round(r * 100)) for a, r in g["mean"].items()], title="Share solved", unit="%"),
+            b.table(["Agency", "Killings"], [[a, int(n)] for a, n in g["size"].items()]),
+        ]
+```
+
+- **Inputs** (`b.state`, `b.choice`, `b.number`, `b.text_input`) become controls at the top of the page; their values are passed to `render()`.
+- **Blocks**: `b.heading`, `b.text` (with **bold** and `code`), `b.note`, `b.stats`, `b.table` (give `flag_ids` to make rows open a flag), `b.bars`, `b.line`, `b.flags`.
+- **ctx** has `ctx.cases` (the case table), `ctx.flags` (the ranked flags), `ctx.decisions` (the shortlist) and `ctx.datasets` (your datasets). A flag section's `render(self, ctx, flag)` also gets the flag.
+- If a view fails, the app shows its error in place of its content; nothing else breaks.
+- Views can be switched on and off on the Models page, and doing so never makes your flags out of date. AI assistants can run your pages too (the `app_views` tool).
+
+The example [`agency_report.py`](../examples/agency_report.py) adds both: an Agencies page and an "Agency record" section on every flag. In the app: Models > Add a model > Example: Agency report, or start from Models > Add a model > Page starter.
+
 ## Use your own data
 
 On the **Data** page you can add datasets of your own: a CSV keyed by a place (county, agency or state) and a time (a year or a date), with any measures or notes beside them. coldmap keeps a cleaned copy on this computer and hands it to every model:

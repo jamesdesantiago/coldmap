@@ -269,6 +269,17 @@ th[aria-sort]{color:var(--ink)}
 .params tr.changed td:first-child code{background:var(--hl);border-radius:2px;padding:0 3px}
 .code{max-height:440px;overflow:auto;white-space:pre;font:12px/1.55 var(--mono)}
 
+/* plugin pages and sections */
+.nav .plug-ico{color:var(--mute)}
+.vbar{display:flex;flex-wrap:wrap;align-items:end;gap:10px 14px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--surf)}
+.vbar label{display:grid;gap:3px;font-size:11px;font-weight:700;font-stretch:90%;text-transform:uppercase;letter-spacing:.06em;color:var(--mute)}
+.vbar .inp,.vbar .sel{text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink)}
+.vchart{background:var(--surf);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+.vchart svg{display:block;width:100%;max-width:760px}
+.vchart text{font:11px var(--mono);fill:var(--mute)}
+.vchart .t{font:600 12.5px Archivo,sans-serif;fill:var(--ink)}
+.vsec{border:1px solid var(--line);border-radius:6px;background:var(--surf);padding:10px 12px;margin:0 0 10px}
+
 /* your datasets */
 .dsform{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin:12px 0}
 .dsform label{display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600}
@@ -353,10 +364,12 @@ pre{background:var(--surf);border:1px solid var(--line);border-radius:5px;paddin
   <a class="nav" href="/map" data-nav data-sec="map"><svg viewBox="0 0 16 16"><path d="M1.5 3.5l4-1.5 5 2 4-1.5v10l-4 1.5-5-2-4 1.5z"/><path d="M5.5 2v10M10.5 4v10"/></svg>Map</a>
   <a class="nav" href="/shortlist" data-nav data-sec="shortlist"><svg viewBox="0 0 16 16"><path d="M4 2h8v12l-4-2.8L4 14z"/></svg>Shortlist<span class="ct" id="ctShort"></span></a>
   <a class="nav" href="/places" data-nav data-sec="places"><svg viewBox="0 0 16 16"><path d="M8 14s4.5-4.2 4.5-7.5a4.5 4.5 0 10-9 0C3.5 9.8 8 14 8 14z"/><circle cx="8" cy="6.5" r="1.6"/></svg>Places</a>
+  <div id="navResearchX"></div>
   <div class="grp">Extend</div>
   <a class="nav" href="/models" data-nav data-sec="models"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/><path d="M7 4.5h2.5A1.5 1.5 0 0111 6v3M9 11.5H6.5A1.5 1.5 0 015 10V7"/></svg>Models<span class="ct" id="ctModels"></span></a>
   <a class="nav" href="/ai" data-nav data-sec="ai"><svg viewBox="0 0 16 16"><path d="M2.5 4.5a2 2 0 012-2h7a2 2 0 012 2v5a2 2 0 01-2 2H7l-3 2.5v-2.5h0a2 2 0 01-1.5-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/></svg>AI assistants</a>
   <a class="nav" href="/methods" data-nav data-sec="methods"><svg viewBox="0 0 16 16"><path d="M3 2.5h7l3 3v8H3z"/><path d="M10 2.5v3h3M5.5 8.5h5M5.5 11h3.5"/></svg>Methods</a>
+  <div id="navExtendX"></div>
   <div class="foot">
    <a class="nav" href="/data" data-nav data-sec="data" style="margin:0 -8px"><svg viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5" ry="2"/><path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/></svg>Data<span class="ct" id="ctData"></span></a>
    <div class="themes" role="group" aria-label="Theme"><button data-theme-set="light">Light</button><button data-theme-set="dark">Dark</button></div>
@@ -461,12 +474,12 @@ function render(){
  const r=route();
  document.querySelectorAll('.nav').forEach(a=>{if(a.dataset.sec===r.sec)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
  const t=document.documentElement.dataset.theme||'light';document.querySelectorAll('[data-theme-set]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.themeSet===t));
- renderStatus();
+ renderStatus();renderViewNav(r);
  const st=S.st;
  if(!st){$('main').innerHTML=`<div class="view"><div class="page"><p class="${S.err?'msg err':'muted'}">${esc(S.err||'Opening coldmap…')}</p></div></div>`;return}
- const research=['flags','shortlist','places','map'].includes(r.sec);
+ const research=['flags','shortlist','places','map','x'].includes(r.sec);
  if(research&&!st.national)return renderGate();
- ({flags:renderFlags,map:renderMap,shortlist:renderShortlist,places:renderPlaces,models:renderModels,ai:renderAI,methods:renderMethods,data:renderData}[r.sec]||renderFlags)(r);
+ ({flags:renderFlags,map:renderMap,x:renderViewPage,shortlist:renderShortlist,places:renderPlaces,models:renderModels,ai:renderAI,methods:renderMethods,data:renderData}[r.sec]||renderFlags)(r);
  document.title=({flags:'Flags',map:'Map',shortlist:'Shortlist',places:'Places',models:'Models',ai:'AI assistants',methods:'Methods',data:'Data'}[r.sec]||'coldmap')+' · coldmap';
 }
 function setMain(key,html){const m=$('main');if(m.dataset.key!==key){m.dataset.key=key;m.innerHTML=html;return true}return false}
@@ -565,6 +578,7 @@ async function renderFlag(id){
   ${decideBox(id,f,dec)}
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
   ${(f.plugins||[]).length?`<h3>From plugins</h3>${f.plugins.map(n=>`<div class="plug"><b>${esc(n.title)}</b> <span class="by">${esc(n.by)}</span><p style="margin:4px 0 0">${esc(n.text)}</p></div>`).join('')}`:''}
+  ${(d.sections||[]).map(x=>`<h3>${esc(x.title)} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">from a plugin</span></h3><div class="vsec">${renderBlocks(x.blocks)}</div>`).join('')}
   ${(d.datasets||[]).length?`<h3>Your data <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">from datasets you added, matched to this place</span></h3>${d.datasets.map(x=>mineView(x,f,d)).join('')}`:''}
   ${(f.data||[]).length?`<h3>Known problems in the data</h3><div class="notes"><ul>${f.data.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></div>`:''}
   ${f.cases?`<h3>Victims, in aggregate</h3><p>${esc(f.cases)}</p>`:''}
@@ -841,6 +855,64 @@ function mapPlay(){
  MP.timer=setInterval(()=>{MP.y=[y,Math.min(Y1,y+win-1)];updateMap();y++;if(y>Y1-win+1){clearInterval(MP.timer);MP.timer=null;$('mPlay').innerHTML='<svg viewBox="0 0 12 12"><path d="M3 2l7 4-7 4z"/></svg>'}},420);
 }
 
+// ---- pages and sections from plugins -------------------------------------------------------
+async function loadViews(){try{S.views=await api('/api/views')}catch(e){S.views=[]}render()}
+function renderViewNav(r){
+ if(!S.views){if(!S.viewsLoading){S.viewsLoading=1;loadViews()}return}
+ const ico='<svg viewBox="0 0 16 16" class="plug-ico"><path d="M6 2.5h4v2a1.5 1.5 0 003 0v-0h1.5v4h-2a1.5 1.5 0 000 3h2v2.5h-12v-12h3.5"/></svg>';
+ const item=v=>`<a class="nav" href="/x/${encodeURIComponent(v.name)}" data-nav data-sec="x:${esc(v.name)}"${r.sec==='x'&&r.a===v.name?' aria-current="page"':''} title="${esc(v.summary)} (from a plugin)">${ico}${esc(v.title)}</a>`;
+ const pages=S.views.filter(v=>v.place==='page');
+ const res=pages.filter(v=>v.group!=='Extend').map(item).join(''),ext=pages.filter(v=>v.group==='Extend').map(item).join('');
+ if($('navResearchX')._h!==res){$('navResearchX').innerHTML=res;$('navResearchX')._h=res}
+ if($('navExtendX')._h!==ext){$('navExtendX').innerHTML=ext;$('navExtendX')._h=ext}
+}
+function mdLite(t){return esc(t).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>')}
+const fmtV=v=>typeof v==='number'?nf.format(v):v==null?'':String(v);
+const SER=['var(--accent)','var(--red)','var(--solved)','var(--amber)'];
+function renderBlocks(bs){return (bs||[]).map(b=>{
+ if(b.type==='heading')return `<h3>${esc(b.text)}</h3>`;
+ if(b.type==='text')return `<p>${mdLite(b.text)}</p>`;
+ if(b.type==='note')return `<p class="msg ${b.tone==='warn'?'warn':b.tone==='ok'?'ok':''}" style="margin:0 0 12px">${mdLite(b.text)}</p>`;
+ if(b.type==='stats')return `<div class="quote" style="grid-template-columns:repeat(${Math.max(1,Math.min(5,b.items.length))},minmax(0,1fr))">${b.items.map(([l,v,t])=>`<div class="${t==='neg'?'neg':''}"><b>${esc(fmtV(v))}</b><span>${esc(l)}</span></div>`).join('')}</div>`;
+ if(b.type==='table'){const num=new Set(b.numeric||[]);return `<div class="cases" style="max-height:520px;margin:0 0 12px"><table><thead><tr>${b.columns.map(c=>`<th class="${num.has(c)?'n':''}">${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.rows.map((r,i)=>{const fid=b.flags&&b.flags[i];return `<tr${fid?` class="click" data-href="/flags/${esc(fid)}" title="Open this flag"`:''}>${r.map((v,j)=>`<td class="${num.has(b.columns[j])?'n':''}">${esc(fmtV(v))}</td>`).join('')}</tr>`}).join('')}</tbody></table></div>`}
+ if(b.type==='bars'){const d=b.data.filter(x=>typeof x[1]==='number');if(!d.length)return '';const W=640,L=200,rh=22,H=d.length*rh+(b.title?26:6),mx=Math.max(...d.map(x=>Math.abs(x[1])))||1;
+  return `<div class="vchart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(b.title||'Bar chart')}">${b.title?`<text class="t" x="0" y="14">${esc(b.title)}</text>`:''}${d.map(([k,v],i)=>{const y=(b.title?24:4)+i*rh,w=(W-L-70)*Math.abs(v)/mx;
+   return `<text x="${L-8}" y="${y+14}" text-anchor="end">${esc(k.length>28?k.slice(0,27)+'…':k)}</text><rect x="${L}" y="${y+3}" width="${Math.max(1,w)}" height="${rh-8}" rx="2" fill="${v<0?'var(--red)':'var(--solved)'}" data-tip="${esc(`<b>${k}</b>\n${fmtV(v)}${b.unit?' '+b.unit:''}`)}"/><text x="${L+w+6}" y="${y+14}">${esc(fmtV(v))}${b.unit?' '+esc(b.unit):''}</text>`}).join('')}</svg></div>`}
+ if(b.type==='line'){const xs=b.x,W=640,H=220,L=46,R=10,T=b.title?28:8,B=22,all=b.series.flatMap(s=>s[1]).filter(v=>typeof v==='number');if(!all.length||xs.length<2)return '';
+  const lo=Math.min(0,...all),hi=Math.max(...all)||1,xx=i=>L+(W-L-R)*i/(xs.length-1),yy=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo||1));
+  return `<div class="vchart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(b.title||'Line chart')}">${b.title?`<text class="t" x="0" y="14">${esc(b.title)}</text>`:''}
+   <text x="${L-6}" y="${T+4}" text-anchor="end">${esc(fmtV(hi))}</text><text x="${L-6}" y="${H-B}" text-anchor="end">${esc(fmtV(lo))}</text><line x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}" stroke="var(--line2)"/>
+   ${[0,Math.floor((xs.length-1)/2),xs.length-1].map(i=>`<text x="${xx(i)}" y="${H-5}" text-anchor="middle">${esc(fmtV(xs[i]))}</text>`).join('')}
+   ${b.series.map(([nm,vals],si)=>`<path d="${vals.map((v,i)=>typeof v==='number'?`${i&&typeof vals[i-1]==='number'?'L':'M'}${xx(i).toFixed(1)},${yy(v).toFixed(1)}`:'').join('')}" fill="none" stroke="${SER[si%4]}" stroke-width="2"/>${vals.map((v,i)=>typeof v==='number'?`<circle cx="${xx(i).toFixed(1)}" cy="${yy(v).toFixed(1)}" r="5" fill="transparent" data-tip="${esc(`<b>${fmtV(xs[i])}</b>\n${nm}: ${fmtV(v)}${b.unit?' '+b.unit:''}`)}"/>`:'').join('')}`).join('')}</svg>
+   ${b.series.length>1?`<div class="key">${b.series.map(([nm],si)=>`<span><i style="background:${SER[si%4]}"></i>${esc(nm)}</span>`).join('')}</div>`:''}</div>`}
+ if(b.type==='flags'){const fs=b.ids.map(id=>(S.flags||[]).find(f=>f.id===id)).filter(Boolean);return `${b.title?`<h3>${esc(b.title)}</h3>`:''}<table style="margin:0 0 12px"><tbody>${fs.map(f=>`<tr class="click" data-href="/flags/${f.id}"><td><span class="tag ${f.confidence}">${CONF[f.confidence]}</span></td><td>${esc(f.place)}, ${esc(f.state)}</td><td class="muted">${esc(String(f.weapon).toLowerCase())} · ${who(f.sex)} · ${yrs(f.start,f.end)}</td><td class="n" style="color:var(--red)">${gapTxt(gapOf(f))}</td></tr>`).join('')||'<tr><td class="muted">No flags.</td></tr>'}</tbody></table>`}
+ return '';
+}).join('')}
+function viewInputs(v){
+ const vals=S.vin[v.name]||(S.vin[v.name]=Object.fromEntries(v.inputs.map(i=>[i.name,i.default??''])));
+ const states=[...new Set((S.flags||[]).map(f=>f.state).filter(Boolean))].sort();
+ return v.inputs.map(i=>{const val=vals[i.name]??'';
+  if(i.type==='state')return `<label>${esc(i.label)}<select class="sel" data-vin="${esc(i.name)}">${states.map(st=>`<option${st===val?' selected':''}>${esc(st)}</option>`).join('')}</select></label>`;
+  if(i.type==='choice')return `<label>${esc(i.label)}<select class="sel" data-vin="${esc(i.name)}">${i.options.map(([o,t])=>`<option value="${esc(o)}"${String(o)===String(val)?' selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
+  if(i.type==='number')return `<label>${esc(i.label)}<input class="inp" type="number" data-vin="${esc(i.name)}" value="${esc(val)}"${i.min!=null?` min="${i.min}"`:''}${i.max!=null?` max="${i.max}"`:''}${i.step!=null?` step="${i.step}"`:''} style="width:110px"></label>`;
+  return `<label>${esc(i.label)}<input class="inp" data-vin="${esc(i.name)}" value="${esc(val)}" placeholder="${esc(i.placeholder||'')}"></label>`}).join('');
+}
+async function runView(name){
+ const v=(S.views||[]).find(x=>x.name===name);if(!v)return;S.vres[name]={loading:true};render();
+ try{S.vres[name]=await api('/api/view/'+encodeURIComponent(name)+'?'+new URLSearchParams(S.vin[name]||{}))}catch(e){S.vres[name]={error:e.message}}render();
+}
+S.vin={};S.vres={};
+function renderViewPage(r){
+ if(!S.views){setMain('vload',`<div class="view"><div class="page"><span class="spin"></span> Loading…</div></div>`);return}
+ const v=S.views.find(x=>x.name===r.a);
+ if(!v){setMain('vnone',`<div class="view"><div class="page"><h1>Page not found</h1><p class="muted">No plugin page called “${esc(r.a)}” is switched on. See <a href="/models" data-nav>Models</a>.</p></div></div>`);return}
+ const res=S.vres[v.name];if(!res){runView(v.name)}
+ const body=!res||res.loading?`<p><span class="spin"></span> Working…</p>`:res.error?`<p class="msg err">${esc(res.error)}</p>`:renderBlocks(res.blocks);
+ setMain('x:'+v.name,`<div class="toolbar"><h1>${esc(v.title)}</h1><span class="muted" style="font-size:12.5px">${esc(v.summary)}</span><span style="flex:1"></span><span class="tag">plugin · ${esc(v.origin.replace(/^file /,''))}</span><a class="btn" href="/models?m=view|${encodeURIComponent(v.name)}" data-nav>Manage</a></div>${v.inputs.length?`<div class="vbar" id="vbar"></div>`:''}<div class="view"><div class="page" id="vbody"></div></div>`);
+ if(v.inputs.length){const h=viewInputs(v);if($('vbar')._h!==h){$('vbar').innerHTML=h;$('vbar')._h=h}}
+ if($('vbody')._h!==body){$('vbody').innerHTML=body;$('vbody')._h=body}
+}
+
 // ---- shortlist -------------------------------------------------------------------------------
 function renderShortlist(){
  const all=Object.values(S.dec);
@@ -912,7 +984,7 @@ async function plugin(action,params,body){
    S.mAdd=false;if(pr)S.mSel={kind:pr.kind,name:pr.name};if(action==='starter')post('/api/plugins/open?file='+encodeURIComponent(j.added.file)).catch(()=>{})}
   else if(action==='remove'){S.plMsg={ok:1,html:'Removed.'};S.mSel=null}
   else S.plMsg={ok:1,html:action==='param'||action==='reset'?'Setting saved. Re-scan every state to apply it to your flags.':'Saved. Re-scan every state to apply it to your flags.'};
-  S.mCode=null;
+  S.mCode=null;S.views=null;S.viewsLoading=0;S.vres={};S.detail={};
  }catch(e){S.plMsg={ok:0,html:esc(e.message)}}
  await poll();
 }
@@ -936,6 +1008,7 @@ function renderModels(r){
  const list=`${bad.length?`<div class="mgrp"><span>Need attention</span><span>${bad.length}</span></div>${bad.map(f=>`<button class="mrow bad" data-msel="file|${esc(f.file)}" aria-selected="${S.mSel&&S.mSel.name===f.file}"><span class="n">${esc(f.file)}</span><span class="s">Couldn't load: ${esc(f.error)}</span></button>`).join('')}`:''}
   <div class="mgrp"><span>Find flags · detectors</span><span>${on('detector')} on</span></div>${det.map(i=>row('detector',i)).join('')||'<p class="empty">No match.</p>'}
   <div class="mgrp"><span>Add context · enrichers</span><span>${on('enricher')} on</span></div>${enr.map(i=>row('enricher',i)).join('')||'<p class="empty">No match.</p>'}
+  <div class="mgrp"><span>App pages and sections · views</span><span>${on('view')} on</span></div>${grp('view').items.filter(match).map(i=>row('view',i)).join('')||'<p class="empty" style="padding:12px 14px;text-align:left">None yet. Add the Agency report example, or create a page starter.</p>'}
   ${others.map(({g,items})=>`<div class="mgrp"><span>${ALSO[g.kind]}</span><span>${items.length}</span></div>${items.map(i=>row(g.kind,i)).join('')}`).join('')}`;
  const banner=(n&&n.stale?`<div class="row" style="padding:8px 16px;border-bottom:1px solid var(--line);background:color-mix(in oklab,var(--amber) 9%,var(--surf));font-size:13px">Your flags were made with different models or settings. <button class="btn" id="rescan"${busy?' disabled':''}>Re-scan every state</button><span class="muted">about 5 minutes</span></div>`:'')+
   (S.plMsg?`<div style="padding:8px 16px;border-bottom:1px solid var(--line)"><span class="msg ${S.plMsg.ok?'ok':'err'}" role="${S.plMsg.ok?'status':'alert'}" style="display:block">${S.plMsg.html}</span></div>`:'')+
@@ -951,10 +1024,12 @@ function modelAdd(pl,busy){
  const dis=busy?' disabled':'';
  return `<div class="fpage"><h1>Add a model</h1><p class="lede">A model is Python code that runs on your computer with access to your files. Add only ones from people you trust, and read the file first.</p>
   <ul class="plist">
-   <li><span class="t">Example: Before &amp; after</span><span class="d">Solve rates in the years before and after each flag, to tell a short drop from a long-running problem. Written as a tutorial: <a href="/guide/before_after.py" target="_blank" rel="noopener">read its code</a>.</span><span class="a">${pl.example.added?'<span class="tag kept">added</span>':`<button class="btn" data-pa="example"${dis}>Add</button>`}</span></li>
+   ${[['before_after.py','Example: Before &amp; after','Adds context: solve rates in the years before and after each flag, to tell a short drop from a long-running problem.'],
+      ['agency_report.py','Example: Agency report','Adds a page and a section: an Agencies page ranking police agencies by their gap below the state, and an “Agency record” section on every flag.']].map(([f,t,d])=>{const ex=(pl.examples||[]).find(x=>x.file===f)||{};
+     return `<li><span class="t">${t}</span><span class="d">${d} Written as a tutorial: <a href="/guide/${f}" target="_blank" rel="noopener">read its code</a>.</span><span class="a">${ex.added?'<span class="tag kept">added</span>':`<button class="btn" data-pa="example" data-pname="${f}"${dis}>Add</button>`}</span></li>`}).join('')}
    <li><span class="t">A file someone shared</span><span class="d">A single <code>.py</code> file.</span><span class="a"><input type="file" id="pFile" accept=".py" hidden><button class="btn" id="pPick"${dis}>Choose file…</button></span></li>
    <li><span class="t">From a link</span><span class="d"><span class="row"><input class="inp" id="pUrl" type="url" placeholder="https://github.com/…/my_model.py" aria-label="Link to a model file" style="flex:1"><button class="btn" id="pLink"${dis}>Add</button></span></span></li>
-   <li><span class="t">Write your own</span><span class="d">A starter file with each part explained, in your models folder. It opens in your editor.</span><span class="a"><button class="btn" data-pa="starter"${dis}>Create starter</button></span></li>
+   <li><span class="t">Write your own</span><span class="d">A starter file with each part explained, in your models folder. It opens in your editor. Start from a model that adds context to flags, or from a new page for the app.</span><span class="a"><button class="btn" data-pa="starter" data-pkind="enricher"${dis}>Context starter</button><button class="btn" data-pa="starter" data-pkind="page"${dis}>Page starter</button></span></li>
   </ul><div class="row" style="margin-top:14px"><button class="btn" data-popen="">Open your models folder</button><button class="btn" id="mAddClose">Done</button></div></div>`;
 }
 function modelDetail(pl,busy){
@@ -978,7 +1053,9 @@ function modelDetail(pl,busy){
  return `<div class="fpage">
   <div class="row" style="justify-content:space-between"><h1 style="font-family:var(--mono);font-size:19px">${esc(i.name)}</h1>
    ${i.on==null?'':i.locked?'<span class="tag">always on</span>':`<label class="row" style="gap:8px;font-weight:600">${i.on?'On':'Off'} <span class="sw" role="switch" tabindex="0" aria-checked="${i.on}" aria-label="Use ${esc(i.name)}" data-kind="${sel.kind}" data-name="${esc(i.name)}"></span></label>`}</div>
-  <div class="row" style="margin:4px 0 10px"><span class="tag">${esc({detector:'finds flags',enricher:'adds context'}[sel.kind]||sel.kind)}</span>${i.tier?`<span class="tag">${esc(i.tier)}</span>`:''}<span class="tag${file?' kept':''}">${esc(file?'your file: '+file:i.origin)}</span></div>
+  ${sel.kind==='view'&&i.place==='page'&&i.on?`<p><a class="btn primary" href="/x/${encodeURIComponent(i.name)}" data-nav>Open the page</a></p>`:''}
+  ${sel.kind==='view'?`<p class="muted" style="font-size:12.5px">${i.place==='page'?`Adds a page to the sidebar, under ${esc(i.group)}.`:'Adds a section to every flag\'s page.'} Switching a view on or off doesn't change your flags.</p>`:''}
+  <div class="row" style="margin:4px 0 10px"><span class="tag">${esc({detector:'finds flags',enricher:'adds context',view:'adds to the app'}[sel.kind]||sel.kind)}</span>${i.tier?`<span class="tag">${esc(i.tier)}</span>`:''}<span class="tag${file?' kept':''}">${esc(file?'your file: '+file:i.origin)}</span></div>
   <p><b>${esc(i.summary)}</b></p>${i.doc?`<div class="notes">${esc(i.doc).split(/\n\s*\n/).map(x=>`<p style="white-space:pre-line">${x}</p>`).join('')}</div>`:''}
   ${effect?`<h3>In your research</h3><p>${effect}</p>`:''}
   ${ptable}
@@ -991,7 +1068,7 @@ async function renderGuide(){
  setMain('guide',`<div class="view"><div class="page"><div class="crumb"><a href="/models" data-nav>Models</a> › <b>Plugin guide</b></div><article class="doc" style="margin-top:12px">${S.guide}</article></div></div>`);
 }
 const REPO='https://github.com/jamesdesantiago/coldmap/blob/main/';
-function mdHref(h){if(/^https?:/.test(h))return h;if(h==='../examples/before_after.py')return '/guide/before_after.py';return REPO+h.replace(/^(\.\.\/)+/,'')}
+function mdHref(h){if(/^https?:/.test(h))return h;{const m=h.match(/^\.\.\/examples\/([a-z_]+\.py)$/);if(m)return '/guide/'+m[1]}return REPO+h.replace(/^(\.\.\/)+/,'')}
 function mdText(t){return t.split(/(`[^`]+`)/).map(p=>/^`[^`]+`$/.test(p)?`<code>${esc(p.slice(1,-1))}</code>`:esc(p).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>')).join('')}
 function mdInline(t){const links=[];t=t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(m,txt,href)=>{const u=mdHref(href),ext=/^https?:|\.py$/.test(u);links.push(`<a href="${esc(u)}"${ext?' target="_blank" rel="noopener"':''}>${mdText(txt)}</a>`);return `\u0000${links.length-1}\u0000`});return mdText(t).replace(/\u0000(\d+)\u0000/g,(m,i)=>links[+i])}
 function md(src){const lines=src.replace(/\r/g,'').split('\n');let out='',i=0;const para=[];const flush=()=>{if(para.length){out+=`<p>${mdInline(para.join(' '))}</p>`;para.length=0}};
@@ -1134,7 +1211,7 @@ document.addEventListener('click',async e=>{
  if(t.id==='aiConnect'){S.aiConn='run';render();try{const r=await post('/api/ai/connect');S.aiConn=r;S.ai.desktop_status=r.status}catch(err){S.aiConn={error:err.message}}render();return}
  if(t.id==='aiCode'){S.aiCode='run';render();try{S.aiCode=await post('/api/ai/claude-code')}catch(err){S.aiCode={ok:false,error:err.message}}render();return}
  if(t.dataset.copy){navigator.clipboard.writeText($(t.dataset.copy).textContent).then(()=>toast('Copied'));return}
- if(t.dataset.pa){plugin(t.dataset.pa);return}
+ if(t.dataset.pa){plugin(t.dataset.pa,t.dataset.pname?{name:t.dataset.pname}:t.dataset.pkind?{kind:t.dataset.pkind}:null);return}
  if(t.dataset.msel){const [kind,...rest]=t.dataset.msel.split('|');if(e.target.closest('.sw'))return;S.mSel={kind,name:rest.join('|')};S.mAdd=false;render();return}
  if(t.id==='mAddBtn'){S.mAdd=true;render();return}
  if(t.id==='mAddClose'){S.mAdd=false;render();return}
@@ -1177,6 +1254,7 @@ document.addEventListener('change',e=>{
  if(t.id==='fState'){S.f.state=t.value;S.f.county='';S.limit=200;render()}
  if(t.id==='fCounty'){S.f.county=t.value;render()}
  if(t.id==='mMetric'){MP.metric=t.value;updateMap()}
+ if(t.dataset&&t.dataset.vin){const r=route();S.vin[r.a]={...(S.vin[r.a]||{}),[t.dataset.vin]:t.value};runView(r.a);return}
  if(t.id==='mLinks'){MP.links=t.checked;updateMap()}
  if((t.id==='wbY0'||t.id==='wbY1')&&S.sel){const w=wbOf(S.sel);w[t.id==='wbY0'?'y0':'y1']=+t.value;if(w.y0>w.y1)[w.y0,w.y1]=[w.y1,w.y0];renderWB(S.sel)}
  if(t.id==='fKind'){S.f.kind=t.value;render()}

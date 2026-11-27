@@ -202,6 +202,26 @@ def local_datasets(place: str | None = None, start: int | None = None, end: int 
     return {"place": place, "matches": out, "ethics": ETHICS}
 
 
+@mcp.tool()
+def app_views(name: str | None = None, inputs: dict | None = None) -> dict:
+    """Pages that plugins add to the coldmap app. Without `name`, lists them and their inputs;
+    with a name (and optional inputs such as {"state": "Ohio"}), returns that page's blocks:
+    text, numbers, tables and charts as data."""
+    from ..views import VIEWS, Context, render
+    from .research import decisions, with_ids
+    from ..plugins import home
+    import json
+    pages = {n: v for n, v in VIEWS if v.place == "page"}
+    if not name:
+        return {"pages": [v.describe() for v in pages.values()], "ethics": ETHICS}
+    if name not in pages:
+        return {"error": f"No page called {name!r}.", "pages": list(pages)}
+    path = home() / "sites" / "_national" / "national.json"
+    flags = with_ids(json.loads(path.read_text())["findings"]) if path.exists() else []
+    return {"page": name, "blocks": render(pages[name], Context(_data(), flags, decisions()), **(inputs or {})),
+            "ethics": ETHICS}
+
+
 def main():
     mcp.run()
 

@@ -6,6 +6,7 @@ Extension points (all plugins, all discoverable through Python entry points):
     coldmap.fixes      correct known data problems                FIXES
     coldmap.detectors  find suspicious place/method/periods       DETECTORS
     coldmap.enrichers  add information to findings                ENRICHERS
+    coldmap.views      add pages and flag sections to the app      VIEWS
 
 Quick start:
 
@@ -27,10 +28,12 @@ from .fixes import FIXES, Fix
 from .presets import PRESETS, Preset
 from .regions import REGIONS, RegionSet, load_regions
 from .sources import SOURCES, Source, load
+from .views import VIEWS, View, blocks
 
 __all__ = [
     "Dataset", "Finding", "Query", "Registry", "findings_frame",
     "DETECTORS", "Detector", "ENRICHERS", "Enricher", "FIXES", "Fix", "SOURCES", "Source",
+    "VIEWS", "View", "blocks",
     "Ensemble", "Matcher", "DEFAULT_DETECTORS", "PRESETS", "Preset", "REGIONS", "RegionSet", "load_regions", "load", "run", "explain",
 ]
 __version__ = "0.4.0"

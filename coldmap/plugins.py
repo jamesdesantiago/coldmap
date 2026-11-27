@@ -25,6 +25,7 @@ import threading
 from pathlib import Path
 
 EXAMPLE = Path(__file__).with_name("examples") / "before_after.py"
+EXAMPLES = {"before_after.py": "Before & after", "agency_report.py": "Agency report"}
 GUIDE = Path(__file__).with_name("docs") / "plugins.md"  # shown in the app at /guide
 LOCKED_ENRICHERS = ("county", "kind")  # other steps rely on these
 MAX_BYTES = 512 * 1024
@@ -149,17 +150,22 @@ def remove(filename: str) -> None:
         load_local(force=True)
 
 
-def example() -> tuple[str, str]:
-    """The bundled example plugin: (file name, source)."""
-    return EXAMPLE.name, EXAMPLE.read_text(encoding="utf-8")
+def example(name: str | None = None) -> tuple[str, str]:
+    """A bundled example plugin: (file name, source). Default: Before & after."""
+    name = name or EXAMPLE.name
+    if name not in EXAMPLES:
+        raise ValueError(f"There's no example called {name!r}.")
+    path = EXAMPLE.with_name(name)
+    return path.name, path.read_text(encoding="utf-8")
 
 
-def starter() -> tuple[str, str]:
-    """A new, unused starter plugin: (file name, source) for someone writing their own."""
+def starter(kind: str = "enricher") -> tuple[str, str]:
+    """A new, unused starter plugin: (file name, source). kind: "enricher" or "page"."""
+    base, template, token = (("my_page", STARTER_PAGE, "my-page") if kind == "page" else ("my_plugin", STARTER, "my-plugin"))
     taken = {p.name for p in folder().glob("*.py")} if folder().is_dir() else set()
-    n = next(i for i in range(1, 1000) if (f"my_plugin{'' if i == 1 else f'_{i}'}.py") not in taken)
+    n = next(i for i in range(1, 1000) if (f"{base}{'' if i == 1 else f'_{i}'}.py") not in taken)
     suffix = "" if n == 1 else f"_{n}"
-    return f"my_plugin{suffix}.py", STARTER.replace("my-plugin", f"my-plugin{suffix.replace('_', '-')}")
+    return f"{base}{suffix}.py", template.replace(token, f"{token}{suffix.replace('_', '-')}")
 
 
 # ---- which plugins are on --------------------------------------------------------------------
@@ -199,7 +205,23 @@ def enabled() -> dict[str, list[str]]:
             "params": {d: p for d, p in s.get("params", {}).items() if d in dets and p}}
 
 
+def views_off() -> list[str]:
+    """Views (app pages and flag sections) switched off. Kept apart from enabled(): views only
+    display, so switching one never makes the national scan out of date."""
+    return list(_settings().get("views_off", []))
+
+
 def set_enabled(kind: str, name: str, on: bool) -> dict[str, list[str]]:
+    if kind == "view":
+        from .views import VIEWS
+        if name not in VIEWS:
+            raise ValueError(f"There's no view called {name!r}.")
+        s = _settings()
+        off = [v for v in s.get("views_off", []) if v != name] + ([] if on else [name])
+        s["views_off"] = off
+        _settings_path().parent.mkdir(parents=True, exist_ok=True)
+        _settings_path().write_text(json.dumps(s, indent=1))
+        return enabled()
     if kind not in ("detector", "enricher") or name not in _order(kind):
         raise ValueError(f"There's no {kind} called {name!r}.")
     if kind == "enricher" and name in LOCKED_ENRICHERS and not on:
@@ -311,9 +333,46 @@ def fingerprint() -> str:
     """Changes whenever the plugins in use change, so cached builds are redone."""
     load_local()
     h = hashlib.sha1(json.dumps(enabled(), sort_keys=True).encode())
-    for name in sorted(_state["files"]):
-        h.update(name.encode() + (folder() / name).read_bytes())
+    for name, entry in sorted(_state["files"].items()):
+        # Only files that change what a scan finds; a file that only adds views doesn't.
+        if entry["error"] or any(r.kind != "view" for r, _ in entry["regs"]):
+            h.update(name.encode() + (folder() / name).read_bytes())
     return h.hexdigest()[:12]
+
+
+STARTER_PAGE = '''"""My page: a starting point for adding your own page to the coldmap app.
+
+This file is in your plugins folder, so coldmap already loads it: look for "My page" in the
+sidebar. Change render(), save, then press Replace on the Models page (or restart coldmap) to see
+your changes. Pages return building blocks; the app draws them in its own style.
+
+Blocks: b.heading, b.text, b.note, b.stats, b.table, b.bars, b.line, b.flags.
+Inputs: b.state, b.choice, b.number, b.text_input. See coldmap/examples/agency_report.py.
+
+Rules every plugin follows (ETHICS.md): describe patterns, never people.
+"""
+
+from coldmap import VIEWS, View, blocks as b
+
+
+@VIEWS.register                                  # 1. register it, so coldmap can find it
+class MyPage(View):
+    name = "my-page"                             # 2. a unique name
+    title = "My page"                            #    what the sidebar shows
+    summary = "Unsolved killings by year in a state (an example to change)"
+    place = "page"                               #    "page", or "flag" for a section on each flag
+    group = "Research"
+    inputs = [b.state(default="Ohio")]           # 3. controls at the top of the page
+
+    def render(self, ctx, state="Ohio"):         # 4. return blocks
+        c = ctx.cases[(ctx.cases.state == state) & (ctx.cases.vic_age >= 12)]
+        by_year = c.groupby("year").solved.agg(["size", "sum"])
+        unsolved = by_year["size"] - by_year["sum"]
+        return [
+            b.stats([("Killings", len(c)), ("Unsolved", int(unsolved.sum()), "neg")]),
+            b.line(list(by_year.index), {"Unsolved": list(unsolved)}, title=f"Unsolved killings in {state}, by year"),
+        ]
+'''
 
 
 STARTER = '''"""My plugin: a starting point for your own coldmap plugin.

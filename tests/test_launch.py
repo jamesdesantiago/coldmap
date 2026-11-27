@@ -444,3 +444,41 @@ def test_manage_models_settings_and_code(chome, tmp_path, server):
     assert "class SlidingWindow" in code["code"]
     with pytest.raises(urllib.error.HTTPError, match="400"):
         post("/api/plugins/open?file=..%5Cevil.py")  # only files in the models folder
+
+
+def test_plugins_add_pages_and_flag_sections(chome, tmp_path, server):
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, post = server(app)
+    post("/api/setup")
+    _wait(app)
+    assert json.loads(get("/api/views")[1]) == []
+    before = app.status()["national"]
+    post("/api/plugins/example?name=agency_report.py")
+    views = {v["name"]: v for v in json.loads(get("/api/views")[1])}
+    assert views["agencies"]["place"] == "page" and views["agency-record"]["place"] == "flag"
+    assert app.status()["national"]["stale"] is before["stale"] is False  # views never make flags out of date
+    page = json.loads(get("/api/view/agencies?state=Samplestate&victims=all&min_killings=5")[1])
+    assert [b["type"] for b in page["blocks"]][:4] == ["stats", "text", "bars", "table"]
+    assert "<title>coldmap</title>" in get("/x/agencies")[1]
+    f = json.loads(get("/api/flags")[1])["flags"][0]
+    sec = json.loads(get(f"/api/flag/{f['id']}")[1])["sections"]
+    assert sec[0]["title"] == "Agency record" and sec[0]["blocks"][0]["type"] in ("table", "text")
+    post("/api/plugins/enable?kind=view&name=agencies&on=0")
+    assert [v["name"] for v in json.loads(get("/api/views")[1])] == ["agency-record"]
+    with pytest.raises(urllib.error.HTTPError, match="404"):
+        get("/api/view/agencies")
+
+
+def test_a_broken_view_shows_its_error_not_a_crash(chome, tmp_path, server):
+    from coldmap import plugins
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    get, _ = server(app)
+    plugins.add("broken_page.py", "from coldmap import VIEWS, View\n@VIEWS.register\nclass B(View):\n"
+                "    name = 'broken'\n    title = 'Broken'\n    def render(self, ctx):\n        return 1 / 0\n")
+    out = json.loads(get("/api/view/broken")[1])
+    assert out["blocks"][0]["type"] == "note" and "ZeroDivisionError" in out["blocks"][0]["text"]
+    page = plugins.add(*plugins.starter("page"))
+    assert page["provides"] == [{"kind": "view", "name": "my-page"}]
+    assert json.loads(get("/api/view/my-page?state=Samplestate")[1])["blocks"][0]["type"] == "stats"

@@ -513,7 +513,8 @@ class App:
         places = {"county": counties, "state": [r["state"]] if r.get("state") else [],
                   "agency": [r["place"]] if r.get("level") == "agency" else []}
         mine = datasets.for_place(counties, places, (r["start"] - 10, r["end"] + 10))
-        return {"flag": r, "decision": research.decisions().get(fid), **detail, "datasets": mine}
+        return {"flag": r, "decision": research.decisions().get(fid), **detail, "datasets": mine,
+                "sections": self.flag_sections(r)}
 
     def dataset_action(self, action: str, q: dict, b: dict) -> dict:
         from .. import datasets
@@ -535,6 +536,50 @@ class App:
         except KeyError as e:
             raise click.ClickException(f"Missing column {e}.") from None
         raise click.ClickException("Unknown dataset action.")
+
+    def views(self) -> list[dict]:
+        """App pages and flag sections from plugins that are switched on."""
+        from .. import plugins
+        from ..views import VIEWS
+        off = plugins.views_off()
+        return [{**v.describe(), "origin": VIEWS.origin(n)} for n, v in VIEWS if n not in off]
+
+    def view(self, name: str, q: dict) -> dict:
+        from .. import plugins
+        from ..views import VIEWS
+        if name not in VIEWS or name in plugins.views_off():
+            raise KeyError(name)
+        v = VIEWS.get(name)
+        if v.place != "page":
+            raise KeyError(name)
+        inputs = {}
+        for spec in v.inputs:
+            raw = q.get(spec["name"], spec.get("default"))
+            if spec["type"] == "number" and raw not in (None, ""):
+                f = float(raw)
+                raw = int(f) if f.is_integer() else f
+            inputs[spec["name"]] = raw if raw != "" else None
+        return {"view": v.describe(), "blocks": self._run(v, inputs=inputs)}
+
+    def _context(self):
+        from . import research
+        from ..views import Context
+        return Context(self._data(), self.flags()[1], research.decisions())
+
+    def _run(self, v, *args, inputs=None) -> list[dict]:
+        """Run a view; a broken plugin shows its error instead of breaking the page."""
+        from ..views import render
+        try:
+            return render(v, self._context(), *args, **(inputs or {}))
+        except Exception as e:  # plugin code: report, don't crash
+            return [{"type": "note", "tone": "warn", "text": f"This view failed: {type(e).__name__}: {e}"}]
+
+    def flag_sections(self, r: dict) -> list[dict]:
+        from .. import plugins
+        from ..views import VIEWS
+        off = plugins.views_off()
+        return [{"name": n, "title": v.title or n, "origin": VIEWS.origin(n), "blocks": self._run(v, r)}
+                for n, v in VIEWS if v.place == "flag" and n not in off]
 
     def _data(self):
         if self.lib is None:
@@ -569,6 +614,7 @@ class App:
                     ["research_flags", "The ranked national list of flags this app shows, with filters"],
                     ["shortlist", "Your kept flags, notes and review status"],
                     ["local_datasets", "Your own datasets about places and times, and their rows for a place"],
+                    ["app_views", "Pages your plugins add to the app, run with any inputs"],
                     ["triage_finding", "Why a place was flagged, in plain language"],
                     ["get_cases", "The case rows behind a flag (no names exist in the data)"],
                     ["scan_clusters", "Run any detectors or preset on a state"],
@@ -599,6 +645,9 @@ class App:
             for name, obj in r:
                 summary = getattr(obj, "summary", "") or getattr(obj, "note", "") or getattr(obj, "title", "")
                 item = {"name": name, "summary": summary, "origin": r.origin(name)}
+                if r.kind == "view":
+                    item.update(obj.describe(), on=name not in plugins.views_off(), origin=r.origin(name))
+                    item["summary"] = obj.summary
                 if r.kind in ("detector", "enricher"):
                     import inspect
                     item["on"] = name in on[r.kind + "s"]
@@ -619,7 +668,9 @@ class App:
             groups.append({"kind": r.kind, "items": items})
         ex_name, _ = plugins.example()
         return {"groups": groups, "files": plugins.files(), "folder": str(plugins.folder()),
-                "example": {"file": ex_name, "added": (plugins.folder() / ex_name).exists()}}
+                "example": {"file": ex_name, "added": (plugins.folder() / ex_name).exists()},
+                "examples": [{"file": f, "title": t, "added": (plugins.folder() / f).exists()}
+                             for f, t in plugins.EXAMPLES.items()]}
 
     def plugin_action(self, action: str, q: dict, body: bytes) -> dict:
         from .. import plugins
@@ -640,9 +691,9 @@ class App:
             if action == "open":
                 return {**self.plugins_view(), "opened": plugins.open_path(q.get("file") or None)}
             if action == "example":
-                added = plugins.add(*plugins.example())
+                added = plugins.add(*plugins.example(q.get("name") or None))
             elif action == "starter":
-                added = plugins.add(*plugins.starter())
+                added = plugins.add(*plugins.starter(q.get("kind", "enricher")))
             elif action == "upload":
                 j = json.loads(body or b"{}")
                 added = plugins.add(str(j.get("file", "")), str(j.get("text", "")))
@@ -795,9 +846,12 @@ def _handler(app: App):
             if path == "/guide.md":
                 from .. import plugins
                 return self._send(200, plugins.GUIDE.read_text(encoding="utf-8"), "text/markdown; charset=utf-8")
-            if path == "/guide/before_after.py":
+            if path.startswith("/guide/") and path.endswith(".py"):  # the bundled examples' code
                 from .. import plugins
-                return self._send(200, plugins.example()[1], "text/plain; charset=utf-8")
+                name = path.rsplit("/", 1)[1]
+                if name in plugins.EXAMPLES:
+                    return self._send(200, plugins.example(name)[1], "text/plain; charset=utf-8")
+                return self._send(404, "Not found")
             if path.startswith("/vendor/"):  # the map's libraries and county shapes, shipped with coldmap
                 name = path.rsplit("/", 1)[1]
                 f = APP_PAGE.with_name("vendor") / name
@@ -852,6 +906,10 @@ def _handler(app: App):
                     out = {n: {"summary": CHECKS.get(n).summary, "rows": json.loads(t.to_json(orient="records"))}
                            for n, t in report(app._data(), q.get("state") or None, top=10).items()}
                     return self._json(200, out)
+                if path == "/api/views":
+                    return self._json(200, app.views())
+                if path.startswith("/api/view/"):
+                    return self._json(200, app.view(unquote(path.rsplit("/", 1)[1]), q))
                 if path == "/api/map":
                     return self._json(200, research.map_counties(app._data(), q.get("sex", "all")))
                 if path == "/api/datasets":
