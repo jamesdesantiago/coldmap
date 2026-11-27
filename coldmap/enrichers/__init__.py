@@ -7,6 +7,7 @@ county    sets `county` for agency- and metro-level findings (needed for matchin
 kind      labels each finding serial-pattern or accountability
 coverage  share of the place's reported murders present in the case file
 namus     missing people and unidentified remains in the same county and years (if loaded)
+ruleouts  checks each flag against ordinary explanations (known series, reporting gaps, clearances, coding)
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ class Enricher(ABC):
 
 
 ENRICHERS: Registry[type[Enricher]] = Registry("enricher", "coldmap.enrichers")
-DEFAULT_ENRICHERS = ("county", "kind", "coverage", "namus")
+DEFAULT_ENRICHERS = ("county", "kind", "coverage", "namus", "ruleouts")
 
 
 def enrich(findings: list[Finding], data: Dataset, names=DEFAULT_ENRICHERS) -> list[Finding]:
@@ -41,4 +42,4 @@ def enrich(findings: list[Finding], data: Dataset, names=DEFAULT_ENRICHERS) -> l
     return findings
 
 
-from . import builtin, namus  # noqa: E402,F401
+from . import builtin, namus, ruleouts  # noqa: E402,F401

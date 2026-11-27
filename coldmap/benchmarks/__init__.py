@@ -37,6 +37,9 @@ class KnownSeries:
     end: int
     arrest: int
     note: str = ""
+    label: str = ""   # neutral description for the app: place, victims, years, outcome; no names
+    victims: int | None = None   # killings attributed, as stated in the note (None when it doesn't say)
+    active: list | None = None   # [[start, end], ...] when the note gives separate active periods
 
 
 def load_series(path: str | Path | None = None) -> list[KnownSeries]:

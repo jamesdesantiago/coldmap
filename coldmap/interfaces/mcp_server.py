@@ -163,7 +163,7 @@ def research_flags(state: str | None = None, victim_sex: str = "Female", confide
     rows = [r for r in rows if r["sex"] == victim_sex and r["confidence"] in keep
             and (not state or r["state"] == state) and (not kind or r["kind"] == kind)]
     cols = ("id", "state", "place", "level", "weapon", "start", "end", "total", "solved", "expected",
-            "confidence", "kind", "what")
+            "confidence", "kind", "ruleout", "what")
     return {"flags": [{k: r.get(k) for k in cols} for r in rows[:top]], "matching": len(rows), "ethics": ETHICS}
 
 

@@ -253,6 +253,10 @@ def export_markdown(d: dict, version: str, data_date: str | None) -> str:
     if f.get("q") is not None:
         lines.append(f"- q = {f['q']}")
     lines += ["", "## Why it was flagged", f.get("what", ""), "", f.get("agreement", "")]
+    if f.get("ruleouts"):
+        word = {"explains": "May explain this", "weakens": "Weakens this", "clear": "Nothing found"}
+        lines += ["", "## Rule-out checks", *[f"- {r['title']}: {word.get(r['status'], r['status'])}. {r['text']}"
+                                               for r in f["ruleouts"]]]
     if f.get("statistics"):
         lines += ["", f"Statistics: {f['statistics']}"]
     if f.get("data"):
