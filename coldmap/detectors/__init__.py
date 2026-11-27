@@ -13,6 +13,6 @@ def make(name: str, **params) -> Detector:
     return DETECTORS.get(name)(**params)
 
 
-from . import burst, map_original, sliding_window, temporal_scan  # noqa: E402,F401  (built-ins)
+from . import burst, map_original, neighbours, sliding_window, temporal_scan  # noqa: E402,F401  (built-ins)
 
 __all__ = ["DETECTORS", "Detector", "TIERS", "make"]
