@@ -11,9 +11,17 @@ Groups overlap, so one real cluster can surface in several groups; findings keep
 strongest of overlapping groups for the same method and years. A finding names the centre county
 and lists every county in its group.
 
-EXPERIMENTAL, off by default: none of the bundled known series crosses a county line outside the
-regions `scan` already covers, so the benchmark cannot show whether it helps. See the Models page
-for its measured false-alarm rate.
+EXPERIMENTAL, off by default. Measured on MAP's file (November 2026), women:
+- False alarms, 3 shuffled runs (real / chance): Texas 12 / 0.0 (scan 14 / 0.0), Ohio 5 / 0.0
+  (12 / 1.0), Georgia 11 / 1.3 (9 / 0.3), Michigan 8 / 0.3 (4 / 0.0), Indiana 0 / 0 (5 / 0),
+  Illinois 5 / 2.3 (11 / 4.3).
+- New flags scan doesn't have: 15 across those six states, e.g. Dallas and neighbours,
+  strangulations 1980-1988, 12 of 49 solved; several are "Other/unknown" method, which often means
+  coding problems.
+- Benchmark: alone it finds 3 of 9 fully and 1 partly. Added to the combined models it makes them
+  worse: Orange County 1980-1981 goes from found to missed and South Los Angeles 1985-2007 from
+  partly found to missed, because its broader groups displace sharper findings when flags merge.
+Use it on its own to look for cross-county patterns, not as part of the default combination.
 """
 
 from __future__ import annotations
@@ -73,7 +81,7 @@ def groups(labels) -> dict[str, list[str]]:
 @DETECTORS.register
 class Neighbours(Detector):
     name = "neighbours"
-    summary = "Experimental: each county with its neighbours, scanned like scan; off by default"
+    summary = "Experimental: each county with its neighbours; few false alarms, but hurts the combined benchmark"
     tier = "strict"
 
     @dataclass
