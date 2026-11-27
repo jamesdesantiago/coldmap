@@ -482,3 +482,36 @@ def test_a_broken_view_shows_its_error_not_a_crash(chome, tmp_path, server):
     page = plugins.add(*plugins.starter("page"))
     assert page["provides"] == [{"kind": "view", "name": "my-page"}]
     assert json.loads(get("/api/view/my-page?state=Samplestate")[1])["blocks"][0]["type"] == "stats"
+
+
+def test_only_this_computers_app_can_use_the_server(chome, tmp_path):
+    """DNS rebinding (a foreign Host), cross-site writes (a foreign Origin, no X-Coldmap) are refused."""
+    cases, clearance = make_sample(tmp_path)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), launch._handler(launch.App("files", cases, clearance)))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
+
+    def call(path, method="GET", **headers):
+        req = urllib.request.Request(base + path, method=method, headers=headers,
+                                     data=b"{}" if method == "POST" else None)
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, dict(r.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers)
+    try:
+        assert call("/api/status")[0] == 200
+        assert call("/api/status", Host=f"localhost:{port}")[0] == 200
+        assert call("/api/status", Host=f"attacker.example:{port}")[0] == 403          # rebinding
+        assert call("/", Host="attacker.example")[0] == 403
+        assert call("/api/plugins/starter", "POST", Host=f"attacker.example:{port}", **{"X-Coldmap": "1"})[0] == 403
+        assert call("/api/plugins/starter", "POST", Origin="https://attacker.example", **{"X-Coldmap": "1"})[0] == 403
+        assert call("/api/plugins/starter", "POST")[0] == 403                              # no X-Coldmap
+        assert not (chome / "plugins").exists()                                            # nothing was written
+        code, h = call("/flags")
+        assert code == 200 and "frame-ancestors 'none'" in h["Content-Security-Policy"]
+        assert h["X-Content-Type-Options"] == "nosniff"
+        assert call("/api/plugins/starter", "POST", Origin=base, **{"X-Coldmap": "1"})[0] == 200  # the app itself
+    finally:
+        httpd.shutdown()

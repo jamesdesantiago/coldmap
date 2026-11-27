@@ -763,12 +763,45 @@ def _handler(app: App):
         def log_message(self, *a):
             pass
 
+        def _origins(self) -> set[str]:
+            port = self.server.server_address[1]
+            return {f"127.0.0.1:{port}", f"localhost:{port}"}
+
+        def _trusted(self, write: bool) -> bool:
+            """Requests must name this server as their host, so a web page that re-points its own
+            domain at 127.0.0.1 (DNS rebinding) is refused. Writes must also come from this app's
+            own page: the Origin, when sent, must be this server, and the X-Coldmap header must be
+            set (another site can't set it without a CORS preflight, which is never answered)."""
+            if (self.headers.get("Host") or "").lower() not in self._origins():
+                return False
+            if write:
+                origin = (self.headers.get("Origin") or "").lower()
+                if origin and origin.removeprefix("http://") not in self._origins():
+                    return False
+                if self.headers.get("X-Coldmap") != "1":
+                    return False
+            return True
+
+        def end_headers(self):
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("X-Frame-Options", "DENY")
+            super().end_headers()
+
         def _send(self, code: int, body: str, ctype: str = "text/plain; charset=utf-8"):
             b = body.encode()
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(b)))
             self.send_header("Cache-Control", "no-store")
+            if ctype.startswith("text/html"):
+                # The app's own scripts and data only; fonts from Google Fonts; no framing.
+                self.send_header("Content-Security-Policy",
+                                 "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                                 "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
+                                 "connect-src 'self'; object-src 'none'; base-uri 'none'; "
+                                 "form-action 'self'; frame-ancestors 'none'")
             self.end_headers()
             self.wfile.write(b)
 
@@ -790,8 +823,7 @@ def _handler(app: App):
                 return {}
 
         def do_POST(self):
-            # The page sends this header; another site can't without a CORS preflight we never answer.
-            if self.headers.get("X-Coldmap") != "1":
+            if not self._trusted(write=True):
                 return self._send(403, "Forbidden")
             from . import research
             u = urlsplit(self.path)
@@ -841,6 +873,8 @@ def _handler(app: App):
 
         def do_GET(self):
             from . import research
+            if not self._trusted(write=False):
+                return self._send(403, "Forbidden")
             u = urlsplit(self.path)
             path, q = u.path, {k: v[0] for k, v in parse_qs(u.query).items()}
             if path == "/guide.md":

@@ -678,7 +678,14 @@ function drawTimeline(id,rows){
 }
 // tooltips: anything with data-tip
 const tipEl=document.createElement('div');tipEl.className='tip';tipEl.hidden=true;document.body.append(tipEl);
-document.addEventListener('mouseover',e=>{const t=e.target.closest('[data-tip]');if(!t){tipEl.hidden=true;return}tipEl.innerHTML=t.dataset.tip.replace(/&lt;b&gt;|&lt;\/b&gt;/g,m=>m.includes('/')?'</b>':'<b>');tipEl.hidden=false});
+document.addEventListener('mouseover',e=>{const t=e.target.closest('[data-tip]');if(!t){tipEl.hidden=true;return}showTip(t.dataset.tip);tipEl.hidden=false});
+// Tooltips are plain text: any markup in the data (a county name, a dataset column, a plugin's label)
+// is shown as text, never run. The <b> markers only say the first line is a heading.
+function showTip(raw){
+ const text=new DOMParser().parseFromString(String(raw).replace(/<\/?b>/g,''),'text/html').documentElement.textContent;
+ const lines=text.split('\n'),b=document.createElement('b');b.textContent=lines[0];
+ tipEl.replaceChildren(b,...lines.slice(1).map(l=>'\n'+l));
+}
 document.addEventListener('mousemove',e=>{if(tipEl.hidden)return;const r=tipEl.getBoundingClientRect();let x=e.clientX+14,y=e.clientY+14;if(x+r.width>innerWidth-8)x=e.clientX-r.width-14;if(y+r.height>innerHeight-8)y=e.clientY-r.height-14;tipEl.style.left=x+'px';tipEl.style.top=y+'px'});
 document.addEventListener('mouseleave',()=>tipEl.hidden=true);
 // drag across years on the chart
@@ -719,7 +726,10 @@ function renderMap(r){
   <div class="mzoom"><button id="mzIn" aria-label="Zoom in">+</button><button id="mzOut" aria-label="Zoom out">−</button><button id="mzHome" aria-label="Whole country" style="font-size:11px">US</button></div>
   <div class="mlegend" id="mLegend"></div><div class="mtime" id="mTime"></div></div>`);
  const want=new URLSearchParams(location.search).get('flag')||(S.usedMapFlag?null:wantMapFlag);S.usedMapFlag=1;if(want&&MP.sel?.id!==want)MP.sel={type:'flag',id:want,zoom:true};
- if(fresh||!MP.svg){MP.svg=null;(async()=>{try{await mapAssets();await mapStats(S.f.sex==='all'?'all':S.f.sex);buildMap();updateMap()}catch(e){$('mapload').innerHTML=`<p class="msg err">${esc(e.message)}</p>`}})();return}
+ // One build at a time: redraws that arrive while the map is being built wait for it.
+ if(fresh)MP.svg=null;
+ if(!MP.svg){if(!MP.building)MP.building=(async()=>{try{await mapAssets();await mapStats(S.f.sex==='all'?'all':S.f.sex);if($('mapsvg')){buildMap();updateMap()}}
+   catch(e){const el=$('mapload');if(el)el.innerHTML=`<p class="msg err">${esc(e.message)}</p>`;else toast(e.message)}finally{MP.building=null}})();return}
  updateMap();
 }
 function buildMap(){
