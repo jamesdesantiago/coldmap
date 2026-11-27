@@ -79,8 +79,10 @@ def test_get_the_post_data_in_one_click(tmp_path, monkeypatch):
             assert "JANE" not in f.read_text(encoding="utf-8", errors="ignore"), f   # names never kept
 
 
-def test_cross_check_matches_place_victims_and_years():
+def test_cross_check_matches_place_victims_and_years(monkeypatch):
     from types import SimpleNamespace
+    from coldmap import datasets
+    monkeypatch.setattr(datasets, "_STATE_ABBR", {})   # don't leave this made-up case file in the shared cache
     cases = pd.DataFrame({"state": ["Nebraska"] * 4 + ["Kentucky"] * 2,
                           "agency": ["Omaha", "Omaha", "Omaha Tribal", "Lincoln", "Louisville Metro", "Louisville Metro"],
                           "county": ["Douglas, NE", "Douglas, NE", "Thurston, NE", "Lancaster, NE",

@@ -380,14 +380,15 @@ def results() -> dict | None:
 
 
 # ---- cross-check with the case file's flags ------------------------------------------------------
-_PLACES: dict[str, dict | None] = {}
+_PLACES: dict[tuple[int, str], dict | None] = {}
 
 
 def city_places(data, city: str) -> dict | None:
     """The case file's police agency and county for a city ("Chicago, IL" -> Chicago, Cook, IL):
     the agency named exactly like the city, else the busiest one whose name starts with it."""
-    if city in _PLACES:
-        return _PLACES[city]
+    key = (id(data.cases), city)
+    if key in _PLACES:
+        return _PLACES[key]
     from .datasets import _abbr
     out = None
     if ", " in city:
@@ -407,7 +408,7 @@ def city_places(data, city: str) -> dict | None:
             if len(exact):
                 out = {"state": exact.state.iloc[0], "agency": str(exact.agency.iloc[0]),
                        "county": exact.county.mode().iloc[0] if exact.county.notna().any() else None}
-    _PLACES[city] = out
+    _PLACES[key] = out
     return out
 
 
