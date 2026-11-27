@@ -41,3 +41,18 @@ def test_stop_is_only_for_long_jobs(tmp_path, monkeypatch):
     app.stop_job()
     wait(app)
     assert app.job.stop and (app.job.result.get("stopped") or app.job.result.get("states") is not None)
+
+
+def test_lead_time_for_the_planted_series(tmp_path, monkeypatch):
+    from coldmap.benchmarks import KnownSeries
+    monkeypatch.setenv("COLDMAP_HOME", str(tmp_path / "home"))
+    cases, clearance = make_sample(tmp_path)
+    planted = KnownSeries("planted", "Samplestate", "Harbor, SS", None, "Female", ("Strangle/asphyxia",),
+                          1980, 1996, 1997, "Convicted (synthetic)", "Harbor County, SS (synthetic)")
+    monkeypatch.setattr("coldmap.benchmarks.load_series", lambda *a, **k: [planted])
+    app = launch.App("files", cases, clearance)
+    app.lead_times()
+    wait(app)
+    r = app.lead_saved()["series"][0]
+    assert r["first_flagged"] is not None and 1980 <= r["first_flagged"] <= 1997
+    assert r["years_before_arrest"] == 1997 - r["first_flagged"]

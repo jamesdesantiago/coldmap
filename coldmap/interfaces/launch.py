@@ -352,7 +352,7 @@ class Busy(Exception):
     pass
 
 
-STOPPABLE = {"controls"}
+STOPPABLE = {"controls", "lead"}
 
 
 class Job:
@@ -806,6 +806,56 @@ class App:
                           [("load", "Read the case file"),
                            ("measure", "Scan shuffled copies of each state (women, men)")], work)
 
+    def lead_times(self) -> Job:
+        """For each known series the models find, the first year they would have flagged it using only
+        the data available that year: how early coldmap could have pointed at it."""
+        from .. import plugins
+        from ..benchmarks import hit, load_series
+        from ..core.types import Query
+        from ..ensemble import Ensemble
+        if self.lib is None:
+            raise click.ClickException("Get the data first.")
+        lib, on = self.lib, plugins.enabled()
+        series = load_series()
+        path = home() / "research" / "leadtime.json"
+
+        def work(job: Job):
+            job.step("load")
+            data = lib.data()
+            ens = Ensemble.from_names(on["detectors"], on["params"])
+            out = {"stamp": lib.national_stamp, "series": []}
+            job.step("years", 0, len(series))
+            for i, s in enumerate(series, 1):
+                if job.stop:
+                    job.notes.append(f"Stopped after {i - 1} of {len(series)} series.")
+                    break
+                first = None
+                for y in range(s.start, min(s.arrest, s.end + 3) + 1):
+                    if job.stop:
+                        break
+                    if hit(s, ens.run(data, Query(state=s.state, victim_sex=s.victim_sex, as_of=y))):
+                        first = y
+                        break
+                out["series"].append({"name": s.name, "label": s.label, "start": s.start, "end": s.end,
+                                      "arrest": s.arrest, "first_flagged": first,
+                                      "years_before_arrest": (s.arrest - first) if first else None})
+                job.step("years", i, len(series))
+            out["generated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(out), encoding="utf-8")
+            job.finish({"series": len(out["series"])})
+        return self.start("lead", "Finding how early each series would have been flagged",
+                          [("load", "Read the case file"),
+                           ("years", "Rescan each series' state year by year, with only the data known then")], work)
+
+    def lead_saved(self) -> dict | None:
+        try:
+            out = json.loads((home() / "research" / "leadtime.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        out["stale"] = bool(self.lib) and out.get("stamp") != self.lib.national_stamp
+        return out
+
     def stop_job(self) -> dict:
         job = self.job
         if job and job.running and job.kind in STOPPABLE:
@@ -1097,6 +1147,8 @@ def _handler(app: App):
                     return self._json(202, app.benchmark().view())
                 if u.path == "/api/controls":
                     return self._json(202, app.controls_all().view())
+                if u.path == "/api/leadtime":
+                    return self._json(202, app.lead_times().view())
                 if u.path == "/api/job/stop":
                     return self._json(200, app.stop_job())
                 if u.path == "/api/cities/wapo":
@@ -1220,6 +1272,8 @@ def _handler(app: App):
                     return self._json(200, app.benchmark_view())
                 if path == "/api/controls":
                     return self._json(200, app.controls_saved() or {})
+                if path == "/api/leadtime":
+                    return self._json(200, app.lead_saved() or {})
                 if path == "/api/cities":
                     return self._json(200, app.cities_view())
                 if path == "/api/cities/grid":

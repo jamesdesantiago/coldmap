@@ -43,6 +43,7 @@ async function poll(){
  if(job&&!job.running&&S.lastJob===job.id+':run'){S.lastJob=job.id;if(!job.error)toast(job.title.replace(/^(Preparing|Scanning|Getting|Updating)/,m=>({Preparing:'Prepared',Scanning:'Scanned',Getting:'Got',Updating:'Updated'})[m])+' — done')}
  if(job&&job.running)S.lastJob=job.id+':run';
  if(job&&job.kind==='benchmark'&&!job.running&&S.benchWatch){S.benchWatch=0;S.bench=null}
+ if(job&&job.kind==='lead'&&!job.running&&S.leadWatch){S.leadWatch=0;api('/api/leadtime').then(j=>{S.lead=j;render()})}
  if(job&&job.kind==='controls'&&S.ctlWatch&&(!job.running||Date.now()-(S.ctlAt||0)>20000)){S.ctlAt=Date.now();if(!job.running)S.ctlWatch=0;api('/api/controls').then(j=>{S.ctl=j;render()})}
  if(job&&['cities','cities-get'].includes(job.kind)&&!job.running&&S.cityWatch){S.cityWatch=0;S.cities=null;S.cgrid={}}
  if(wantDownload&&st&&!S.didDl&&st.mode==='map'&&!(job&&job.running)){S.didDl=1;try{await post('/api/download'+(wantDownload==='refresh'?'?refresh=1':''))}catch(e){}}
@@ -762,6 +763,7 @@ function renderMethods(){
  if(!S.methods){if(!S.mLoading){S.mLoading=1;api('/api/methods').then(j=>{S.methods=j;render()})}setMain('m-load',`<div class="view"><div class="page"><span class="spin"></span> Loading…</div></div>`);return}
  const m=S.methods,states=[...new Set((S.flags||[]).map(f=>f.state).filter(Boolean))].sort();
  const qk=S.qState||'';const qd=qk?S.quality&&S.quality[qk]:null;
+ if(!S.lead&&!S.leadLoading){S.leadLoading=1;api('/api/leadtime').then(j=>{S.lead=j;S.leadLoading=0;render()})}
  if(!S.bench&&!S.benchLoading){S.benchLoading=1;api('/api/benchmark').then(j=>{S.bench=j;S.benchLoading=0;render()})}
  if(!S.ctl&&!S.ctlLoading){S.ctlLoading=1;api('/api/controls').then(j=>{S.ctl=j;S.ctlLoading=0;render()})}
  setTimeout(renderBench,0);setTimeout(renderControls,0);
@@ -802,18 +804,24 @@ function renderControls(){
   ${cj&&cj.running?'':`<div class="row"><button class="btn${!keys.length||c.stale?' primary':''}" id="ctlRun"${run?' disabled':''}>${keys.length&&!c.stale?'Measure again':keys.length?'Continue or redo':'Measure every state'}</button><span class="muted">about 20–40 minutes; you can stop and continue later</span></div>`}`;
  if(el._h!==h){el.innerHTML=h;el._h=h}
 }
+function leadCell(r){const lt=S.lead&&S.lead.series&&S.lead.series.find(x=>x.name===r.name);if(!lt)return '<span class="muted">—</span>';
+ return lt.first_flagged?`<span class="num">${lt.first_flagged}</span> <span class="muted">${lt.years_before_arrest>0?`${lt.years_before_arrest} yr before the arrest`:lt.years_before_arrest===0?'the arrest year':'after the arrest'}</span>`:'<span class="muted">not before the arrest</span>'}
+function leadNote(){const job=S.st&&S.st.job,lj=job&&job.kind==='lead'&&(job.running||job.error)?job:null,run=job&&job.running,lt=S.lead;
+ return `<h3>How early</h3><p class="muted" style="font-size:12.5px">For each series, the models in use rerun with only the data available in each year from the series' start, until they first flag it. The answer is how early coldmap could have pointed at it.${lt&&lt.generated?` Last run ${esc(day(lt.generated))}${lt.stale?' · <b>out of date</b>':''}.`:''}</p>
+  ${lj?jobView(lj)+(lj.running?`<div class="row"><button class="btn" id="leadStop"${lj.stopping?' disabled':''}>${lj.stopping?'Stopping…':'Stop'}</button></div>`:''):`<div class="row"><button class="btn" id="leadRun"${run?' disabled':''}>${lt&&lt.series?'Find it again':'Find how early'}</button><span class="muted">can take an hour on the national file: each year is a full scan of the state</span></div>`}`}
 function renderBench(){
  const el=$('benchBox');if(!el)return;const b=S.bench,job=S.st&&S.st.job,run=job&&job.running;
  if(!b){if(el._h!=='l'){el.innerHTML='<span class="spin"></span> Loading…';el._h='l'}return}
  const bj=job&&job.kind==='benchmark'&&(job.running||job.error)?job:null;
  const L=b.last,GR={full:['Found','reviewed'],partial:['Partly','strong']};
  const res=L?`<p class="muted" style="font-size:12.5px">Last run ${esc(day(L.generated))}${L.stale?' · <b>out of date</b>: your data, models or settings changed since':''}. <b>Found</b>: a flag covers most of the series' years. <b>Partly</b>: a flag touches it but mostly describes something else.</p>
-  <div class="cases" style="max-height:none;margin-bottom:10px"><table><thead><tr><th>Series</th><th>Source</th>${L.detectors.map(d=>`<th>${esc(d==='ensemble'?'Combined':d)}</th>`).join('')}</tr></thead><tbody>
-   ${L.series.map(r=>`<tr><td>${esc(r.label||r.county+', '+r.start+'–'+r.end)}</td><td class="muted">${esc(r.source==='built in'?'built in':'yours')}</td>${L.detectors.map(d=>{const x=r.results[d];return `<td>${x?`<span class="tag ${GR[x.grade][1]}" title="${esc(x.place+', '+x.weapon+' '+x.start+'–'+x.end)}">${GR[x.grade][0]}</span>`:'<span class="muted">Missed</span>'}</td>`}).join('')}</tr>`).join('')}
-   <tr><td><b>Found or partly found</b></td><td></td>${L.detectors.map(d=>{const c=L.caught[d];return `<td class="num"><b>${c.full}</b> + ${c.partial} of ${c.of}</td>`}).join('')}</tr></tbody></table></div>`:'<p class="muted">Not run yet.</p>';
+  <div class="cases" style="max-height:none;margin-bottom:10px"><table><thead><tr><th>Series</th><th>Source</th>${L.detectors.map(d=>`<th>${esc(d==='ensemble'?'Combined':d)}</th>`).join('')}<th>First flagged</th></tr></thead><tbody>
+   ${L.series.map(r=>`<tr><td>${esc(r.label||r.county+', '+r.start+'–'+r.end)}</td><td class="muted">${esc(r.source==='built in'?'built in':'yours')}</td>${L.detectors.map(d=>{const x=r.results[d];return `<td>${x?`<span class="tag ${GR[x.grade][1]}" title="${esc(x.place+', '+x.weapon+' '+x.start+'–'+x.end)}">${GR[x.grade][0]}</span>`:'<span class="muted">Missed</span>'}</td>`}).join('')}<td>${leadCell(r)}</td></tr>`).join('')}
+   <tr><td><b>Found or partly found</b></td><td></td>${L.detectors.map(d=>{const c=L.caught[d];return `<td class="num"><b>${c.full}</b> + ${c.partial} of ${c.of}</td>`}).join('')}<td></td></tr></tbody></table></div>`:'<p class="muted">Not run yet.</p>';
  const h=`<h2>Benchmark</h2><p>${b.built_in} series ship with coldmap${b.yours?`, plus <b>${b.yours}</b> of your own`:''}. Add your own adjudicated series with <code>coldmap series import FILE.csv</code>; they stay in <code>${esc(b.folder)}</code> on this computer.</p>
   ${b.problems.length?`<p class="msg warn">Some of your series were skipped: ${b.problems.slice(0,5).map(esc).join('; ')}${b.problems.length>5?'…':''}</p>`:''}
   ${bj?jobView(bj):res}
+  ${leadNote()}
   <div class="row"><button class="btn${!L||L.stale?' primary':''}" id="benchRun"${run?' disabled':''}>${L?'Run it again':'Run the benchmark'}</button><span class="muted">about 6 minutes on the national file: each series' state is scanned</span></div>`;
  if(el._h!==h){el.innerHTML=h;el._h=h}
 }
@@ -961,6 +969,8 @@ document.addEventListener('click',async e=>{
  if(t.dataset&&t.dataset.cirm){if(!confirm('Remove this city data and the last city scan?'))return;post('/api/cities/remove?slug='+encodeURIComponent(t.dataset.cirm)).then(()=>{S.cities=null;S.cgrid={};render()}).catch(err=>toast(err.message));return}
  if(t.id==='ciWapo'){try{await post('/api/cities/wapo')}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
  if(t.id==='ciScan'){try{await post('/api/cities/scan'+(S.cityPeriods?'?periods=1':''))}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
+ if(t.id==='leadRun'){try{await post('/api/leadtime')}catch(err){toast(err.message)}S.leadWatch=1;poll();return}
+ if(t.id==='leadStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
  if(t.id==='ctlRun'){try{await post('/api/controls')}catch(err){toast(err.message)}S.ctlWatch=1;poll();return}
  if(t.id==='ctlStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
  if(t.id==='benchRun'){try{await post('/api/benchmark')}catch(err){toast(err.message)}S.benchWatch=1;poll();return}
