@@ -588,12 +588,45 @@ class App:
             return {"ok": True}
         raise click.ClickException("Unknown city data action.")
 
+    def _cross_check(self, areas: list[dict], flags: list[dict] | None = None) -> list[dict]:
+        """Mark city areas with the case file's flags for the same place and years (when there are
+        flags to compare with)."""
+        from .. import cities
+        if not areas or self.lib is None:
+            return areas
+        if flags is None:
+            meta, flags = self.flags()
+            if not meta:
+                return areas
+        cities.cross_check(self._data(), areas, flags)
+        return areas
+
     def cities_view(self) -> dict:
         from .. import cities
         metas = cities.all_meta()
         names = sorted(cities.load().city.unique()) if metas else []
-        return {"datasets": metas, "cities": names, "results": cities.results(), "min_shown": cities.MIN_SHOWN,
+        res = cities.results()
+        if res:
+            self._cross_check(res["areas"])
+        return {"datasets": metas, "cities": names, "results": res, "min_shown": cities.MIN_SHOWN,
                 "folder": str(cities.folder())}
+
+    def city_grid(self, city: str, sex: str) -> dict:
+        from .. import cities
+        g = cities.grid(city, sex)
+        self._cross_check(g["areas"])
+        return g
+
+    def city_areas_for(self, flag: dict) -> list[dict]:
+        """City areas (from your city data) in the same place and overlapping years as this flag."""
+        from .. import cities
+        res = cities.results()
+        if not res:
+            return []
+        areas = [dict(a) for a in res["areas"]]
+        self._cross_check(areas, [flag])
+        return [{k: a[k] for k in ("city", "sex", "start", "end", "killings", "solved", "rest_rate", "q_value")}
+                for a in areas if a.get("flags")]
 
     def benchmark_view(self) -> dict:
         from ..benchmarks import load_local, load_series
@@ -636,6 +669,7 @@ class App:
                   "agency": [r["place"]] if r.get("level") == "agency" else []}
         mine = datasets.for_place(counties, places, (r["start"] - 10, r["end"] + 10))
         return {"flag": r, "decision": research.decisions().get(fid), **detail, "datasets": mine,
+                "city_areas": self.city_areas_for(r),
                 "sections": self.flag_sections(r)}
 
     def dataset_action(self, action: str, q: dict, b: dict) -> dict:
@@ -1140,8 +1174,7 @@ def _handler(app: App):
                 if path == "/api/cities":
                     return self._json(200, app.cities_view())
                 if path == "/api/cities/grid":
-                    from .. import cities
-                    return self._json(200, cities.grid(q.get("city", ""), q.get("sex", "all")))
+                    return self._json(200, app.city_grid(q.get("city", ""), q.get("sex", "all")))
                 if path == "/api/history":
                     s = app.lib.national_summary() if app.lib else None
                     return self._json(200, (s or {}).get("history") or {})

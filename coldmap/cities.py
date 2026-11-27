@@ -377,3 +377,55 @@ def _results_path() -> Path:
 def results() -> dict | None:
     p = _results_path()
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+# ---- cross-check with the case file's flags ------------------------------------------------------
+_PLACES: dict[str, dict | None] = {}
+
+
+def city_places(data, city: str) -> dict | None:
+    """The case file's police agency and county for a city ("Chicago, IL" -> Chicago, Cook, IL):
+    the agency named exactly like the city, else the busiest one whose name starts with it."""
+    if city in _PLACES:
+        return _PLACES[city]
+    from .datasets import _abbr
+    out = None
+    if ", " in city:
+        name, ab = city.rsplit(", ", 1)
+        names = {v: k for k, v in _abbr(data).items()}
+        state = "district of columbia" if ab == "DC" else names.get(ab)
+        c = data.cases
+        if state:
+            c = c[(c.state.str.lower() == state) & c.agency.notna()]
+            ag = c.agency.astype(str)
+            exact = c[ag.str.lower() == name.lower()]
+            if exact.empty:
+                near = c[ag.str.lower().str.startswith(name.lower() + " ") & ~ag.str.contains("County|Tribal|Heights")]
+                exact = near[near.agency == near.agency.mode().iloc[0]] if len(near) else near
+            if len(exact):
+                out = {"state": exact.state.iloc[0], "agency": str(exact.agency.iloc[0]),
+                       "county": exact.county.mode().iloc[0] if exact.county.notna().any() else None}
+    _PLACES[city] = out
+    return out
+
+
+def cross_check(data, areas: list[dict], flags: list[dict]) -> None:
+    """Mark each city area with the case file's flags for the same place, victims and overlapping years
+    (r["flags"] on areas, as ids and short descriptions). Two independent sources agreeing is worth
+    more than either alone; the Post's data has no method, so agreement is on place and years only."""
+    for a in areas:
+        pl = city_places(data, a["city"])
+        a["places"] = pl
+        a["flags"] = []
+        if not pl:
+            continue
+        for f in flags:
+            if f.get("state") != pl["state"] or not (f["start"] <= a["end"] and a["start"] <= f["end"]):
+                continue
+            if a["sex"] != "all" and f.get("sex") != a["sex"]:
+                continue
+            here = (f.get("level") == "agency" and f.get("place") == pl["agency"]) or \
+                (pl["county"] and (f.get("county") == pl["county"] or pl["county"] in (f.get("counties") or [])))
+            if here:
+                a["flags"].append({"id": f["id"], "place": f["place"], "weapon": f["weapon"], "sex": f["sex"],
+                                   "start": f["start"], "end": f["end"], "confidence": f.get("confidence")})
