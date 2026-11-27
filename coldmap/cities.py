@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .datasets import MAX_BYTES, identifying, slugify
+from .datasets import MAX_BYTES, identifying, slugify  # noqa: F401  (MAX_BYTES caps the download too)
 from .plugins import home
 
 CELL_KM = 1.0
@@ -38,6 +38,7 @@ MIN_SHOWN = 3        # cells with fewer killings are never shown
 RADIUS_KM = 2.5      # largest area tested, as a radius from its centre cell
 MIN_CASES = 15       # smallest area reported
 MAX_Q = 0.10
+CHUNK = 100          # Monte Carlo runs simulated at a time
 KEEP = ("city", "cell", "lat", "lon", "year", "month", "sex", "solved")
 WAPO = "The Washington Post, data-homicides (CC BY-NC-SA 4.0; non-commercial use, with credit)"
 WAPO_URL = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
@@ -294,9 +295,7 @@ def _city_scan(d: pd.DataFrame, rng, reps: int, radius_km: float, min_cases: int
     if periods:
         wins += [(a, b) for a in range(ny) for b in range(a, min(ny, a + max_years)) if (a, b) != (0, ny - 1)]
     # Null: solved labels drawn at the city's rate for each year, cell by cell.
-    sims = rng.binomial(n.astype(int)[None, :, :], p_year[None, None, :], size=(reps, nc, ny))
-    best = np.zeros(reps)
-    cands = []
+    cands, tests = [], []
     for a, b in wins:
         nw, sw = n[:, a:b + 1].sum(1), s[:, a:b + 1].sum(1)
         N, S, E = M @ nw, M @ sw, M @ (n[:, a:b + 1] * p_year[a:b + 1]).sum(1)
@@ -309,10 +308,20 @@ def _city_scan(d: pd.DataFrame, rng, reps: int, radius_km: float, min_cases: int
             if ratio[k] > 0:
                 cands.append((float(ratio[k]), int(k), a, b, int(N[k]), int(S[k]), float(p0[k])))
         idx = np.flatnonzero(ok)
-        Ssim = (M[idx] @ sims[:, :, a:b + 1].sum(2).T).T
-        best = np.maximum(best, llr(Ssim, N[idx][None, :], p0[idx][None, :]).max(1))
+        tests.append((a, b, M[idx], N[idx], p0[idx]))
     if not cands:
         return []
+    # Null: solved labels drawn at the city's rate for each year, cell by cell; simulated in chunks
+    # of CHUNK runs so memory stays bounded however large the file is.
+    best = np.zeros(reps)
+    ni = n.astype(np.int64)
+    for c0 in range(0, reps, CHUNK):
+        c1 = min(reps, c0 + CHUNK)
+        sims = rng.binomial(ni[None, :, :], p_year[None, None, :], size=(c1 - c0, nc, ny)).astype(np.int32)
+        for a, b, Mi, Ni, pi in tests:
+            Ssim = (Mi @ sims[:, :, a:b + 1].sum(2).T).T
+            best[c0:c1] = np.maximum(best[c0:c1], llr(Ssim, Ni[None, :], pi[None, :]).max(1))
+        del sims
     members = [M.indices[M.indptr[k]:M.indptr[k + 1]] for k in range(z)]
     out, taken = [], np.zeros(nc, bool)
     for ratio, k, a, b, NN, SS, p0 in sorted(cands, reverse=True):
@@ -377,3 +386,60 @@ def _results_path() -> Path:
 def results() -> dict | None:
     p = _results_path()
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+# ---- cross-check with the case file's flags ------------------------------------------------------
+_PLACES: dict[tuple[int, str], dict | None] = {}
+
+
+def city_places(data, city: str) -> dict | None:
+    """The case file's police agency and county for a city ("Chicago, IL" -> Chicago, Cook, IL):
+    the agency named exactly like the city, else the busiest one whose name starts with it."""
+    key = (id(data.cases), city)
+    if key in _PLACES:
+        return _PLACES[key]
+    from .datasets import _abbr
+    out = None
+    if ", " in city:
+        name, ab = city.rsplit(", ", 1)
+        names = {v: k for k, v in _abbr(data).items()}
+        state = "district of columbia" if ab == "DC" else names.get(ab)
+        c = data.cases
+        if state:
+            c = c[(c.state.str.lower() == state) & c.agency.notna()]
+            ag = c.agency.astype(str)
+            exact = c[ag.str.lower() == name.lower()]
+            if exact.empty:
+                low = ag.str.lower()
+                near = c[(low.str.startswith(name.lower() + " ") | low.str.startswith(name.lower() + "-"))
+                         & ~ag.str.contains("County|Tribal|Heights")]
+                exact = near[near.agency == near.agency.mode().iloc[0]] if len(near) else near
+            if len(exact):
+                out = {"state": exact.state.iloc[0], "agency": str(exact.agency.iloc[0]),
+                       "county": exact.county.mode().iloc[0] if exact.county.notna().any() else None}
+    _PLACES[key] = out
+    return out
+
+
+def cross_check(data, areas: list[dict], flags: list[dict]) -> None:
+    """Mark each city area with the case file's flags for the same place, victims and overlapping years
+    (r["flags"] on areas, as ids and short descriptions). Agreement says both sources show low
+    clearance in that place and period. In large cities with long-running low clearance it is the
+    usual case (all 11 areas in the Post's data match flags), so it is context, not evidence of a
+    series; the Post's data has no method, so agreement is on place and years only."""
+    for a in areas:
+        pl = city_places(data, a["city"])
+        a["places"] = pl
+        a["flags"] = []
+        if not pl:
+            continue
+        for f in flags:
+            if f.get("state") != pl["state"] or not (f["start"] <= a["end"] and a["start"] <= f["end"]):
+                continue
+            if a["sex"] != "all" and f.get("sex") != a["sex"]:
+                continue
+            here = (f.get("level") == "agency" and f.get("place") == pl["agency"]) or \
+                (pl["county"] and (f.get("county") == pl["county"] or pl["county"] in (f.get("counties") or [])))
+            if here:
+                a["flags"].append({"id": f["id"], "place": f["place"], "weapon": f["weapon"], "sex": f["sex"],
+                                   "start": f["start"], "end": f["end"], "confidence": f.get("confidence")})

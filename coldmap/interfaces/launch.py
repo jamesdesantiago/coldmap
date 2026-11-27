@@ -57,33 +57,47 @@ def _url(key: str) -> str:
     return os.environ.get(env) or url
 
 
-def download(url: str, dest: Path, label: str, progress=None) -> dict:
+def download(url: str, dest: Path, label: str, progress=None, max_bytes: int | None = None) -> dict:
     """Download to dest (via a .part file). progress(done, total) is called as bytes arrive;
-    without it a terminal progress bar is shown. Returns the server's size and ETag."""
+    without it a terminal progress bar is shown. Stops with an error past max_bytes.
+    Returns the server's size and ETag."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
-    req = urllib.request.Request(url, headers={"User-Agent": "coldmap"})
-    with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as out:
-        size = int(r.headers.get("Content-Length") or 0) or None
-        info = {"size": size, "etag": r.headers.get("ETag")}
-        if progress:
-            done = 0
-            progress(0, size)
-            while chunk := r.read(1 << 20):
-                out.write(chunk)
-                done += len(chunk)
-                progress(done, size)
-        else:
-            with click.progressbar(length=size, label=label, show_pos=size is None) as bar:
-                while chunk := r.read(1 << 20):
-                    out.write(chunk)
-                    bar.update(len(chunk))
+    try:
+        info = _fetch(url, part, label, progress, max_bytes)
+    except BaseException:
+        part.unlink(missing_ok=True)   # never leave a partial file behind
+        raise
     with open(part, "rb") as f:
         head = f.read(200).lower()
     if head.lstrip().startswith((b"<!doctype", b"<html")):
         part.unlink()
         raise OSError("the link returned a web page instead of the data file")
     part.replace(dest)
+    return info
+
+
+def _fetch(url: str, part: Path, label: str, progress, max_bytes: int | None) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "coldmap"})
+    with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as out:
+        size = int(r.headers.get("Content-Length") or 0) or None
+        info = {"size": size, "etag": r.headers.get("ETag")}
+        if max_bytes and size and size > max_bytes:
+            raise OSError(f"the file is larger than expected ({size:,} bytes)")
+        if progress:
+            done = 0
+            progress(0, size)
+            while chunk := r.read(1 << 20):
+                out.write(chunk)
+                done += len(chunk)
+                if max_bytes and done > max_bytes:
+                    raise OSError("the file is larger than expected")
+                progress(done, size)
+        else:
+            with click.progressbar(length=size, label=label, show_pos=size is None) as bar:
+                while chunk := r.read(1 << 20):
+                    out.write(chunk)
+                    bar.update(len(chunk))
     return info
 
 
@@ -569,7 +583,7 @@ class App:
                 raw = Path(tmp) / "homicide-data.csv"
                 job.step("download", 0, None)
                 download(cities.wapo_url(), raw, "The Washington Post's data",
-                         progress=lambda d, t: job.step("download", d, t))
+                         progress=lambda d, t: job.step("download", d, t), max_bytes=cities.MAX_BYTES)
                 text = cities.decode(raw.read_bytes())
                 raw.unlink()
             job.step("import", 0, 1)
@@ -593,12 +607,45 @@ class App:
             return {"ok": True}
         raise click.ClickException("Unknown city data action.")
 
+    def _cross_check(self, areas: list[dict], flags: list[dict] | None = None) -> list[dict]:
+        """Mark city areas with the case file's flags for the same place and years (when there are
+        flags to compare with)."""
+        from .. import cities
+        if not areas or self.lib is None:
+            return areas
+        if flags is None:
+            meta, flags = self.flags()
+            if not meta:
+                return areas
+        cities.cross_check(self._data(), areas, flags)
+        return areas
+
     def cities_view(self) -> dict:
         from .. import cities
         metas = cities.all_meta()
         names = sorted(cities.load().city.unique()) if metas else []
-        return {"datasets": metas, "cities": names, "results": cities.results(), "min_shown": cities.MIN_SHOWN,
+        res = cities.results()
+        if res:
+            self._cross_check(res["areas"])
+        return {"datasets": metas, "cities": names, "results": res, "min_shown": cities.MIN_SHOWN,
                 "folder": str(cities.folder())}
+
+    def city_grid(self, city: str, sex: str) -> dict:
+        from .. import cities
+        g = cities.grid(city, sex)
+        self._cross_check(g["areas"])
+        return g
+
+    def city_areas_for(self, flag: dict) -> list[dict]:
+        """City areas (from your city data) in the same place and overlapping years as this flag."""
+        from .. import cities
+        res = cities.results()
+        if not res:
+            return []
+        areas = [dict(a) for a in res["areas"]]
+        self._cross_check(areas, [flag])
+        return [{k: a[k] for k in ("city", "sex", "start", "end", "killings", "solved", "rest_rate", "q_value")}
+                for a in areas if a.get("flags")]
 
     def benchmark_view(self) -> dict:
         from ..benchmarks import load_local, load_series
@@ -641,7 +688,7 @@ class App:
                   "agency": [r["place"]] if r.get("level") == "agency" else []}
         mine = datasets.for_place(counties, places, (r["start"] - 10, r["end"] + 10))
         return {"flag": r, "decision": research.decisions().get(fid), **detail, "datasets": mine,
-                "chance": self.chance_for(r),
+                "chance": self.chance_for(r), "city_areas": self.city_areas_for(r),
                 "sections": self.flag_sections(r)}
 
     def dataset_action(self, action: str, q: dict, b: dict) -> dict:
@@ -1277,8 +1324,7 @@ def _handler(app: App):
                 if path == "/api/cities":
                     return self._json(200, app.cities_view())
                 if path == "/api/cities/grid":
-                    from .. import cities
-                    return self._json(200, cities.grid(q.get("city", ""), q.get("sex", "all")))
+                    return self._json(200, app.city_grid(q.get("city", ""), q.get("sex", "all")))
                 if path == "/api/history":
                     s = app.lib.national_summary() if app.lib else None
                     return self._json(200, (s or {}).get("history") or {})
