@@ -264,6 +264,39 @@ def open_cmd(state, cases, clearance, sample, refresh, rebuild, port, no_browser
     launch.serve(app, port, open_browser=not no_browser, path="/" + (f"?{urlencode(query)}" if query else ""))
 
 
+@main.group()
+def series():
+    """Known, adjudicated series used by the benchmark and the rule-out checks."""
+
+
+@series.command("list")
+def series_list():
+    """List the bundled series and your own, and any problems with your files."""
+    from ..benchmarks import load_local, load_series
+    for s in load_series(local=False):
+        click.echo(f"built in   {s.state:<14} {s.county:<22} {s.victim_sex:<6} {s.start}-{s.end}")
+    mine, problems = load_local()
+    for s in mine:
+        click.echo(f"{s.source:<10} {s.state:<14} {s.county:<22} {s.victim_sex:<6} {s.start}-{s.end}")
+    for p in problems:
+        click.echo(f"skipped: {p}", err=True)
+
+
+@series.command("import")
+@click.argument("csv_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--name", help="Name for the local series file (default: the CSV's name)")
+def series_import(csv_file, name):
+    """Add adjudicated series from a CSV to your local benchmark (this computer only).
+
+    Columns: name, state, county, agency, victim_sex, weapons (separated by ;), start, end,
+    arrest, note (must state the conviction, guilty plea or attribution), label, victims."""
+    from ..benchmarks import import_csv
+    r = import_csv(csv_file, name)
+    click.echo(f"Saved {r['series']} series to {r['file']}.")
+    for p in r["problems"]:
+        click.echo(f"skipped {p}", err=True)
+
+
 @main.command()
 @click.option("--out-dir", default=".", show_default=True)
 def sample(out_dir):
