@@ -43,6 +43,8 @@ async function poll(){
  if(job&&!job.running&&S.lastJob===job.id+':run'){S.lastJob=job.id;if(!job.error)toast(job.title.replace(/^(Preparing|Scanning|Getting|Updating)/,m=>({Preparing:'Prepared',Scanning:'Scanned',Getting:'Got',Updating:'Updated'})[m])+' — done')}
  if(job&&job.running)S.lastJob=job.id+':run';
  if(job&&job.kind==='benchmark'&&!job.running&&S.benchWatch){S.benchWatch=0;S.bench=null}
+ if(job&&job.kind==='lead'&&!job.running&&S.leadWatch){S.leadWatch=0;api('/api/leadtime').then(j=>{S.lead=j;render()})}
+ if(job&&job.kind==='controls'&&S.ctlWatch&&(!job.running||Date.now()-(S.ctlAt||0)>20000)){S.ctlAt=Date.now();if(!job.running)S.ctlWatch=0;api('/api/controls').then(j=>{S.ctl=j;render()})}
  if(job&&['cities','cities-get'].includes(job.kind)&&!job.running&&S.cityWatch){S.cityWatch=0;S.cities=null;S.cgrid={}}
  if(wantDownload&&st&&!S.didDl&&st.mode==='map'&&!(job&&job.running)){S.didDl=1;try{await post('/api/download'+(wantDownload==='refresh'?'?refresh=1':''))}catch(e){}}
  render();
@@ -203,6 +205,7 @@ async function renderFlag(id){
   ${historyLine(f)}
   ${decideBox(id,f,dec)}
   ${ruleoutBox(f)}
+  ${d.chance?`<p class="muted" style="font-size:12.5px">False-alarm test${d.chance.stale?' (out of date)':''}: in ${esc(f.state)}, for ${esc(who(f.sex))}, shuffled copies of the data produced ${d.chance.chance} ${d.chance.confidence?esc(d.chance.confidence)+'-confidence ':''}flags on average against ${d.chance.real} on the real data${d.chance.real?`, so about <b>${pct(Math.min(1,d.chance.chance/d.chance.real))}</b> of flags like this one may be chance`:''}.</p>`:''}
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
   ${(f.plugins||[]).length?`<h3>From plugins</h3>${f.plugins.map(n=>`<div class="plug"><b>${esc(n.title)}</b> <span class="by">${esc(n.by)}</span><p style="margin:4px 0 0">${esc(n.text)}</p></div>`).join('')}`:''}
   ${(d.sections||[]).map(x=>`<h3>${esc(x.title)} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">from a plugin</span></h3><div class="vsec">${renderBlocks(x.blocks)}</div>`).join('')}
@@ -762,8 +765,10 @@ function renderMethods(){
  if(!S.methods){if(!S.mLoading){S.mLoading=1;api('/api/methods').then(j=>{S.methods=j;render()})}setMain('m-load',`<div class="view"><div class="page"><span class="spin"></span> Loading…</div></div>`);return}
  const m=S.methods,states=[...new Set((S.flags||[]).map(f=>f.state).filter(Boolean))].sort();
  const qk=S.qState||'';const qd=qk?S.quality&&S.quality[qk]:null;
+ if(!S.lead&&!S.leadLoading){S.leadLoading=1;api('/api/leadtime').then(j=>{S.lead=j;S.leadLoading=0;render()})}
  if(!S.bench&&!S.benchLoading){S.benchLoading=1;api('/api/benchmark').then(j=>{S.bench=j;S.benchLoading=0;render()})}
- setTimeout(renderBench,0);
+ if(!S.ctl&&!S.ctlLoading){S.ctlLoading=1;api('/api/controls').then(j=>{S.ctl=j;S.ctlLoading=0;render()})}
+ setTimeout(renderBench,0);setTimeout(renderControls,0);
  setMain('methods:'+qk+(qd?Object.keys(qd).length:'x'),`<div class="view"><div class="page">
   <h1>Methods</h1><p class="lede">How a flag is made, how much to trust it, and how to make coldmap better. Everything here is open: the code, the tests and the false-alarm measurements.</p>
   <h3>How a flag is made</h3><ol class="notes" style="padding-left:18px">
@@ -777,26 +782,48 @@ function renderMethods(){
   <h3>Data fixes applied</h3><table><tbody>${m.fixes.map(f=>`<tr><td><b>${esc(f.title)}</b></td><td>${esc(f.summary)}</td></tr>`).join('')}</tbody></table>
   <h3>Data quality, by state</h3><div class="row"><select class="sel" id="qState" aria-label="State"><option value="">Choose a state</option>${states.map(s=>`<option${s===qk?' selected':''}>${esc(s)}</option>`).join('')}</select><span class="muted">Reporting gaps and oddities that can create or hide flags.</span></div>
   <div id="qBody" style="margin-top:10px">${qk?(qd?Object.entries(qd).map(([n,t])=>`<p style="margin:12px 0 4px"><b>${esc(n)}</b> <span class="muted">${esc(t.summary)}</span></p>${t.rows.length?`<table><thead><tr>${Object.keys(t.rows[0]).map(k=>`<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${t.rows.map(r=>`<tr>${Object.values(r).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<p class="muted">Nothing found.</p>'}`).join(''):'<p><span class="spin"></span> Checking…</p>'):''}</div>
-  <h3>How well it works</h3><p>Two measurements keep coldmap honest. The <b>benchmark</b> checks which known series that went through the courts each model finds, using your current models and settings. <b>False-alarm tests</b> (<code>coldmap controls</code> in a terminal) shuffle the solved labels to count how many flags appear by chance. A model that catches more but invents more isn't an improvement.</p>
-  <div class="box" id="benchBox"></div>
+  <h3>How well it works</h3><p>Two measurements keep coldmap honest. The <b>benchmark</b> checks which known series that went through the courts each model finds, using your current models and settings. <b>False-alarm tests</b> (below, or <code>coldmap controls</code> in a terminal) shuffle the solved labels to count how many flags appear by chance. A model that catches more but invents more isn't an improvement.</p>
+  <div class="box" id="benchBox"></div><div class="box" id="ctlBox"></div>
   <h3>Ethics</h3><ul class="notes" style="padding-left:18px"><li>A flag is a pattern worth review, never evidence that cases are linked. Only investigators can link cases.</li><li>Never contact families, witnesses or possible suspects.</li><li>Never describe a flag as a “serial killer”, name suspects, or profile neighbourhoods or groups.</li><li>A second person reviews every lead before it goes to MAP or the investigating agency.</li></ul>
   <h3>Improve the research</h3><ul class="notes" style="padding-left:18px"><li>Write a model: start from <a href="/models" data-nav>Models</a> › Write your own, then share it as a file or a package.</li><li>Add a known, adjudicated series to the benchmark so every model is measured against it: <a href="${REPO}CONTRIBUTING.md#add-a-known-series" target="_blank" rel="noopener">how</a>.</li><li>Document a data problem you found: <a href="${REPO}DATA_ISSUES.md" target="_blank" rel="noopener">DATA_ISSUES.md</a>.</li><li>Read the full guide for contributors: <a href="${REPO}CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a>.</li></ul>
  </div></div>`);
 }
 
+function renderControls(){
+ const el=$('ctlBox');if(!el)return;const c=S.ctl,job=S.st&&S.st.job,run=job&&job.running;
+ if(!c){if(el._h!=='l'){el.innerHTML='<span class="spin"></span> Loading…';el._h='l'}return}
+ const cj=job&&job.kind==='controls'&&(job.running||job.error)?job:null;
+ const st=c.states||{},keys=Object.keys(st).sort();
+ const share=(x)=>x&&x.real?Math.min(1,x.chance/x.real):null;
+ const cell=x=>{if(!x)return '<td class="n muted">—</td>';const s=share(x);return `<td class="n" title="${x.real} flags on the real data; ${x.chance} on average on shuffled copies">${x.real?`<b>${pct(s)}</b> <span class="muted">${x.chance} / ${x.real}</span>`:x.chance?`<span class="muted">0 real, ${x.chance} chance</span>`:'<span class="muted">none</span>'}</td>`};
+ const tot=k=>{let r=0,ch=0;for(const v of Object.values(st)){if(v[k]){r+=v[k].real;ch+=v[k].chance}}return {real:r,chance:+ch.toFixed(1)}};
+ const tbl=keys.length?`<p class="muted" style="font-size:12.5px">${c.updated?'Last measured '+esc(day(c.updated))+'. ':''}${keys.length} of ${S.st&&S.st.data&&S.st.data.states?S.st.data.states*2:'all'} state-and-victim groups measured, ${c.runs} shuffled copies each${c.stale?' · <b>out of date</b>: your data or models changed since':''}. Each cell: the share of flags expected by chance (flags on shuffled copies ÷ flags on the real data).</p>
+  <div class="cases" style="max-height:420px;margin-bottom:10px"><table><thead><tr><th>State</th><th>Victims</th><th class="n">All flags</th><th class="n">High</th><th class="n">Strong</th><th class="n">Possible</th></tr></thead><tbody>
+  <tr><td><b>Every state measured</b></td><td></td>${['all','high','strong','possible'].map(k=>cell(tot(k))).join('')}</tr>
+  ${keys.map(k=>{const [s,x]=k.split('|');const v=st[k];return `<tr><td>${esc(s)}</td><td>${esc(who(x))}</td>${['all','high','strong','possible'].map(kk=>cell(v[kk])).join('')}</tr>`}).join('')}</tbody></table></div>`:'<p class="muted">Not measured yet.</p>';
+ const h=`<h2>False alarms, state by state</h2><p>The solved and unsolved labels are shuffled within each state, year, method and victims, which keeps every statewide rate but destroys any real cluster. Flags that still appear are false alarms by construction. Measured with the models you have switched on.</p>
+  ${cj?jobView(cj)+(cj.running?`<div class="row"><button class="btn" id="ctlStop"${cj.stopping?' disabled':''}>${cj.stopping?'Stopping after this state…':'Stop'}</button><span class="muted">progress is saved; run it again to continue</span></div>`:''):tbl}
+  ${cj&&cj.running?'':`<div class="row"><button class="btn${!keys.length||c.stale?' primary':''}" id="ctlRun"${run?' disabled':''}>${keys.length&&!c.stale?'Measure again':keys.length?'Continue or redo':'Measure every state'}</button><span class="muted">about 20–40 minutes; you can stop and continue later</span></div>`}`;
+ if(el._h!==h){el.innerHTML=h;el._h=h}
+}
+function leadCell(r){const lt=S.lead&&S.lead.series&&S.lead.series.find(x=>x.name===r.name);if(!lt)return '<span class="muted">—</span>';
+ return lt.first_flagged?`<span class="num">${lt.first_flagged}</span> <span class="muted">${lt.years_before_arrest>0?`${lt.years_before_arrest} yr before the arrest`:lt.years_before_arrest===0?'the arrest year':'after the arrest'}</span>`:'<span class="muted">not before the arrest</span>'}
+function leadNote(){const job=S.st&&S.st.job,lj=job&&job.kind==='lead'&&(job.running||job.error)?job:null,run=job&&job.running,lt=S.lead;
+ return `<h3>How early</h3><p class="muted" style="font-size:12.5px">For each series, the models in use rerun with only the data available in each year from the series' start, until they first flag it. The answer is how early coldmap could have pointed at it.${lt&&lt.generated?` Last run ${esc(day(lt.generated))}${lt.stale?' · <b>out of date</b>':''}.`:''}</p>
+  ${lj?jobView(lj)+(lj.running?`<div class="row"><button class="btn" id="leadStop"${lj.stopping?' disabled':''}>${lj.stopping?'Stopping…':'Stop'}</button></div>`:''):`<div class="row"><button class="btn" id="leadRun"${run?' disabled':''}>${lt&&lt.series?'Find it again':'Find how early'}</button><span class="muted">can take an hour on the national file: each year is a full scan of the state</span></div>`}`}
 function renderBench(){
  const el=$('benchBox');if(!el)return;const b=S.bench,job=S.st&&S.st.job,run=job&&job.running;
  if(!b){if(el._h!=='l'){el.innerHTML='<span class="spin"></span> Loading…';el._h='l'}return}
  const bj=job&&job.kind==='benchmark'&&(job.running||job.error)?job:null;
  const L=b.last,GR={full:['Found','reviewed'],partial:['Partly','strong']};
  const res=L?`<p class="muted" style="font-size:12.5px">Last run ${esc(day(L.generated))}${L.stale?' · <b>out of date</b>: your data, models or settings changed since':''}. <b>Found</b>: a flag covers most of the series' years. <b>Partly</b>: a flag touches it but mostly describes something else.</p>
-  <div class="cases" style="max-height:none;margin-bottom:10px"><table><thead><tr><th>Series</th><th>Source</th>${L.detectors.map(d=>`<th>${esc(d==='ensemble'?'Combined':d)}</th>`).join('')}</tr></thead><tbody>
-   ${L.series.map(r=>`<tr><td>${esc(r.label||r.county+', '+r.start+'–'+r.end)}</td><td class="muted">${esc(r.source==='built in'?'built in':'yours')}</td>${L.detectors.map(d=>{const x=r.results[d];return `<td>${x?`<span class="tag ${GR[x.grade][1]}" title="${esc(x.place+', '+x.weapon+' '+x.start+'–'+x.end)}">${GR[x.grade][0]}</span>`:'<span class="muted">Missed</span>'}</td>`}).join('')}</tr>`).join('')}
-   <tr><td><b>Found or partly found</b></td><td></td>${L.detectors.map(d=>{const c=L.caught[d];return `<td class="num"><b>${c.full}</b> + ${c.partial} of ${c.of}</td>`}).join('')}</tr></tbody></table></div>`:'<p class="muted">Not run yet.</p>';
+  <div class="cases" style="max-height:none;margin-bottom:10px"><table><thead><tr><th>Series</th><th>Source</th>${L.detectors.map(d=>`<th>${esc(d==='ensemble'?'Combined':d)}</th>`).join('')}<th>First flagged</th></tr></thead><tbody>
+   ${L.series.map(r=>`<tr><td>${esc(r.label||r.county+', '+r.start+'–'+r.end)}</td><td class="muted">${esc(r.source==='built in'?'built in':'yours')}</td>${L.detectors.map(d=>{const x=r.results[d];return `<td>${x?`<span class="tag ${GR[x.grade][1]}" title="${esc(x.place+', '+x.weapon+' '+x.start+'–'+x.end)}">${GR[x.grade][0]}</span>`:'<span class="muted">Missed</span>'}</td>`}).join('')}<td>${leadCell(r)}</td></tr>`).join('')}
+   <tr><td><b>Found or partly found</b></td><td></td>${L.detectors.map(d=>{const c=L.caught[d];return `<td class="num"><b>${c.full}</b> + ${c.partial} of ${c.of}</td>`}).join('')}<td></td></tr></tbody></table></div>`:'<p class="muted">Not run yet.</p>';
  const h=`<h2>Benchmark</h2><p>${b.built_in} series ship with coldmap${b.yours?`, plus <b>${b.yours}</b> of your own`:''}. Add your own adjudicated series with <code>coldmap series import FILE.csv</code>; they stay in <code>${esc(b.folder)}</code> on this computer.</p>
   ${b.problems.length?`<p class="msg warn">Some of your series were skipped: ${b.problems.slice(0,5).map(esc).join('; ')}${b.problems.length>5?'…':''}</p>`:''}
   ${bj?jobView(bj):res}
-  <div class="row"><button class="btn${!L||L.stale?' primary':''}" id="benchRun"${run?' disabled':''}>${L?'Run it again':'Run the benchmark'}</button><span class="muted">about 6 minutes on the national file: each series' state is scanned</span></div>`;
+  <div class="row"><button class="btn${!L||L.stale?' primary':''}" id="benchRun"${run?' disabled':''}>${L?'Run it again':'Run the benchmark'}</button><span class="muted">about 6 minutes on the national file: each series' state is scanned</span></div>${leadNote()}`;
  if(el._h!==h){el.innerHTML=h;el._h=h}
 }
 
@@ -944,6 +971,10 @@ document.addEventListener('click',async e=>{
  if(t.dataset&&t.dataset.cirm){if(!confirm('Remove this city data and the last city scan?'))return;post('/api/cities/remove?slug='+encodeURIComponent(t.dataset.cirm)).then(()=>{S.cities=null;S.cgrid={};render()}).catch(err=>toast(err.message));return}
  if(t.id==='ciWapo'){try{await post('/api/cities/wapo')}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
  if(t.id==='ciScan'){try{await post('/api/cities/scan'+(S.cityPeriods?'?periods=1':''))}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
+ if(t.id==='leadRun'){try{await post('/api/leadtime')}catch(err){toast(err.message)}S.leadWatch=1;poll();return}
+ if(t.id==='leadStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
+ if(t.id==='ctlRun'){try{await post('/api/controls')}catch(err){toast(err.message)}S.ctlWatch=1;poll();return}
+ if(t.id==='ctlStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
  if(t.id==='benchRun'){try{await post('/api/benchmark')}catch(err){toast(err.message)}S.benchWatch=1;poll();return}
  if(t.id==='rescan'){try{await post('/api/national')}catch(err){toast(err.message)}$('main').dataset.key='';poll();return}
  if(t.id==='check'){S.checking=1;render();try{await post('/api/check')}catch(err){toast(err.message)}S.checking=0;poll();return}
