@@ -55,6 +55,7 @@ def build_national(data: Dataset, out_dir: Path, detectors=DEFAULT_DETECTORS, en
             "start": f.start, "end": f.end, "total": f.total, "solved": f.solved,
             "expected": f.expected, "q": None if f.q_value is None else round(f.q_value, 4),
             "confidence": f.confidence, "kind": f.kind, "by": list(f.found_by),
+            "ruleout": f.extras.get("ruleout"), "ruleouts": f.extras.get("ruleouts"),
             **{k: e[k] for k in ("what", "agreement", "statistics", "data", "cases", "plugins", "namus") if k in e},
         })
         if i % 25 == 0 or i == len(found):

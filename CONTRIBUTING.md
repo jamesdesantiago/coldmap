@@ -64,6 +64,12 @@ Register a `coldmap.presets.Preset(name, summary, detectors, params)`. Say who i
 
 Append to `coldmap/benchmarks/known_series.json`. Only publicly adjudicated series (conviction, guilty plea or official attribution), with a `note` stating the basis. Series that detectors miss are as valuable as ones they catch: they show where the blind spots are.
 
+Each entry also feeds the **rule-out checks**, which tell researchers when a flag matches a series that has already been through the courts. Add:
+
+- `label`: a neutral description the app shows, by place, victims, years and outcome, never names or nicknames (for example `"King County, WA, killings of women 1982–1984 (guilty plea, 2003)"`).
+- `victims`: the number of killings attributed, only if the `note` states it; otherwise leave it out. A series explains a flag only when it could account for a good share of the flag's unsolved killings.
+- `active`: `[[start, end], ...]` when the `note` gives separate active periods, so a flag in the gap isn't matched.
+
 ## Package a plugin
 
 ```toml

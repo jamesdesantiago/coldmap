@@ -13,7 +13,9 @@
     "start": 1986,
     "end": 1991,
     "arrest": 1992,
-    "note": "Convicted 1995 of 12 murders in Riverside County, 1986-1991."
+    "note": "Convicted 1995 of 12 murders in Riverside County, 1986-1991.",
+    "label": "Riverside County, CA, killings of women 1986–1991 (conviction, 1995)",
+    "victims": 12
   },
   {
     "name": "Hillside Stranglers (Bianchi and Buono)",
@@ -27,7 +29,9 @@
     "start": 1977,
     "end": 1978,
     "arrest": 1979,
-    "note": "Strangulations of women in Los Angeles, 1977-1978; both convicted."
+    "note": "Strangulations of women in Los Angeles, 1977-1978; both convicted.",
+    "label": "Los Angeles, CA, strangulations of women 1977–1978 (convictions)",
+    "victims": null
   },
   {
     "name": "Golden State Killer, Orange County murders",
@@ -41,7 +45,9 @@
     "start": 1980,
     "end": 1981,
     "arrest": 2018,
-    "note": "Joseph DeAngelo bludgeoned victims in Orange County 1980-1981; pleaded guilty 2020."
+    "note": "Joseph DeAngelo bludgeoned victims in Orange County 1980-1981; pleaded guilty 2020.",
+    "label": "Orange County, CA, killings of women 1980–1981 (guilty plea, 2020)",
+    "victims": null
   },
   {
     "name": "Gary Ridgway (Green River Killer)",
@@ -56,7 +62,9 @@
     "start": 1982,
     "end": 1984,
     "arrest": 2001,
-    "note": "Pleaded guilty 2003 to 48 murders, most in King County 1982-1984. Used by MAP to develop its algorithm."
+    "note": "Pleaded guilty 2003 to 48 murders, most in King County 1982-1984. Used by MAP to develop its algorithm.",
+    "label": "King County, WA, killings of women 1982–1984 (guilty plea, 2003)",
+    "victims": 48
   },
   {
     "name": "Darren Vann (Gary, Indiana)",
@@ -70,7 +78,9 @@
     "start": 1994,
     "end": 2014,
     "arrest": 2014,
-    "note": "Strangulations spread thinly over about 20 years; Gary was flagged by MAP's algorithm."
+    "note": "Strangulations spread thinly over about 20 years; Gary was flagged by MAP's algorithm.",
+    "label": "Gary, IN, strangulations of women 1994–2014 (arrest, 2014)",
+    "victims": null
   },
   {
     "name": "Chester Turner (Southside Slayer)",
@@ -85,7 +95,9 @@
     "start": 1987,
     "end": 1998,
     "arrest": 2003,
-    "note": "Convicted 2007 and 2014 of strangling 14 women in Los Angeles, 1987-1998; linked by DNA in 2003-2004."
+    "note": "Convicted 2007 and 2014 of strangling 14 women in Los Angeles, 1987-1998; linked by DNA in 2003-2004.",
+    "label": "Los Angeles, CA, strangulations of women 1987–1998 (convictions, 2007 and 2014)",
+    "victims": 14
   },
   {
     "name": "Lonnie Franklin Jr. (Grim Sleeper)",
@@ -100,7 +112,19 @@
     "start": 1985,
     "end": 2007,
     "arrest": 2010,
-    "note": "Convicted 2016 of 10 murders of women in South Los Angeles, 1985-1988 and 2002-2007; victims shot or strangled."
+    "note": "Convicted 2016 of 10 murders of women in South Los Angeles, 1985-1988 and 2002-2007; victims shot or strangled.",
+    "label": "South Los Angeles, CA, killings of women 1985–2007 (conviction, 2016)",
+    "victims": 10,
+    "active": [
+      [
+        1985,
+        1988
+      ],
+      [
+        2002,
+        2007
+      ]
+    ]
   },
   {
     "name": "Randy Kraft (Scorecard Killer)",
@@ -115,7 +139,9 @@
     "start": 1976,
     "end": 1983,
     "arrest": 1983,
-    "note": "Convicted 1989 of murdering 16 young men in Orange County, 1972-1983 (case file starts 1976). Tests male victims."
+    "note": "Convicted 1989 of murdering 16 young men in Orange County, 1972-1983 (case file starts 1976). Tests male victims.",
+    "label": "Orange County, CA, killings of young men 1976–1983 (conviction, 1989)",
+    "victims": 16
   },
   {
     "name": "Andre Crawford (Chicago)",
@@ -131,6 +157,8 @@
     "start": 1993,
     "end": 1999,
     "arrest": 2000,
-    "note": "Convicted 2009 of 11 murders of women in Chicago's Englewood area, 1993-1999. Another serial killer, Hubert Geralds, was active in the same area."
+    "note": "Convicted 2009 of 11 murders of women in Chicago's Englewood area, 1993-1999. Another serial killer, Hubert Geralds, was active in the same area.",
+    "label": "Chicago, IL, killings of women 1993–1999 (conviction, 2009)",
+    "victims": 11
   }
 ]

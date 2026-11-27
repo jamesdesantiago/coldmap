@@ -138,6 +138,7 @@ function filtered(){
  if(f.show==='open')rows=rows.filter(r=>stt(r)!=='dismissed');
  else if(f.show==='kept')rows=rows.filter(r=>['kept','reviewed','sent'].includes(stt(r)));
  else if(f.show==='dismissed')rows=rows.filter(r=>stt(r)==='dismissed');
+ else if(f.show==='unexplained')rows=rows.filter(r=>stt(r)!=='dismissed'&&r.ruleout!=='explains');
  const by={strength:null,gap:(a,b)=>(gapOf(a)??0)-(gapOf(b)??0),unsolved:(a,b)=>(b.total-b.solved)-(a.total-a.solved),recent:(a,b)=>b.end-a.end};
  if(by[f.sort])rows=[...rows].sort(by[f.sort]);
  return rows;
@@ -155,7 +156,7 @@ function renderFlags(r){
   ${seg('sex',[['Female','Women'],['Male','Men'],['all','Both']])}
   ${seg('conf',[['high','High'],['strong','High + strong'],['all','All']])}
   <select class="sel" id="fKind" aria-label="Kind"><option value="all">Any kind</option><option value="serial-pattern"${f.kind==='serial-pattern'?' selected':''}>Serial-pattern</option><option value="accountability"${f.kind==='accountability'?' selected':''}>Accountability</option></select>
-  <select class="sel" id="fShow" aria-label="Show"><option value="open"${f.show==='open'?' selected':''}>Not dismissed</option><option value="kept"${f.show==='kept'?' selected':''}>Kept only</option><option value="dismissed"${f.show==='dismissed'?' selected':''}>Dismissed</option><option value="all"${f.show==='all'?' selected':''}>Everything</option></select>
+  <select class="sel" id="fShow" aria-label="Show"><option value="open"${f.show==='open'?' selected':''}>Not dismissed</option><option value="kept"${f.show==='kept'?' selected':''}>Kept only</option><option value="unexplained"${f.show==='unexplained'?' selected':''}>Not explained by a known series</option><option value="dismissed"${f.show==='dismissed'?' selected':''}>Dismissed</option><option value="all"${f.show==='all'?' selected':''}>Everything</option></select>
   <input class="inp" id="fQ" type="search" placeholder="Search place or method  /" aria-label="Search flags" value="${esc(f.q)}" style="width:210px">
   <select class="sel" id="fSort" aria-label="Sort"><option value="strength">Strongest first</option><option value="gap"${f.sort==='gap'?' selected':''}>Largest gap</option><option value="unsolved"${f.sort==='unsolved'?' selected':''}>Most unsolved</option><option value="recent"${f.sort==='recent'?' selected':''}>Most recent</option></select>`;
  const keep=document.activeElement&&document.activeElement.id==='fQ',caret=keep?document.activeElement.selectionStart:0;
@@ -168,7 +169,7 @@ function renderFlags(r){
   (rows.slice(0,S.limit).map(x=>{const g=gapOf(x),s=status(x.id);
    return `<button class="frow ${s||''}" data-id="${x.id}" aria-selected="${S.sel===x.id}" role="option">
     <span class="tag ${x.confidence}">${CONF[x.confidence]}</span>
-    <span class="pl"><b>${esc(x.place)}${x.state&&x.level!=='region'?'':''}</b><span>${esc(x.state||'')} · ${esc(String(x.weapon).toLowerCase())} · ${who(x.sex)} · ${yrs(x.start,x.end)}${s?` · <span class="tag ${s}" style="font-size:9.5px">${STATUS[s]}</span>`:''}</span></span>
+    <span class="pl"><b>${esc(x.place)}${x.state&&x.level!=='region'?'':''}</b><span>${esc(x.state||'')} · ${esc(String(x.weapon).toLowerCase())} · ${who(x.sex)} · ${yrs(x.start,x.end)}${s?` · <span class="tag ${s}" style="font-size:9.5px">${STATUS[s]}</span>`:''}${x.ruleout==='explains'?' · <span class="tag" style="font-size:9.5px" title="A known series that went through the courts may explain this flag">known series</span>':''}</span></span>
     <span class="r rt">${pct(x.solved/x.total)}<span class="muted"> / ${pct(x.expected)}</span>${bar(x)}</span>
     <span class="r gp${g>0?' up':''}">${gapTxt(g)}</span>
     <span class="r un">${nf.format(x.total-x.solved)}</span></button>`}).join('')||`<div class="empty">No flags match. Widen the filters, or pick another state.</div>`)+
@@ -196,6 +197,7 @@ async function renderFlag(id){
   <div class="row"><span class="tag ${f.confidence}">${CONF[f.confidence]} confidence</span><span class="tag">${esc(f.kind||'')}</span><a class="btn" href="/map?flag=${f.id}" data-nav style="height:24px;font-size:12px">Show on map</a><span class="muted" style="font-size:12px">found by ${(f.by||[]).map(b=>`<a href="/models?m=detector|${encodeURIComponent(b)}" data-nav>${esc(b)}</a>`).join(' + ')}${f.q!=null?` · q = ${f.q}`:''}</span></div>
   <div class="quote"><div><b>${pct(f.solved/f.total)}</b><span>Solved</span></div><div><b>${pct(f.expected)}</b><span>Expected</span></div><div class="${g<0?'neg':''}"><b>${gapTxt(g)}</b><span>Gap, points</span></div><div><b>${nf.format(f.total-f.solved)}</b><span>Unsolved of ${nf.format(f.total)}</span></div><div><b>${f.end-f.start+1}</b><span>Years</span></div></div>
   ${decideBox(id,f,dec)}
+  ${ruleoutBox(f)}
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
   ${(f.plugins||[]).length?`<h3>From plugins</h3>${f.plugins.map(n=>`<div class="plug"><b>${esc(n.title)}</b> <span class="by">${esc(n.by)}</span><p style="margin:4px 0 0">${esc(n.text)}</p></div>`).join('')}`:''}
   ${(d.sections||[]).map(x=>`<h3>${esc(x.title)} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">from a plugin</span></h3><div class="vsec">${renderBlocks(x.blocks)}</div>`).join('')}
@@ -208,6 +210,12 @@ async function renderFlag(id){
   <h3>Next steps</h3><div class="notes"><ol style="padding-left:18px"><li>Search public news and court records: is a series here already known or solved?</li><li>Read the case rows: do dates, ages and circumstances resemble each other?</li><li>If it still looks unexplained, keep it and ask a second person to review it, then export it for MAP.</li></ol><p class="muted" style="margin-top:8px">Never contact families, witnesses or possible suspects. A flag is a pattern worth review, not evidence that cases are linked.</p></div>
  </div>`;
  if(pane._h!==h){const sc=pane._h&&pane._h.includes(f.place)?pane.scrollTop:0;pane.innerHTML=h;pane._h=h;pane.scrollTop=sc;renderWB(id)}
+}
+const RULE={explains:['May explain this','high'],weakens:['Weakens this','strong'],clear:['Nothing found','possible']};
+function ruleoutBox(f){
+ const rs=f.ruleouts;if(!rs||!rs.length)return '';
+ const head=f.ruleout==='explains'?'A known explanation may fit this flag.':f.ruleout==='weakens'?'Something in the data could account for part of this flag.':'None of the usual explanations fit. That makes the flag stronger, not proof of anything.';
+ return `<h3>Rule-out checks</h3><p style="margin:0 0 8px">${head}</p><table style="margin:0 0 14px"><tbody>${rs.map(r=>`<tr><td style="width:130px"><span class="tag ${RULE[r.status]?.[1]||''}">${esc(RULE[r.status]?.[0]||r.status)}</span></td><td><b>${esc(r.title)}.</b> ${esc(r.text)}</td></tr>`).join('')}</tbody></table>`;
 }
 function decideBox(id,f,dec){
  const s=dec?dec.status:null;
@@ -747,7 +755,8 @@ function renderMethods(){
    <li><b>Fixes.</b> Known reporting problems are corrected or marked before anything runs (listed below).</li>
    <li><b>Detectors.</b> For each place, victim sex and method, models compare how often killings were solved with the rest of the same state, year by year. The strict detector (scan) tests every window length and controls false discoveries; the sensitive one (window) catches more and invents more.</li>
    <li><b>Enrichers.</b> Each flag gets its county, the share of reported murders the case file actually holds, NamUs counts if loaded, and notes from plugins.</li>
-   <li><b>Agreement.</b> Flags that more than one detector finds are labelled high confidence; one strict detector alone is strong; one sensitive detector alone is possible.</li></ol>
+   <li><b>Agreement.</b> Flags that more than one detector finds are labelled high confidence; one strict detector alone is strong; one sensitive detector alone is possible.</li>
+   <li><b>Rule-out checks.</b> Every flag is checked against ordinary explanations: a known series that has been through the courts, agencies that reported murders to the FBI but sent no case records, clearance reports far above the case file's solve rate, and documented coding problems. The verdict is shown beside the flag, never used to hide it.</li></ol>
   <h3>Confidence levels</h3><table><tbody>${Object.entries(m.confidence).map(([k,v])=>`<tr><td><span class="tag ${k}">${CONF[k]}</span></td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>
   <h3>Data fixes applied</h3><table><tbody>${m.fixes.map(f=>`<tr><td><b>${esc(f.title)}</b></td><td>${esc(f.summary)}</td></tr>`).join('')}</tbody></table>
   <h3>Data quality, by state</h3><div class="row"><select class="sel" id="qState" aria-label="State"><option value="">Choose a state</option>${states.map(s=>`<option${s===qk?' selected':''}>${esc(s)}</option>`).join('')}</select><span class="muted">Reporting gaps and oddities that can create or hide flags.</span></div>

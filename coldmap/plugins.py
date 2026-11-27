@@ -28,6 +28,7 @@ EXAMPLE = Path(__file__).with_name("examples") / "before_after.py"
 EXAMPLES = {"before_after.py": "Before & after", "agency_report.py": "Agency report"}
 GUIDE = Path(__file__).with_name("docs") / "plugins.md"  # shown in the app at /guide
 LOCKED_ENRICHERS = ("county", "kind")  # other steps rely on these
+LEGACY_ENRICHERS = ("county", "kind", "coverage", "namus")  # built in before 0.6, when settings didn't record what was offered
 MAX_BYTES = 512 * 1024
 _FILE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,60}\.py$")
 _lock = threading.RLock()
@@ -264,7 +265,12 @@ def enabled() -> dict[str, list[str]]:
     s = _settings()
     dets = [n for n in _order("detector") if n in s.get("detectors", DEFAULT_DETECTORS)]
     enr_all = _order("enricher")
-    want = s.get("enrichers", enr_all)
+    want = list(s.get("enrichers", enr_all))
+    if "enrichers" in s:
+        # Built-in enrichers added in a later version start on: the saved list only records the
+        # choices someone made among the enrichers that existed then.
+        known = set(s.get("known_enrichers") or LEGACY_ENRICHERS) | set(s["enrichers"])
+        want += [n for n in DEFAULT_ENRICHERS if n not in known]
     enr = [n for n in enr_all if n in want or n in LOCKED_ENRICHERS]
     dets = dets or [n for n in DEFAULT_DETECTORS]
     return {"detectors": dets, "enrichers": enr or list(DEFAULT_ENRICHERS),
@@ -299,6 +305,8 @@ def set_enabled(kind: str, name: str, on: bool) -> dict[str, list[str]]:
         raise ValueError("Keep at least one detector on.")
     s = _settings()
     s[key] = [n for n in _order(kind) if n in names]
+    if kind == "enricher":
+        s["known_enrichers"] = _order("enricher")  # what was offered when this choice was made
     _settings_path().parent.mkdir(parents=True, exist_ok=True)
     _settings_path().write_text(json.dumps(s, indent=1))
     return enabled()
