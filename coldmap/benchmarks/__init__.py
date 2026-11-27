@@ -60,8 +60,24 @@ def check_series(d: dict) -> str | None:
         return "the note must state the legal basis (conviction, guilty plea or official attribution)"
     if d["victim_sex"] not in ("Female", "Male"):
         return "victim_sex must be Female or Male"
-    if int(d["start"]) > int(d["end"]):
+    for k in ("name", "state", "county", "note"):
+        if not isinstance(d[k], str):
+            return f"{k} must be text"
+    for k in ("agency", "label"):
+        if d.get(k) is not None and not isinstance(d[k], str):
+            return f"{k} must be text"
+    if not isinstance(d["weapons"], list) or not all(isinstance(w, str) for w in d["weapons"]):
+        return "weapons must be a list of methods"
+    for k in ("start", "end", "arrest") + (("victims",) if d.get("victims") is not None else ()):
+        if isinstance(d[k], bool) or not isinstance(d[k], int):
+            return f"{k} must be a whole number"
+    if d["start"] > d["end"]:
         return "start is after end"
+    a = d.get("active")
+    if a is not None and not (isinstance(a, list) and all(
+            isinstance(p, list) and len(p) == 2 and all(isinstance(y, int) and not isinstance(y, bool) for y in p)
+            and p[0] <= p[1] for p in a)):
+        return "active must be a list of [start, end] years"
     return None
 
 
@@ -113,7 +129,8 @@ def import_csv(csv_path: str | Path, name: str | None = None) -> dict:
             problems.append(f"row {i + 2}: {why}")
         else:
             entries.append({k: v for k, v in d.items() if v is not None})
-    out = local_folder() / f"{(name or Path(csv_path).stem).replace(' ', '_')}.json"
+    from ..datasets import slugify
+    out = local_folder() / f"{slugify(name or Path(csv_path).stem)}.json"   # never outside the folder
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(entries, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return {"file": str(out), "series": len(entries), "problems": problems}
