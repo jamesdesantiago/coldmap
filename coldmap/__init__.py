@@ -36,6 +36,6 @@ __all__ = [
     "VIEWS", "View", "blocks",
     "Ensemble", "Matcher", "DEFAULT_DETECTORS", "PRESETS", "Preset", "REGIONS", "RegionSet", "load_regions", "load", "run", "explain",
 ]
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 from .explain import explain  # noqa: E402

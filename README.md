@@ -20,7 +20,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 Close and reopen the terminal, then run:
 
 ```bash
-uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip coldmap open
+uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/tags/v0.5.0.zip coldmap open
 ```
 
 Your browser opens on the coldmap app straight away. The first time, it downloads the Murder Accountability Project's public files (about 365 MB) and scans every state once (about 5 minutes), with progress for each step. After that it opens straight to your research:
@@ -40,7 +40,7 @@ Change what comes after `coldmap open` to do more (keep the `uvx --from ...` par
 - Just looking? `coldmap open --sample` opens a synthetic example (invented data, no download).
 - Already have the files? `coldmap open --cases SHR76_25a.csv --clearance UCR65_25.csv`.
 
-To type just `coldmap open` from then on, install it once with `uv tool install https://github.com/jamesdesantiago/coldmap/archive/refs/heads/main.zip`. Data and built explorers live in `~/.coldmap` (change it with the `COLDMAP_HOME` environment variable).
+To type just `coldmap open` from then on, install it once with `uv tool install https://github.com/jamesdesantiago/coldmap/archive/refs/tags/v0.5.0.zip`. Data and built explorers live in `~/.coldmap` (change it with the `COLDMAP_HOME` environment variable).
 
 ## The pipeline
 

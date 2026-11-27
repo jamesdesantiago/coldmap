@@ -609,3 +609,18 @@ def test_round_three_hardening(chome, tmp_path, server, monkeypatch):
     assert "@font-face" in get("/static/fonts.css")[1]
     html = get("/flags")[1]
     assert "googleapis" not in html and "/static/fonts.css" in html
+
+
+def test_bundled_third_party_files_are_unchanged():
+    """D3, topojson-client, the county shapes and the fonts must match their recorded checksums."""
+    import hashlib
+    vendor = Path(launch.__file__).with_name("explorer") / "vendor"
+    sums = json.loads((vendor / "SHA256SUMS.json").read_text())
+    for name, want in sums.items():
+        if name.startswith("_"):
+            continue
+        b = (vendor / name).read_bytes()
+        if name.endswith((".js", ".json")):
+            b = b.replace(b"\r\n", b"\n")
+        assert hashlib.sha256(b).hexdigest() == want, f"{name} changed"
+    assert set(launch.STATIC.values()) >= {vendor / n for n in sums if not n.startswith("_")}

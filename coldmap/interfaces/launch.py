@@ -614,7 +614,7 @@ class App:
         local = ({"command": str(exe), "args": [], "env": env} if exe.exists()
                  else {"command": sys.executable, "args": ["-m", "coldmap.interfaces.mcp_server"], "env": env})
         uvx = {"command": "uvx", "args": ["--from", "coldmap[mcp] @ https://github.com/jamesdesantiago/coldmap/"
-                                          "archive/refs/heads/main.zip", "coldmap-mcp"], "env": env}
+                                          "archive/refs/tags/v0.5.0.zip", "coldmap-mcp"], "env": env}
         ready = importlib.util.find_spec("mcp") is not None
         server = local if ready else uvx
         from . import connect
