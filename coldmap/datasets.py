@@ -208,7 +208,7 @@ def add(name: str, text: str, data, place: str, level: str, time: str, keep: lis
                         "month": month})
     for c in keep:
         num = pd.to_numeric(df[c].replace("", None), errors="coerce")
-        out[c] = num if num.notna().mean() >= 0.9 else df[c]
+        out[c] = num if num.notna().mean() >= 0.9 else df[c].map(_no_formula)
     out = out.dropna(subset=["place", "year"])
     slug = slugify(name)
     with _lock:
@@ -293,6 +293,12 @@ def for_place(places: list[str], level_places: dict[str, list[str]], years: tupl
                     "rows": json.loads(inside.head(300).to_json(orient="records")), "rows_total": int(len(inside)),
                     "all_rows": int(len(df))})
     return out
+
+
+def _no_formula(v):
+    """Text a spreadsheet would run as a formula (CSV injection) is kept as text: a leading ' stops it."""
+    s = "" if v is None else str(v)
+    return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
 
 
 def _num(x):

@@ -176,7 +176,30 @@ def review(text: str) -> dict:
                 src = ast.unparse(d)
                 if src.endswith(".register"):
                     registers.append({"registry": src.removesuffix(".register"), "class": node.name})
+    # Changing coldmap itself: assigning to anything imported from coldmap (for example replacing
+    # the dataset identifier filter or the review rules) or to its modules' attributes.
+    from_coldmap = {a.asname or a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
+                    and (n.module or "").startswith("coldmap") for a in n.names}
+    from_coldmap |= {(a.asname or a.name).split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import)
+                     for a in n.names if a.name.startswith("coldmap")}
+    patched = set()
+    for n in ast.walk(tree):
+        targets = n.targets if isinstance(n, ast.Assign) else [n.target] if isinstance(n, (ast.AugAssign, ast.AnnAssign)) else []
+        for t in targets:
+            base = t
+            while isinstance(base, ast.Attribute):
+                base = base.value
+            if isinstance(t, ast.Attribute) and isinstance(base, ast.Name) and base.id in from_coldmap:
+                patched.add(ast.unparse(t))
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ("setattr", "delattr") and n.args \
+                and isinstance(n.args[0], ast.Name) and n.args[0].id in from_coldmap:
+            patched.add(f"{n.func.id}({n.args[0].id}, ...)")
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "unregister":
+            patched.add(ast.unparse(n.func))
     flags = []
+    if patched:
+        flags.append({"what": "coldmap itself (it replaces or removes parts of coldmap, which could switch off its safeguards)",
+                      "uses": sorted(patched)[:8]})
     for what, hints in _RISKY.items():
         hits = sorted({n for n in names for h in hints if n == h or n.startswith(h + ".")})
         if hits:

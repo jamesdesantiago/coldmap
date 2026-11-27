@@ -41,6 +41,9 @@ LABELS = {"cases": "case file", "clearance": "clearance file"}
 APP_PAGE = Path(__file__).with_name("explorer") / "app.html"
 _VENDOR = APP_PAGE.with_name("vendor")
 STATIC = {"/static/app.js": APP_PAGE.with_name("app.js"), "/static/theme.js": APP_PAGE.with_name("theme.js"),
+          "/static/fonts.css": APP_PAGE.with_name("fonts.css"),
+          "/vendor/archivo-latin.woff2": _VENDOR / "archivo-latin.woff2",
+          "/vendor/jetbrainsmono-latin.woff2": _VENDOR / "jetbrainsmono-latin.woff2",
           "/vendor/d3.v7.min.js": _VENDOR / "d3.v7.min.js",
           "/vendor/topojson-client.min.js": _VENDOR / "topojson-client.min.js",
           "/vendor/counties-10m.json": _VENDOR / "counties-10m.json"}
@@ -845,11 +848,10 @@ def _handler(app: App):
             self.send_header("Content-Length", str(len(b)))
             self.send_header("Cache-Control", "no-store")
             if ctype.startswith("text/html"):
-                # The app's own scripts and data only; fonts from Google Fonts; no framing.
+                # Only what coldmap itself serves: no other site is contacted, nothing can frame the app.
                 self.send_header("Content-Security-Policy",
                                  "default-src 'self'; script-src 'self'; "
-                                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                                 "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
+                                 "style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; "
                                  "connect-src 'self'; object-src 'none'; base-uri 'none'; "
                                  "form-action 'self'; frame-ancestors 'none'")
             self.end_headers()
@@ -952,7 +954,8 @@ def _handler(app: App):
                 return self._send(404, "Not found")
             if path in STATIC:  # the app's scripts, libraries and county shapes: a fixed list, nothing else
                 f = STATIC[path]
-                ctype = "application/json" if f.suffix == ".json" else "text/javascript; charset=utf-8"
+                ctype = {".json": "application/json", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2"}.get(
+                    f.suffix, "text/javascript; charset=utf-8")
                 b = f.read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", ctype)
@@ -1032,6 +1035,20 @@ class _Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
 
 
+def _opener(link: str) -> str:
+    """A private local page that forwards to `link`. The browser is started with this file's
+    address, not the link, because other users on the computer can read a program's command line
+    (ps on Linux and Mac) and the link carries the session key. Like Jupyter's redirect file."""
+    import html as _html
+    f = home() / "open.html"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # readable by this user only
+    with os.fdopen(fd, "w", encoding="utf-8") as out:
+        out.write(f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url={_html.escape(link)}">'
+                  f'<title>Opening coldmap</title><p>Opening coldmap… <a href="{_html.escape(link)}">Continue</a></p>')
+    return f.as_uri()
+
+
 def serve(app: App, port: int, open_browser: bool, path: str = "/") -> None:
     handler = _handler(app)
     try:
@@ -1045,7 +1062,7 @@ def serve(app: App, port: int, open_browser: bool, path: str = "/") -> None:
                f"  {link}\n"
                f"Everything else happens in the browser. Press Ctrl+C here to stop.")
     if open_browser:
-        threading.Timer(0.3, webbrowser.open, args=(link,)).start()
+        threading.Timer(0.3, webbrowser.open, args=(_opener(link),)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

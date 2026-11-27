@@ -26,7 +26,7 @@ coldmap-mcp = "coldmap.interfaces.mcp_server:main"
 include = ["coldmap*"]
 
 [tool.setuptools.package-data]
-coldmap = ["interfaces/explorer/*.html", "interfaces/explorer/*.js", "benchmarks/*.json", "examples/*.py", "docs/*.md", "interfaces/explorer/vendor/*"]
+coldmap = ["interfaces/explorer/*.html", "interfaces/explorer/*.js", "interfaces/explorer/*.css", "benchmarks/*.json", "examples/*.py", "docs/*.md", "interfaces/explorer/vendor/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

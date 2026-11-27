@@ -1,0 +1,6 @@
+/* Archivo and JetBrains Mono, Latin subsets, shipped with coldmap (SIL Open Font License, see
+   vendor/LICENSE-*-OFL.txt) so the app makes no requests to anyone else and works offline. */
+@font-face{font-family:'Archivo';font-style:normal;font-weight:400 800;font-stretch:62% 125%;font-display:swap;
+ src:url(/vendor/archivo-latin.woff2) format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 600;font-display:swap;
+ src:url(/vendor/jetbrainsmono-latin.woff2) format('woff2')}

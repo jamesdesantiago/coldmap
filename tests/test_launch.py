@@ -584,3 +584,28 @@ def test_only_the_browser_coldmap_opened_gets_in(chome, tmp_path):
         assert launch.App("files", cases, clearance).key != app.key                    # a new key every run
     finally:
         httpd.shutdown()
+
+
+def test_round_three_hardening(chome, tmp_path, server, monkeypatch):
+    from coldmap import datasets, plugins
+    # The browser is started with a private local file, never the key-carrying link.
+    opened = []
+    monkeypatch.setattr(launch.webbrowser, "open", lambda u: opened.append(u))
+    uri = launch._opener("http://127.0.0.1:1/?key=SECRET")
+    assert uri.startswith("file:") and "SECRET" not in uri
+    page = (chome / "open.html").read_text()
+    assert "SECRET" in page and 'http-equiv="refresh"' in page
+    if os.name != "nt":
+        assert (chome / "open.html").stat().st_mode & 0o077 == 0  # this user only
+    # Spreadsheet formulas in a shared dataset are stored as text.
+    assert datasets._no_formula("=HYPERLINK(\"http://x\",\"y\")") == "'=HYPERLINK(\"http://x\",\"y\")"
+    assert datasets._no_formula("ok") == "ok" and datasets._no_formula("-cmd") == "'-cmd"
+    # A plugin that replaces part of coldmap is pointed out in the review.
+    r = plugins.review("import coldmap.datasets as ds\nds.identifying = lambda df: {}\n")
+    assert r["flags"] and r["flags"][0]["what"].startswith("coldmap itself")
+    # Fonts come from coldmap; the page may load nothing from anywhere else.
+    cases, clearance = make_sample(tmp_path)
+    get, _ = server(launch.App("files", cases, clearance))
+    assert "@font-face" in get("/static/fonts.css")[1]
+    html = get("/flags")[1]
+    assert "googleapis" not in html and "/static/fonts.css" in html
