@@ -36,7 +36,8 @@ _ID_NAMES = re.compile(
     r"apartment|zip|postcode|postal|phone|mobile|cell|email|e_mail|^ip$|ip_?addr|ipv[46]|mac_?addr|imei|"
     r"ssn|social_?security|passport|licen[cs]e|plate|vin$|dob$|date_?of_?birth|birth_?date|birthday|"
     r"finger|print_?id|biometric|dna|codis|afis|face|photo|iris|^lat(itude)?$|^lon(g|gitude)?$|coord|"
-    r"geo_?point|gps|account|card_?num|username|user_?id|person_?id|suspect|victim_?name|offender_?name")
+    r"geo_?point|gps|account|card_?num|username|user_?id|person_?id|suspect|victim_?name|offender_?name|"
+    r"(victim|offender|suspect|person|defendant)_(first|last|middle|sur|given)$")
 # Values that identify people, whatever the column is called.
 _ID_VALUES = [("email addresses", re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.I)),
               ("IP addresses", re.compile(r"^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-f]{0,4}(:[0-9a-f]{0,4}){2,7}$", re.I)),

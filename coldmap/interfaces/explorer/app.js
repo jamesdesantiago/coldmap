@@ -43,6 +43,7 @@ async function poll(){
  if(job&&!job.running&&S.lastJob===job.id+':run'){S.lastJob=job.id;if(!job.error)toast(job.title.replace(/^(Preparing|Scanning|Getting|Updating)/,m=>({Preparing:'Prepared',Scanning:'Scanned',Getting:'Got',Updating:'Updated'})[m])+' — done')}
  if(job&&job.running)S.lastJob=job.id+':run';
  if(job&&job.kind==='benchmark'&&!job.running&&S.benchWatch){S.benchWatch=0;S.bench=null}
+ if(job&&job.kind==='cities'&&!job.running&&S.cityWatch){S.cityWatch=0;S.cities=null;S.cgrid={}}
  if(wantDownload&&st&&!S.didDl&&st.mode==='map'&&!(job&&job.running)){S.didDl=1;try{await post('/api/download'+(wantDownload==='refresh'?'?refresh=1':''))}catch(e){}}
  render();
  timer=setTimeout(poll,S.err?3000:job&&job.running?600:15000);
@@ -100,8 +101,8 @@ function render(){
  if(!st){$('main').innerHTML=`<div class="view"><div class="page"><p class="${S.err?'msg err':'muted'}">${esc(S.err||'Opening coldmap…')}</p></div></div>`;return}
  const research=['flags','shortlist','places','map','x'].includes(r.sec);
  if(research&&!st.national)return renderGate();
- ({flags:renderFlags,map:renderMap,x:renderViewPage,shortlist:renderShortlist,places:renderPlaces,models:renderModels,ai:renderAI,methods:renderMethods,data:renderData}[r.sec]||renderFlags)(r);
- document.title=({flags:'Flags',map:'Map',shortlist:'Shortlist',places:'Places',models:'Models',ai:'AI assistants',methods:'Methods',data:'Data'}[r.sec]||'coldmap')+' · coldmap';
+ ({flags:renderFlags,map:renderMap,x:renderViewPage,shortlist:renderShortlist,places:renderPlaces,cities:renderCities,models:renderModels,ai:renderAI,methods:renderMethods,data:renderData}[r.sec]||renderFlags)(r);
+ document.title=({flags:'Flags',map:'Map',shortlist:'Shortlist',places:'Places',cities:'Cities',models:'Models',ai:'AI assistants',methods:'Methods',data:'Data'}[r.sec]||'coldmap')+' · coldmap';
 }
 function setMain(key,html){const m=$('main');if(m.dataset.key!==key){m.dataset.key=key;m.innerHTML=html;return true}return false}
 
@@ -797,6 +798,61 @@ function renderBench(){
  if(el._h!==h){el.innerHTML=h;el._h=h}
 }
 
+// ---- cities --------------------------------------------------------------------------------------
+function loadCities(){if(S.citiesLoading)return;S.citiesLoading=1;api('/api/cities').then(j=>{S.cities=j;S.citiesLoading=0;render()}).catch(e=>{S.citiesLoading=0;toast(e.message)})}
+function renderCities(r){
+ const C=S.cities;if(!C){loadCities();return setMain('cities:l','<div class="view"><div class="page"><span class="spin"></span> Loading…</div></div>')}
+ const sex=S.citySex||'all';
+ const sexSeg=`<div class="seg" role="group" aria-label="Victims">${[['Female','Women'],['Male','Men'],['all','Both']].map(([v,l])=>`<button data-csex="${v}" aria-pressed="${sex===v}">${l}</button>`).join('')}</div>`;
+ if(r.a)return renderCity(r.a,sex,sexSeg);
+ const job=S.st&&S.st.job,cj=job&&job.kind==='cities'&&(job.running||job.error)?job:null,run=job&&job.running;
+ const R=C.results,areas=R?R.areas.filter(a=>a.sex===sex):[];
+ const intro=`<p class="lede">Areas of about 1 to 5 km within a city where killings were solved far less often than in the rest of the same city, in the same years. Uses city data you add: one row per killing with a location. Locations are kept only as cells of about 1 km, cells with fewer than ${C.min_shown} killings are never shown, and names, race, age and exact dates are left out on import.</p>`;
+ const imp=S.cimp;
+ const form=imp?`<div class="box"><h2>Add “${esc(imp.file)}”</h2>${imp.err?`<p class="msg err">${esc(imp.err)}</p>`:!imp.preview?'<span class="spin"></span> Reading…':(()=>{const pv=imp.preview;
+   return `${pv.missing.length?`<p class="msg err">Couldn't find: ${esc(pv.missing.join(', '))}. City data needs a latitude, a longitude, a city, a date or year, and a status (solved, closed, arrest…).</p>`:`<p>${nf.format(pv.rows)} rows in ${pv.cities} cities.</p>`}
+    <table><thead><tr><th>Column</th><th>Used as</th></tr></thead><tbody>${Object.entries(pv.columns).filter(([k,v])=>v).map(([k,v])=>`<tr><td><code>${esc(v)}</code></td><td>${esc({lat:'latitude, turned into a ~1 km cell',lon:'longitude, turned into a ~1 km cell',date:'date: year and month kept',year:'year',city:'city',state:'state',status:'solved or not',sex:'victim sex'}[k])}</td></tr>`).join('')}</tbody></table>
+    ${pv.status_values?`<p class="muted" style="font-size:12.5px">Status: ${Object.entries(pv.status_values).map(([k,v])=>`“${esc(k)}” → <b>${esc(v)}</b>`).join(' · ')}</p>`:''}
+    <h3>Left out, never stored</h3><ul>${Object.entries(pv.left_out).map(([c,why])=>`<li><code>${esc(c)}</code>: ${esc(why)}</li>`).join('')}</ul>
+    <div class="row"><label>Name <input id="ciName" value="${esc(imp.name)}"></label><label style="flex:1">Source and terms <input id="ciSource" style="width:100%" value="${esc(imp.source??pv.source??'')}" placeholder="Who published it, and its licence"></label></div>
+    <div class="row"><button class="btn primary" id="ciAdd"${pv.missing.length?' disabled':''}>Add it</button><button class="btn" id="ciCancel">Cancel</button></div>`})()}</div>`:'';
+ const ds=C.datasets.length?`<table><thead><tr><th>City data</th><th class="n">Killings</th><th class="n">Cities</th><th>Years</th><th>Source</th><th></th></tr></thead><tbody>${C.datasets.map(m=>`<tr><td><b>${esc(m.name)}</b>${Object.keys(m.dropped||{}).length?`<br><span class="muted" style="font-size:12px">skipped: ${esc(Object.entries(m.dropped).map(([k,v])=>v+' '+k).join(', '))}</span>`:''}</td><td class="n">${nf.format(m.rows)}</td><td class="n">${m.cities}</td><td class="num">${m.years[0]}–${m.years[1]}</td><td style="font-size:12.5px">${esc(m.source||'not given')}</td><td><button class="btn" data-cirm="${esc(m.slug)}">Remove</button></td></tr>`).join('')}</tbody></table>`:`<p class="muted">No city data yet. The Washington Post publishes ${nf.format(52000)} homicides in 50 large cities, 2007–2017, at <code>github.com/washingtonpost/data-homicides</code> (CC BY-NC-SA 4.0: non-commercial use with credit). Download <code>homicide-data.csv</code> and add it here; it stays on this computer.</p>`;
+ const add=imp?'':`<div class="row"><input type="file" id="ciFile" accept=".csv,text/csv" hidden><button class="btn${C.datasets.length?'':' primary'}" id="ciPick">Add city data (CSV)…</button></div>`;
+ const scanRow=C.datasets.length?`<div class="row"><button class="btn${R?'':' primary'}" id="ciScan"${run?' disabled':''}>${R?'Scan again':'Scan cities'}</button><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="ciPeriods"${S.cityPeriods?' checked':''}> Also test periods of 1–5 years</label><span class="muted">${S.cityPeriods?'about 8 minutes; with many more areas and periods tried, one must stand out much further to count':'about 2–3 minutes'}</span></div>`:'';
+ const res=!R?'':`<p class="muted" style="font-size:12.5px">Scanned ${esc(day(R.generated))}${R.settings.periods?', whole period and 1–5 year periods':', whole period'}; areas up to ${R.settings.radius_km} km from their centre, at least ${R.settings.min_cases} killings, false discovery rate ${R.settings.max_q}. ${R.areas.length} area${R.areas.length===1?'':'s'} in all.</p>
+  ${areas.length?`<table><thead><tr><th>City</th><th>Years</th><th class="n">Killings</th><th class="n">Solved here</th><th class="n">Rest of city</th><th class="n">Across</th><th class="n">q</th></tr></thead><tbody>${areas.map(a=>`<tr class="click" data-href="/cities/${encodeURIComponent(a.city)}"><td><b>${esc(a.city)}</b></td><td class="num">${a.start}–${a.end}</td><td class="n">${a.killings}</td><td class="n"><b>${pct(a.solved/a.killings)}</b></td><td class="n">${a.rest_rate!=null?pct(a.rest_rate):'—'}</td><td class="n">${(2*a.radius_km).toFixed(0)} km</td><td class="n">${a.q_value.toFixed(3)}</td></tr>`).join('')}</tbody></table>`:`<p class="muted">No area stands out for ${who(sex)} once chance is accounted for.</p>`}`;
+ const cityList=C.cities.length?`<h3>Every city</h3><p class="muted" style="font-size:12.5px">${C.cities.map(c=>`<a href="/cities/${encodeURIComponent(c)}" data-nav>${esc(c)}</a>`).join(' · ')}</p>`:'';
+ return setMain('cities:'+sex+':'+(R?R.generated:'')+':'+(imp?JSON.stringify([imp.file,!!imp.preview,imp.err]):'')+':'+C.datasets.length+':'+(cj?cj.id+cj.steps.map(x=>x.done+'/'+x.total).join():'')+':'+!!S.cityPeriods+run,
+  `<div class="view"><div class="page"><div class="row" style="justify-content:space-between"><div><h1>Cities</h1>${intro}</div>${sexSeg}</div>
+   ${form}<div class="box"><h2>Your city data</h2>${ds}${add}</div>
+   ${C.datasets.length?`<div class="box"><h2>Areas</h2>${cj?jobView(cj):res}${scanRow}</div>`:''}
+   ${cityList}
+   <p class="muted" style="font-size:12.5px">An area is a pattern worth review, never evidence that killings are linked. Low clearance across a neighbourhood usually reflects how cases there are investigated and resourced; read it alongside what is known locally.</p></div></div>`);
+}
+function renderCity(city,sex,sexSeg){
+ S.cgrid=S.cgrid||{};const k=city+'|'+sex,g=S.cgrid[k];
+ if(!g){S.cgrid[k]='l';api('/api/cities/grid?city='+encodeURIComponent(city)+'&sex='+sex).then(j=>{S.cgrid[k]=j;render()}).catch(e=>toast(e.message))}
+ const crumb=`<div class="crumb"><a href="/cities" data-nav>Cities</a> › <b>${esc(city)}</b></div>`;
+ if(!g||g==='l')return setMain('city:l'+k,`<div class="view"><div class="page">${crumb}<span class="spin"></span> Loading…</div></div>`);
+ const W=760,H=560;
+ let svg='<p class="muted">No cells with enough killings to show.</p>';
+ if(g.cells.length){
+  const lat0=g.cells.reduce((a,c)=>a+c.lat,0)/g.cells.length,kx=Math.cos(lat0*Math.PI/180);
+  const xs=g.cells.map(c=>c.lon*kx),ys=g.cells.map(c=>c.lat);
+  const pad=.02,x0=Math.min(...xs)-pad,x1=Math.max(...xs)+pad,y0=Math.min(...ys)-pad,y1=Math.max(...ys)+pad;
+  const sc=Math.min(W/(x1-x0),H/(y1-y0)),X=v=>(v*kx-x0)*sc,Y=v=>(y1-v)*sc;
+  const cell=(1/110.574)*sc;
+  const col=c=>{const r=c.solved/c.killings;return `color-mix(in oklab, var(--solved) ${Math.round(r*100)}%, var(--red))`};
+  svg=`<svg viewBox="0 0 ${Math.ceil((x1-x0)*sc)} ${Math.ceil((y1-y0)*sc)}" style="width:100%;max-width:${W}px;height:auto;display:block" role="img" aria-label="Cells of about 1 km in ${esc(city)}, shaded by share solved">
+   ${g.cells.map(c=>`<rect x="${(X(c.lon)-cell/2).toFixed(1)}" y="${(Y(c.lat)-cell/2).toFixed(1)}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" fill="${col(c)}" opacity="${Math.min(1,.35+c.killings/40).toFixed(2)}" data-tip="${esc(c.killings+' killings, '+pct(c.solved/c.killings)+' solved')}"/>`).join('')}
+   ${g.areas.map((a,i)=>`<circle cx="${X(a.lon).toFixed(1)}" cy="${Y(a.lat).toFixed(1)}" r="${(a.radius_km/110.574*sc).toFixed(1)}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="5 3" data-tip="${esc(`Area ${i+1}: ${a.solved} of ${a.killings} solved (${pct(a.solved/a.killings)}), rest of city ${a.rest_rate!=null?pct(a.rest_rate):'—'}, ${a.start}–${a.end}`)}"/><text x="${X(a.lon).toFixed(1)}" y="${(Y(a.lat)+4).toFixed(1)}" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">${i+1}</text>`).join('')}
+  </svg>`}
+ const areas=g.areas.length?`<table><thead><tr><th>Area</th><th>Years</th><th class="n">Killings</th><th class="n">Solved here</th><th class="n">Rest of city</th><th class="n">q</th></tr></thead><tbody>${g.areas.map((a,i)=>`<tr><td><b>${i+1}</b>, about ${(2*a.radius_km).toFixed(0)} km across</td><td class="num">${a.start}–${a.end}</td><td class="n">${a.killings}</td><td class="n"><b>${pct(a.solved/a.killings)}</b></td><td class="n">${a.rest_rate!=null?pct(a.rest_rate):'—'}</td><td class="n">${a.q_value.toFixed(3)}</td></tr>`).join('')}</tbody></table>`:`<p class="muted">No area here stands out for ${who(sex)} in the last scan.</p>`;
+ return setMain('city:'+k,`<div class="view"><div class="page">${crumb}<div class="row" style="justify-content:space-between"><div><h1>${esc(city)}</h1>
+  <p class="lede">${nf.format(g.killings)} killings of ${who(sex)}, <span class="num">${pct(g.killings?g.solved/g.killings:0)}</span> solved. Each square is about 1 km, shaded from unsolved (red) to solved; fainter squares hold fewer killings. ${g.hidden_cells} cell${g.hidden_cells===1?'':'s'} with fewer than ${g.min_shown} killings ${g.hidden_cells===1?'is':'are'} hidden. Dashed circles are areas the scan found.</p></div>${sexSeg}</div>
+  <div class="box">${svg}</div><div class="box"><h2>Areas</h2>${areas}</div></div></div>`);
+}
+
 // ---- data ------------------------------------------------------------------------------------
 function renderData(){
  const st=S.st,job=st.job,busy=job&&job.running,n=st.national,ck=st.data.check;
@@ -877,6 +933,12 @@ document.addEventListener('click',async e=>{
  if(t.classList.contains('frow')){selectFlag(t.dataset.id);return}
  if(t.id==='more'){S.limit+=200;render();return}
  if(t.id==='doSetup'){try{await post('/api/setup')}catch(err){toast(err.message)}poll();return}
+ if(t.dataset&&t.dataset.csex){S.citySex=t.dataset.csex;render();return}
+ if(t.id==='ciPick'){$('ciFile').click();return}
+ if(t.id==='ciCancel'){S.cimp=null;render();return}
+ if(t.id==='ciAdd'&&S.cimp){const b=t;b.disabled=true;post('/api/cities/add',{text:S.cimp.text,name:$('ciName').value,source:$('ciSource').value}).then(m=>{S.cimp=null;S.cities=null;S.cgrid={};toast(`Added ${nf.format(m.rows)} killings in ${m.cities} cities`);render()}).catch(err=>{b.disabled=false;toast(err.message)});return}
+ if(t.dataset&&t.dataset.cirm){if(!confirm('Remove this city data and the last city scan?'))return;post('/api/cities/remove?slug='+encodeURIComponent(t.dataset.cirm)).then(()=>{S.cities=null;S.cgrid={};render()}).catch(err=>toast(err.message));return}
+ if(t.id==='ciScan'){try{await post('/api/cities/scan'+(S.cityPeriods?'?periods=1':''))}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
  if(t.id==='benchRun'){try{await post('/api/benchmark')}catch(err){toast(err.message)}S.benchWatch=1;poll();return}
  if(t.id==='rescan'){try{await post('/api/national')}catch(err){toast(err.message)}$('main').dataset.key='';poll();return}
  if(t.id==='check'){S.checking=1;render();try{await post('/api/check')}catch(err){toast(err.message)}S.checking=0;poll();return}
@@ -947,7 +1009,7 @@ function exportDialog(f,text){
  document.body.append(d);d.querySelector('#dlgClose').focus();
  d.addEventListener('keydown',e=>{if(e.key==='Escape')d.remove()});
 }
-document.addEventListener('change',e=>{
+document.addEventListener('change',async e=>{
  const t=e.target;
  if(t.id==='fState'){S.f.state=t.value;S.f.county='';S.limit=200;render()}
  if(t.id==='fCounty'){S.f.county=t.value;render()}
@@ -960,6 +1022,12 @@ document.addEventListener('change',e=>{
  if(t.id==='fSort'){S.f.sort=t.value;render()}
  if(t.id==='qState'){S.qState=t.value;S.quality=S.quality||{};if(t.value&&!S.quality[t.value])api('/api/quality?state='+encodeURIComponent(t.value)).then(j=>{S.quality[t.value]=j;render()}).catch(err=>toast(err.message));render()}
  if(t.id==='noteBox'){post('/api/note',{id:t.dataset.id,note:t.value}).then(()=>{refreshDecisions();toast('Note saved')}).catch(err=>toast(err.message))}
+ if(t.id==='ciPeriods'){S.cityPeriods=t.checked;render();return}
+ if(t.id==='ciFile'&&t.files[0]){const fl=t.files[0];t.value='';
+  if(fl.size>25*1024*1024){toast('That file is over 25 MB.');return}
+  S.cimp={file:fl.name,name:fl.name.replace(/\.csv$/i,'').replace(/[_-]+/g,' ')};render();
+  const buf=await fl.arrayBuffer();let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch(e){text=new TextDecoder('windows-1252').decode(buf)}
+  S.cimp.text=text;try{S.cimp.preview=await post('/api/cities/preview',{text})}catch(e){S.cimp.err=e.message}render();return}
  if(t.id==='dsFile'&&t.files[0]){const fl=t.files[0];t.value='';
   if(fl.size>25*1024*1024){toast('That file is over 25 MB. Aggregate it by place and year first.');return}
   S.imp={file:fl.name,name:fl.name.replace(/\.csv$/i,'').replace(/[_-]+/g,' '),keep:[]};render();

@@ -540,6 +540,39 @@ class App:
         return self.start("benchmark", "Running the benchmark",
                           [("load", "Read the case file"), ("score", "Score each known series")], work)
 
+    def city_scan(self, periods: bool = False) -> Job:
+        """Look for areas within each imported city where killings went unsolved far more often."""
+        from .. import cities
+        if not cities.all_meta():
+            raise click.ClickException("Add city data first.")
+
+        def work(job: Job):
+            job.step("scan", 0, 1)
+            out = cities.scan(periods=periods, progress=lambda i, n, c: job.step("scan", i, n))
+            job.finish({"areas": len(out["areas"])})
+        return self.start("cities", "Scanning cities",
+                          [("scan", "Compare areas with the rest of each city")], work)
+
+    def city_action(self, action: str, q: dict, b: dict) -> dict:
+        from .. import cities
+        if action == "preview":
+            return cities.preview(str(b.get("text", "")))
+        if action == "add":
+            self._idle()
+            return cities.add(str(b.get("name", "")), str(b.get("text", "")), str(b.get("source", "")))
+        if action == "remove":
+            self._idle()
+            cities.remove(q.get("slug", ""))
+            return {"ok": True}
+        raise click.ClickException("Unknown city data action.")
+
+    def cities_view(self) -> dict:
+        from .. import cities
+        metas = cities.all_meta()
+        names = sorted(cities.load().city.unique()) if metas else []
+        return {"datasets": metas, "cities": names, "results": cities.results(), "min_shown": cities.MIN_SHOWN,
+                "folder": str(cities.folder())}
+
     def benchmark_view(self) -> dict:
         from ..benchmarks import load_local, load_series
         mine, problems = load_local()
@@ -963,6 +996,10 @@ def _handler(app: App):
                     return self._json(202, app.national().view())
                 if u.path == "/api/benchmark":
                     return self._json(202, app.benchmark().view())
+                if u.path == "/api/cities/scan":
+                    return self._json(202, app.city_scan(q.get("periods") == "1").view())
+                if u.path.startswith("/api/cities/"):
+                    return self._json(200, app.city_action(u.path.rsplit("/", 1)[1], q, self._body()))
                 if u.path == "/api/decide":
                     b = self._body()
                     flag = b.get("flag")
@@ -1076,6 +1113,11 @@ def _handler(app: App):
                     return self._json(200, research.map_counties(app._data(), q.get("sex", "all")))
                 if path == "/api/benchmark":
                     return self._json(200, app.benchmark_view())
+                if path == "/api/cities":
+                    return self._json(200, app.cities_view())
+                if path == "/api/cities/grid":
+                    from .. import cities
+                    return self._json(200, cities.grid(q.get("city", ""), q.get("sex", "all")))
                 if path == "/api/history":
                     s = app.lib.national_summary() if app.lib else None
                     return self._json(200, (s or {}).get("history") or {})
