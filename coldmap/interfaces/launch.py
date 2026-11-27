@@ -57,33 +57,47 @@ def _url(key: str) -> str:
     return os.environ.get(env) or url
 
 
-def download(url: str, dest: Path, label: str, progress=None) -> dict:
+def download(url: str, dest: Path, label: str, progress=None, max_bytes: int | None = None) -> dict:
     """Download to dest (via a .part file). progress(done, total) is called as bytes arrive;
-    without it a terminal progress bar is shown. Returns the server's size and ETag."""
+    without it a terminal progress bar is shown. Stops with an error past max_bytes.
+    Returns the server's size and ETag."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
-    req = urllib.request.Request(url, headers={"User-Agent": "coldmap"})
-    with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as out:
-        size = int(r.headers.get("Content-Length") or 0) or None
-        info = {"size": size, "etag": r.headers.get("ETag")}
-        if progress:
-            done = 0
-            progress(0, size)
-            while chunk := r.read(1 << 20):
-                out.write(chunk)
-                done += len(chunk)
-                progress(done, size)
-        else:
-            with click.progressbar(length=size, label=label, show_pos=size is None) as bar:
-                while chunk := r.read(1 << 20):
-                    out.write(chunk)
-                    bar.update(len(chunk))
+    try:
+        info = _fetch(url, part, label, progress, max_bytes)
+    except BaseException:
+        part.unlink(missing_ok=True)   # never leave a partial file behind
+        raise
     with open(part, "rb") as f:
         head = f.read(200).lower()
     if head.lstrip().startswith((b"<!doctype", b"<html")):
         part.unlink()
         raise OSError("the link returned a web page instead of the data file")
     part.replace(dest)
+    return info
+
+
+def _fetch(url: str, part: Path, label: str, progress, max_bytes: int | None) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "coldmap"})
+    with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as out:
+        size = int(r.headers.get("Content-Length") or 0) or None
+        info = {"size": size, "etag": r.headers.get("ETag")}
+        if max_bytes and size and size > max_bytes:
+            raise OSError(f"the file is larger than expected ({size:,} bytes)")
+        if progress:
+            done = 0
+            progress(0, size)
+            while chunk := r.read(1 << 20):
+                out.write(chunk)
+                done += len(chunk)
+                if max_bytes and done > max_bytes:
+                    raise OSError("the file is larger than expected")
+                progress(done, size)
+        else:
+            with click.progressbar(length=size, label=label, show_pos=size is None) as bar:
+                while chunk := r.read(1 << 20):
+                    out.write(chunk)
+                    bar.update(len(chunk))
     return info
 
 
@@ -564,7 +578,7 @@ class App:
                 raw = Path(tmp) / "homicide-data.csv"
                 job.step("download", 0, None)
                 download(cities.wapo_url(), raw, "The Washington Post's data",
-                         progress=lambda d, t: job.step("download", d, t))
+                         progress=lambda d, t: job.step("download", d, t), max_bytes=cities.MAX_BYTES)
                 text = cities.decode(raw.read_bytes())
                 raw.unlink()
             job.step("import", 0, 1)

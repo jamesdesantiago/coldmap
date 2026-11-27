@@ -36,8 +36,17 @@ def _key(r: dict) -> tuple:
 
 def compare(rows: list[dict], generated: str, data_stamp: str, model_stamp: str) -> dict:
     """Annotate `rows` with r["history"], save this scan's snapshot, and return the summary."""
-    prev_path = next((p for p in reversed(snapshots()) if p.stem != _stem(generated)), None)
-    prev = json.loads(prev_path.read_text(encoding="utf-8")) if prev_path else None
+    prev = None
+    for path in reversed(snapshots()):   # the latest readable earlier snapshot; a damaged one is skipped
+        if path.stem == _stem(generated):
+            continue
+        try:
+            prev = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(prev, dict) and isinstance(prev.get("flags"), list) and prev.get("generated"):
+                break
+        except (OSError, ValueError):
+            pass
+        prev = None
     by_key: dict[tuple, list[dict]] = {}
     for r in (prev or {}).get("flags", []):
         by_key.setdefault(_key(r), []).append(r)
