@@ -400,7 +400,9 @@ def city_places(data, city: str) -> dict | None:
             ag = c.agency.astype(str)
             exact = c[ag.str.lower() == name.lower()]
             if exact.empty:
-                near = c[ag.str.lower().str.startswith(name.lower() + " ") & ~ag.str.contains("County|Tribal|Heights")]
+                low = ag.str.lower()
+                near = c[(low.str.startswith(name.lower() + " ") | low.str.startswith(name.lower() + "-"))
+                         & ~ag.str.contains("County|Tribal|Heights")]
                 exact = near[near.agency == near.agency.mode().iloc[0]] if len(near) else near
             if len(exact):
                 out = {"state": exact.state.iloc[0], "agency": str(exact.agency.iloc[0]),
@@ -411,8 +413,10 @@ def city_places(data, city: str) -> dict | None:
 
 def cross_check(data, areas: list[dict], flags: list[dict]) -> None:
     """Mark each city area with the case file's flags for the same place, victims and overlapping years
-    (r["flags"] on areas, as ids and short descriptions). Two independent sources agreeing is worth
-    more than either alone; the Post's data has no method, so agreement is on place and years only."""
+    (r["flags"] on areas, as ids and short descriptions). Agreement says both sources show low
+    clearance in that place and period. In large cities with long-running low clearance it is the
+    usual case (all 11 areas in the Post's data match flags), so it is context, not evidence of a
+    series; the Post's data has no method, so agreement is on place and years only."""
     for a in areas:
         pl = city_places(data, a["city"])
         a["places"] = pl
