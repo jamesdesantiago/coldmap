@@ -42,6 +42,7 @@ async function poll(){
  if(st&&st.national&&(!S.meta||S.meta.generated!==st.national.generated)){await loadFlags()}
  if(job&&!job.running&&S.lastJob===job.id+':run'){S.lastJob=job.id;if(!job.error)toast(job.title.replace(/^(Preparing|Scanning|Getting|Updating)/,m=>({Preparing:'Prepared',Scanning:'Scanned',Getting:'Got',Updating:'Updated'})[m])+' — done')}
  if(job&&job.running)S.lastJob=job.id+':run';
+ if(job&&job.kind==='benchmark'&&!job.running&&S.benchWatch){S.benchWatch=0;S.bench=null}
  if(wantDownload&&st&&!S.didDl&&st.mode==='map'&&!(job&&job.running)){S.didDl=1;try{await post('/api/download'+(wantDownload==='refresh'?'?refresh=1':''))}catch(e){}}
  render();
  timer=setTimeout(poll,S.err?3000:job&&job.running?600:15000);
@@ -139,6 +140,8 @@ function filtered(){
  else if(f.show==='kept')rows=rows.filter(r=>['kept','reviewed','sent'].includes(stt(r)));
  else if(f.show==='dismissed')rows=rows.filter(r=>stt(r)==='dismissed');
  else if(f.show==='unexplained')rows=rows.filter(r=>stt(r)!=='dismissed'&&r.ruleout!=='explains');
+ else if(f.show==='new')rows=rows.filter(r=>r.history&&r.history.status==='new');
+ else if(f.show==='growing')rows=rows.filter(r=>r.history&&r.history.trend==='growing');
  const by={strength:null,gap:(a,b)=>(gapOf(a)??0)-(gapOf(b)??0),unsolved:(a,b)=>(b.total-b.solved)-(a.total-a.solved),recent:(a,b)=>b.end-a.end};
  if(by[f.sort])rows=[...rows].sort(by[f.sort]);
  return rows;
@@ -156,7 +159,7 @@ function renderFlags(r){
   ${seg('sex',[['Female','Women'],['Male','Men'],['all','Both']])}
   ${seg('conf',[['high','High'],['strong','High + strong'],['all','All']])}
   <select class="sel" id="fKind" aria-label="Kind"><option value="all">Any kind</option><option value="serial-pattern"${f.kind==='serial-pattern'?' selected':''}>Serial-pattern</option><option value="accountability"${f.kind==='accountability'?' selected':''}>Accountability</option></select>
-  <select class="sel" id="fShow" aria-label="Show"><option value="open"${f.show==='open'?' selected':''}>Not dismissed</option><option value="kept"${f.show==='kept'?' selected':''}>Kept only</option><option value="unexplained"${f.show==='unexplained'?' selected':''}>Not explained by a known series</option><option value="dismissed"${f.show==='dismissed'?' selected':''}>Dismissed</option><option value="all"${f.show==='all'?' selected':''}>Everything</option></select>
+  <select class="sel" id="fShow" aria-label="Show"><option value="open"${f.show==='open'?' selected':''}>Not dismissed</option><option value="kept"${f.show==='kept'?' selected':''}>Kept only</option><option value="unexplained"${f.show==='unexplained'?' selected':''}>Not explained by a known series</option><option value="new"${f.show==='new'?' selected':''}>New since the last scan</option><option value="growing"${f.show==='growing'?' selected':''}>Growing since the last scan</option><option value="dismissed"${f.show==='dismissed'?' selected':''}>Dismissed</option><option value="all"${f.show==='all'?' selected':''}>Everything</option></select>
   <input class="inp" id="fQ" type="search" placeholder="Search place or method  /" aria-label="Search flags" value="${esc(f.q)}" style="width:210px">
   <select class="sel" id="fSort" aria-label="Sort"><option value="strength">Strongest first</option><option value="gap"${f.sort==='gap'?' selected':''}>Largest gap</option><option value="unsolved"${f.sort==='unsolved'?' selected':''}>Most unsolved</option><option value="recent"${f.sort==='recent'?' selected':''}>Most recent</option></select>`;
  const keep=document.activeElement&&document.activeElement.id==='fQ',caret=keep?document.activeElement.selectionStart:0;
@@ -169,7 +172,7 @@ function renderFlags(r){
   (rows.slice(0,S.limit).map(x=>{const g=gapOf(x),s=status(x.id);
    return `<button class="frow ${s||''}" data-id="${x.id}" aria-selected="${S.sel===x.id}" role="option">
     <span class="tag ${x.confidence}">${CONF[x.confidence]}</span>
-    <span class="pl"><b>${esc(x.place)}${x.state&&x.level!=='region'?'':''}</b><span>${esc(x.state||'')} · ${esc(String(x.weapon).toLowerCase())} · ${who(x.sex)} · ${yrs(x.start,x.end)}${s?` · <span class="tag ${s}" style="font-size:9.5px">${STATUS[s]}</span>`:''}${x.ruleout==='explains'?' · <span class="tag" style="font-size:9.5px" title="A known series that went through the courts may explain this flag">known series</span>':''}</span></span>
+    <span class="pl"><b>${esc(x.place)}${x.state&&x.level!=='region'?'':''}</b><span>${esc(x.state||'')} · ${esc(String(x.weapon).toLowerCase())} · ${who(x.sex)} · ${yrs(x.start,x.end)}${s?` · <span class="tag ${s}" style="font-size:9.5px">${STATUS[s]}</span>`:''}${x.ruleout==='explains'?' · <span class="tag" style="font-size:9.5px" title="A known series that went through the courts may explain this flag">known series</span>':''}${x.history&&x.history.status==='new'?' · <span class="tag kept" style="font-size:9.5px" title="Not in the last scan">new</span>':''}${x.history&&x.history.trend==='growing'?` · <span class="tag high" style="font-size:9.5px" title="${x.history.delta_unsolved} more unsolved than in the last scan">growing</span>`:''}</span></span>
     <span class="r rt">${pct(x.solved/x.total)}<span class="muted"> / ${pct(x.expected)}</span>${bar(x)}</span>
     <span class="r gp${g>0?' up':''}">${gapTxt(g)}</span>
     <span class="r un">${nf.format(x.total-x.solved)}</span></button>`}).join('')||`<div class="empty">No flags match. Widen the filters, or pick another state.</div>`)+
@@ -196,6 +199,7 @@ async function renderFlag(id){
   <h1 style="margin-top:6px">${esc(f.place)}: ${esc(String(f.weapon).toLowerCase())} killings of ${who(f.sex)}, ${yrs(f.start,f.end)}</h1>
   <div class="row"><span class="tag ${f.confidence}">${CONF[f.confidence]} confidence</span><span class="tag">${esc(f.kind||'')}</span><a class="btn" href="/map?flag=${f.id}" data-nav style="height:24px;font-size:12px">Show on map</a><span class="muted" style="font-size:12px">found by ${(f.by||[]).map(b=>`<a href="/models?m=detector|${encodeURIComponent(b)}" data-nav>${esc(b)}</a>`).join(' + ')}${f.q!=null?` · q = ${f.q}`:''}</span></div>
   <div class="quote"><div><b>${pct(f.solved/f.total)}</b><span>Solved</span></div><div><b>${pct(f.expected)}</b><span>Expected</span></div><div class="${g<0?'neg':''}"><b>${gapTxt(g)}</b><span>Gap, points</span></div><div><b>${nf.format(f.total-f.solved)}</b><span>Unsolved of ${nf.format(f.total)}</span></div><div><b>${f.end-f.start+1}</b><span>Years</span></div></div>
+  ${historyLine(f)}
   ${decideBox(id,f,dec)}
   ${ruleoutBox(f)}
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
@@ -212,6 +216,13 @@ async function renderFlag(id){
  if(pane._h!==h){const sc=pane._h&&pane._h.includes(f.place)?pane.scrollTop:0;pane.innerHTML=h;pane._h=h;pane.scrollTop=sc;renderWB(id)}
 }
 const RULE={explains:['May explain this','high'],weakens:['Weakens this','strong'],clear:['Nothing found','possible']};
+function historyLine(f){
+ const h=f.history;if(!h)return '';
+ if(h.status==='new')return `<p class="muted" style="margin:-4px 0 12px;font-size:12.5px"><span class="tag kept">new</span> Not in the scan before this one.</p>`;
+ const b=h.before,was=`${yrs(b.start,b.end)}, ${nf.format(b.total-b.solved)} unsolved of ${nf.format(b.total)}`;
+ const tr=h.trend==='growing'?`<b style="color:var(--red)">${nf.format(h.delta_unsolved)} more unsolved</b> than in the last scan`:h.trend==='shrinking'?`${nf.format(-h.delta_unsolved)} fewer unsolved than in the last scan`:'unchanged since the last scan';
+ return `<p class="muted" style="margin:-4px 0 12px;font-size:12.5px">First seen ${esc(day(h.since))} · ${tr} (then: ${esc(was)}).</p>`;
+}
 function ruleoutBox(f){
  const rs=f.ruleouts;if(!rs||!rs.length)return '';
  const head=f.ruleout==='explains'?'A known explanation may fit this flag.':f.ruleout==='weakens'?'Something in the data could account for part of this flag.':'None of the usual explanations fit. That makes the flag stronger, not proof of anything.';
@@ -748,6 +759,8 @@ function renderMethods(){
  if(!S.methods){if(!S.mLoading){S.mLoading=1;api('/api/methods').then(j=>{S.methods=j;render()})}setMain('m-load',`<div class="view"><div class="page"><span class="spin"></span> Loading…</div></div>`);return}
  const m=S.methods,states=[...new Set((S.flags||[]).map(f=>f.state).filter(Boolean))].sort();
  const qk=S.qState||'';const qd=qk?S.quality&&S.quality[qk]:null;
+ if(!S.bench&&!S.benchLoading){S.benchLoading=1;api('/api/benchmark').then(j=>{S.bench=j;S.benchLoading=0;render()})}
+ setTimeout(renderBench,0);
  setMain('methods:'+qk+(qd?Object.keys(qd).length:'x'),`<div class="view"><div class="page">
   <h1>Methods</h1><p class="lede">How a flag is made, how much to trust it, and how to make coldmap better. Everything here is open: the code, the tests and the false-alarm measurements.</p>
   <h3>How a flag is made</h3><ol class="notes" style="padding-left:18px">
@@ -761,10 +774,27 @@ function renderMethods(){
   <h3>Data fixes applied</h3><table><tbody>${m.fixes.map(f=>`<tr><td><b>${esc(f.title)}</b></td><td>${esc(f.summary)}</td></tr>`).join('')}</tbody></table>
   <h3>Data quality, by state</h3><div class="row"><select class="sel" id="qState" aria-label="State"><option value="">Choose a state</option>${states.map(s=>`<option${s===qk?' selected':''}>${esc(s)}</option>`).join('')}</select><span class="muted">Reporting gaps and oddities that can create or hide flags.</span></div>
   <div id="qBody" style="margin-top:10px">${qk?(qd?Object.entries(qd).map(([n,t])=>`<p style="margin:12px 0 4px"><b>${esc(n)}</b> <span class="muted">${esc(t.summary)}</span></p>${t.rows.length?`<table><thead><tr>${Object.keys(t.rows[0]).map(k=>`<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${t.rows.map(r=>`<tr>${Object.values(r).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<p class="muted">Nothing found.</p>'}`).join(''):'<p><span class="spin"></span> Checking…</p>'):''}</div>
-  <h3>How well it works</h3><p>Two measurements keep coldmap honest, both run from a terminal: <code>coldmap benchmark</code> checks which known, solved series each detector finds, and <code>coldmap controls</code> shuffles the solved labels to count how many flags appear by chance. A model that catches more but invents more isn't an improvement.</p>
+  <h3>How well it works</h3><p>Two measurements keep coldmap honest. The <b>benchmark</b> checks which known series that went through the courts each model finds, using your current models and settings. <b>False-alarm tests</b> (<code>coldmap controls</code> in a terminal) shuffle the solved labels to count how many flags appear by chance. A model that catches more but invents more isn't an improvement.</p>
+  <div class="box" id="benchBox"></div>
   <h3>Ethics</h3><ul class="notes" style="padding-left:18px"><li>A flag is a pattern worth review, never evidence that cases are linked. Only investigators can link cases.</li><li>Never contact families, witnesses or possible suspects.</li><li>Never describe a flag as a “serial killer”, name suspects, or profile neighbourhoods or groups.</li><li>A second person reviews every lead before it goes to MAP or the investigating agency.</li></ul>
   <h3>Improve the research</h3><ul class="notes" style="padding-left:18px"><li>Write a model: start from <a href="/models" data-nav>Models</a> › Write your own, then share it as a file or a package.</li><li>Add a known, adjudicated series to the benchmark so every model is measured against it: <a href="${REPO}CONTRIBUTING.md#add-a-known-series" target="_blank" rel="noopener">how</a>.</li><li>Document a data problem you found: <a href="${REPO}DATA_ISSUES.md" target="_blank" rel="noopener">DATA_ISSUES.md</a>.</li><li>Read the full guide for contributors: <a href="${REPO}CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a>.</li></ul>
  </div></div>`);
+}
+
+function renderBench(){
+ const el=$('benchBox');if(!el)return;const b=S.bench,job=S.st&&S.st.job,run=job&&job.running;
+ if(!b){if(el._h!=='l'){el.innerHTML='<span class="spin"></span> Loading…';el._h='l'}return}
+ const bj=job&&job.kind==='benchmark'&&(job.running||job.error)?job:null;
+ const L=b.last,GR={full:['Found','reviewed'],partial:['Partly','strong']};
+ const res=L?`<p class="muted" style="font-size:12.5px">Last run ${esc(day(L.generated))}${L.stale?' · <b>out of date</b>: your data, models or settings changed since':''}. <b>Found</b>: a flag covers most of the series' years. <b>Partly</b>: a flag touches it but mostly describes something else.</p>
+  <div class="cases" style="max-height:none;margin-bottom:10px"><table><thead><tr><th>Series</th><th>Source</th>${L.detectors.map(d=>`<th>${esc(d==='ensemble'?'Combined':d)}</th>`).join('')}</tr></thead><tbody>
+   ${L.series.map(r=>`<tr><td>${esc(r.label||r.county+', '+r.start+'–'+r.end)}</td><td class="muted">${esc(r.source==='built in'?'built in':'yours')}</td>${L.detectors.map(d=>{const x=r.results[d];return `<td>${x?`<span class="tag ${GR[x.grade][1]}" title="${esc(x.place+', '+x.weapon+' '+x.start+'–'+x.end)}">${GR[x.grade][0]}</span>`:'<span class="muted">Missed</span>'}</td>`}).join('')}</tr>`).join('')}
+   <tr><td><b>Found or partly found</b></td><td></td>${L.detectors.map(d=>{const c=L.caught[d];return `<td class="num"><b>${c.full}</b> + ${c.partial} of ${c.of}</td>`}).join('')}</tr></tbody></table></div>`:'<p class="muted">Not run yet.</p>';
+ const h=`<h2>Benchmark</h2><p>${b.built_in} series ship with coldmap${b.yours?`, plus <b>${b.yours}</b> of your own`:''}. Add your own adjudicated series with <code>coldmap series import FILE.csv</code>; they stay in <code>${esc(b.folder)}</code> on this computer.</p>
+  ${b.problems.length?`<p class="msg warn">Some of your series were skipped: ${b.problems.slice(0,5).map(esc).join('; ')}${b.problems.length>5?'…':''}</p>`:''}
+  ${bj?jobView(bj):res}
+  <div class="row"><button class="btn${!L||L.stale?' primary':''}" id="benchRun"${run?' disabled':''}>${L?'Run it again':'Run the benchmark'}</button><span class="muted">about 6 minutes on the national file: each series' state is scanned</span></div>`;
+ if(el._h!==h){el.innerHTML=h;el._h=h}
 }
 
 // ---- data ------------------------------------------------------------------------------------
@@ -781,12 +811,22 @@ function renderData(){
    ${st.mode==='map'?`<div class="row" style="margin-top:12px"><button class="btn" id="check"${busy||S.checking?' disabled':''}>${S.checking?'<span class="spin"></span> Checking…':'Check for updates'}</button>
    ${ck&&ck.error?`<span class="msg err">${esc(ck.error)}</span>`:ck&&ck.updates?`<span class="msg warn">MAP has published newer files.</span><button class="btn primary" id="update"${busy?' disabled':''}>Download the update</button>`:ck?'<span class="muted">Up to date with MAP.</span>':''}</div>`:''}</div>
   <div class="box"><h2>National scan</h2>${n?`<p>${nf.format(n.findings)} flags in ${n.states} states, made ${esc(day(n.generated))}${n.stale?'. <b>Out of date:</b> the data or your models changed since.':'.'}</p>`:'<p class="muted">Not run yet.</p>'}
+   ${n&&n.history&&n.history.previous?historyBox(n.history):''}
    <div class="row"><button class="btn${n&&n.stale?' primary':''}" id="rescan"${busy?' disabled':''}>Re-scan every state</button><span class="muted">about 5 minutes</span></div></div>
   ${datasetsBox()}
   <p class="muted" style="font-size:12px">coldmap ${esc(st.version)}</p>
  </div></div>`);
 }
 
+function historyBox(h){
+ if(!S.hist&&!S.histLoading){S.histLoading=1;api('/api/history').then(j=>{S.hist=j;S.histLoading=0;$('main').dataset.key='';render()})}
+ const why={data:'the data',models:'your models or settings',nothing:'nothing (the same data and models)'};
+ const gone=(S.hist&&S.hist.gone_flags)||[];
+ return `<h3 style="margin-top:14px">Since the scan of ${esc(day(h.previous))}</h3>
+  <p><b class="num">${nf.format(h.new)}</b> new · <b class="num">${nf.format(h.continuing)}</b> continuing (<span style="color:var(--red)">${nf.format(h.growing)} growing</span>, ${nf.format(h.steady)} steady, ${nf.format(h.shrinking)} shrinking) · <b class="num">${nf.format(h.gone)}</b> gone. What changed between the two scans: ${(h.changed||[]).map(c=>why[c]||c).join(' and ')}.</p>
+  ${h.gone?`<p class="muted" style="font-size:12.5px">${(h.changed||[]).includes('data')&&!(h.changed||[]).includes('models')?'Flags that vanish when only new data arrives are worth noting: some were likely false alarms.':'Gone flags can come from changed models as well as new data.'}</p>
+  <details><summary class="muted" style="cursor:pointer">Flags that are gone (${nf.format(h.gone)})</summary><table style="margin-top:8px"><tbody>${gone.slice(0,100).map(g=>`<tr><td><span class="tag ${g.confidence}">${CONF[g.confidence]||esc(g.confidence)}</span></td><td>${esc(g.place)}, ${esc(g.state)}</td><td class="muted">${esc(String(g.weapon).toLowerCase())} · ${who(g.sex)} · ${yrs(g.start,g.end)}</td><td class="n">${nf.format(g.total-g.solved)} of ${nf.format(g.total)} unsolved</td></tr>`).join('')}</tbody></table></details>`:''}`;
+}
 function datasetsBox(){
  const ds=S.ds||[],im=S.imp;
  const list=ds.length?`<table style="margin-top:8px"><thead><tr><th>Dataset</th><th>Place level</th><th class="n">Rows</th><th class="n">Places</th><th>Years</th><th>Columns</th><th></th></tr></thead><tbody>${ds.map(m=>`<tr><td><b>${esc(m.name)}</b>${m.description?`<br><span class="muted" style="font-size:12px">${esc(m.description)}</span>`:''}${Object.keys(m.left_out||{}).length?`<br><span class="muted" style="font-size:12px">left out: ${esc(Object.keys(m.left_out).join(', '))}</span>`:''}</td><td>${esc(m.level)}</td><td class="n">${nf.format(m.rows)}</td><td class="n">${m.places}</td><td class="num">${m.years[0]}–${m.years[1]}</td><td>${esc(m.columns.join(', '))}</td><td><button class="btn" data-dsrm="${esc(m.slug)}">Remove</button></td></tr>`).join('')}</tbody></table>`:'<p class="muted" style="margin:8px 0 0">None yet.</p>';
@@ -837,6 +877,7 @@ document.addEventListener('click',async e=>{
  if(t.classList.contains('frow')){selectFlag(t.dataset.id);return}
  if(t.id==='more'){S.limit+=200;render();return}
  if(t.id==='doSetup'){try{await post('/api/setup')}catch(err){toast(err.message)}poll();return}
+ if(t.id==='benchRun'){try{await post('/api/benchmark')}catch(err){toast(err.message)}S.benchWatch=1;poll();return}
  if(t.id==='rescan'){try{await post('/api/national')}catch(err){toast(err.message)}$('main').dataset.key='';poll();return}
  if(t.id==='check'){S.checking=1;render();try{await post('/api/check')}catch(err){toast(err.message)}S.checking=0;poll();return}
  if(t.id==='update'){try{await post('/api/download?refresh=1')}catch(err){toast(err.message)}poll();return}

@@ -25,12 +25,12 @@ uvx --from https://github.com/jamesdesantiago/coldmap/archive/refs/tags/v0.5.0.z
 
 Your browser opens on the coldmap app straight away. The first time, it downloads the Murder Accountability Project's public files (about 365 MB) and scans every state once (about 5 minutes), with progress for each step. After that it opens straight to your research:
 
-- **Flags**: every flag in the country, ranked, narrowed by state, county, victims, confidence and kind. Each row leads with the gap between how often killings were solved and how often they were expected to be. Select one to see why it was flagged, the trend chart, the case rows, the data's known problems and notes from models. Keyboard: arrow keys move, `s` keeps, `x` dismisses, `/` searches.
+- **Flags**: every flag in the country, ranked, narrowed by state, county, victims, confidence and kind. Each row leads with the gap between how often killings were solved and how often they were expected to be. Select one to see why it was flagged, the trend chart, the case rows, the data's known problems and notes from models. Keyboard: arrow keys move, `s` keeps, `x` dismisses, `/` searches. Every flag is checked against ordinary explanations (a known series, reporting gaps, clearance records, coding problems), and each scan is compared with the last: flags are marked new, growing or gone.
 - **Shortlist**: flags you kept, on their way to MAP: your notes, the second person's review (required by the [ethics rules](ETHICS.md) before anything leaves), and an export for MAP.
 - **Places**: every state and county: killings, share solved, a heatmap by method and year, and the flags there.
 - **Models**: add detectors and enrichers from a file, a link or a starter template, and switch them on or off. See the [plugin guide](coldmap/docs/plugins.md), also in the app.
 - **AI assistants**: connect Claude or any MCP client. It reads the same flags and shortlist (`research_flags`, `shortlist`) and can triage flags, pull case rows and run models; the app gives you the exact config for this computer.
-- **Methods**: how a flag is made, confidence levels, data fixes, data quality by state, and how to improve the research.
+- **Methods**: how a flag is made, confidence levels, data fixes, data quality by state, and how to improve the research. Run the benchmark there to see which known, adjudicated series your models find; add your own series with `coldmap series import FILE.csv` (kept on your computer).
 
 Your shortlist and notes are saved in `~/.coldmap/research`. coldmap opens your browser with a link that carries a key for this session; other people and programs on the computer can't use the app without it. If you close the tab, open the link coldmap printed in its terminal again. Plugins from a file or a link are shown to you, code and all, before anything is installed. Everything runs on your computer; nothing is published. Press Ctrl+C in the terminal to stop.
 

@@ -4,6 +4,10 @@ The series live in known_series.json so contributors can add cases without
 touching code. Add only publicly adjudicated series (conviction, guilty plea or
 official attribution), with a note citing the basis.
 
+Your own series (for example converted from a database you have access to under its own terms)
+go in COLDMAP_HOME/benchmarks/*.json, or `coldmap series import FILE.csv`. They are used by the
+benchmark and the rule-out checks on this computer only, never bundled or uploaded.
+
 evaluate()  did each detector (and the ensemble) flag each series, using all data?
             'full' = the finding covers most of the series' years and isn't much longer;
             'partial' = it touches the series but mostly describes something else.
@@ -40,10 +44,90 @@ class KnownSeries:
     label: str = ""   # neutral description for the app: place, victims, years, outcome; no names
     victims: int | None = None   # killings attributed, as stated in the note (None when it doesn't say)
     active: list | None = None   # [[start, end], ...] when the note gives separate active periods
+    source: str = "built in"     # "built in", or the local file it came from
 
 
-def load_series(path: str | Path | None = None) -> list[KnownSeries]:
-    text = Path(path).read_text() if path else files(__package__).joinpath("known_series.json").read_text()
+REQUIRED = ("name", "state", "county", "victim_sex", "weapons", "start", "end", "arrest", "note")
+ADJUDICATED = ("convict", "pleaded", "plea", "guilty", "sentenced", "attribut", "adjudicat")
+
+
+def check_series(d: dict) -> str | None:
+    """Why a series entry can't be used, or None. Only adjudicated series with a stated basis count."""
+    missing = [k for k in REQUIRED if d.get(k) in (None, "", [])]
+    if missing:
+        return f"missing {', '.join(missing)}"
+    if not any(w in str(d["note"]).lower() for w in ADJUDICATED):
+        return "the note must state the legal basis (conviction, guilty plea or official attribution)"
+    if d["victim_sex"] not in ("Female", "Male"):
+        return "victim_sex must be Female or Male"
+    if int(d["start"]) > int(d["end"]):
+        return "start is after end"
+    return None
+
+
+def local_folder() -> Path:
+    from ..plugins import home
+    return home() / "benchmarks"
+
+
+def load_local() -> tuple[list[KnownSeries], list[str]]:
+    """Your own series files: (usable series, problems found)."""
+    series, problems = [], []
+    if not local_folder().is_dir():
+        return series, problems
+    for f in sorted(local_folder().glob("*.json")):
+        try:
+            entries = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            problems.append(f"{f.name}: couldn't read it ({e})")
+            continue
+        for i, d in enumerate(entries if isinstance(entries, list) else []):
+            why = check_series(d) if isinstance(d, dict) else "not an object"
+            if why:
+                problems.append(f"{f.name}, entry {i + 1}: {why}")
+                continue
+            fields = {"agency": None, **{k: d.get(k) for k in KnownSeries.__dataclass_fields__ if k in d and k != "source"}}
+            series.append(KnownSeries(**{**fields, "weapons": tuple(d["weapons"]), "source": f.name}))
+    return series, problems
+
+
+def import_csv(csv_path: str | Path, name: str | None = None) -> dict:
+    """Turn a CSV of adjudicated series into a local series file. Columns: name, state, county,
+    agency, victim_sex, weapons (separated by ;), start, end, arrest, note, label, victims."""
+    # UTF-8 (with or without Excel's BOM), else Windows-1252, which Excel on Windows saves "CSV" as.
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            df = pd.read_csv(csv_path, dtype=str, keep_default_na=False, encoding=enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    entries, problems = [], []
+    for i, r in df.iterrows():
+        d = {k: (r.get(k) or None) for k in ("name", "state", "county", "agency", "victim_sex", "note", "label")}
+        d["weapons"] = [w.strip() for w in str(r.get("weapons", "")).split(";") if w.strip()]
+        for k in ("start", "end", "arrest", "victims"):
+            v = str(r.get(k, "")).strip()
+            d[k] = int(float(v)) if v else None
+        why = check_series(d)
+        if why:
+            problems.append(f"row {i + 2}: {why}")
+        else:
+            entries.append({k: v for k, v in d.items() if v is not None})
+    out = local_folder() / f"{(name or Path(csv_path).stem).replace(' ', '_')}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(entries, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"file": str(out), "series": len(entries), "problems": problems}
+
+
+def load_series(path: str | Path | None = None, local: bool = True) -> list[KnownSeries]:
+    """The bundled series (or `path`), plus your own from COLDMAP_HOME/benchmarks unless local=False."""
+    bundled = _load_file(path)
+    return bundled + (load_local()[0] if local and path is None else [])
+
+
+def _load_file(path: str | Path | None = None) -> list[KnownSeries]:
+    text = (Path(path).read_text(encoding="utf-8") if path
+            else files(__package__).joinpath("known_series.json").read_text(encoding="utf-8"))
     return [KnownSeries(**{**d, "weapons": tuple(d["weapons"])}) for d in json.loads(text)]
 
 

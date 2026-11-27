@@ -301,8 +301,16 @@ class Library:
             conf: dict[str, int] = {}
             for r in body["findings"]:
                 conf[r["confidence"]] = conf.get(r["confidence"], 0) + 1
+            # Compare with the last scan: new, continuing (growing/steady/shrinking) and gone flags.
+            from . import history
+            from .research import with_ids
+            from .. import datasets
+            rows = with_ids(body["findings"])
+            hist = history.compare(rows, body["meta"]["generated"], _data_stamp(self.cases, self.clearance),
+                                   plugins.fingerprint() + "|" + datasets.fingerprint())
+            out.write_text(json.dumps(body, separators=(",", ":"), default=str))
             summary = {"generated": body["meta"]["generated"], "findings": len(body["findings"]),
-                       "states": len(body["meta"]["states"]), "confidence": conf}
+                       "states": len(body["meta"]["states"]), "confidence": conf, "history": hist}
             (tmp / "summary.json").write_text(json.dumps(summary))
             (tmp / ".coldmap-build").write_text(stamp)
             if self.national_dir.exists():
@@ -497,6 +505,51 @@ class App:
             job.finish(lib.build_national(progress=job.step))
         return self.start("national", "Scanning every state", [("load", "Read the case file")] + NATIONAL_STEPS,
                           work)
+
+    def benchmark(self) -> Job:
+        """Score the models in use against every known series (bundled and your own)."""
+        from .. import plugins
+        from ..benchmarks import evaluate_records, load_series
+        if self.lib is None:
+            raise click.ClickException("Get the data first.")
+        lib, on = self.lib, plugins.enabled()
+        series = load_series()
+        dets = list(on["detectors"]) + ["ensemble"]
+        params = {d: on["params"].get(d, {}) for d in on["detectors"]}
+        params["ensemble"] = {"detectors": on["detectors"], "params": on["params"]}
+
+        def work(job: Job):
+            job.step("load")
+            data = lib.data()
+            job.step("score", 0, len(series))
+            recs = []
+            for i, s in enumerate(series, 1):
+                recs += evaluate_records(data, dets, params, [s])
+                job.step("score", i, len(series))
+            for r, s in zip(recs, series):
+                r.update(label=s.label, source=s.source)
+            caught = {d: {"full": sum(1 for r in recs if (r["results"].get(d) or {}).get("grade") == "full"),
+                          "partial": sum(1 for r in recs if (r["results"].get(d) or {}).get("grade") == "partial"),
+                          "of": len(recs)} for d in dets}
+            out = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "detectors": dets,
+                   "series": recs, "caught": caught, "stamp": lib.national_stamp}
+            path = home() / "research" / "benchmark.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(out), encoding="utf-8")
+            job.finish({"caught": caught["ensemble"]})
+        return self.start("benchmark", "Running the benchmark",
+                          [("load", "Read the case file"), ("score", "Score each known series")], work)
+
+    def benchmark_view(self) -> dict:
+        from ..benchmarks import load_local, load_series
+        mine, problems = load_local()
+        try:
+            last = json.loads((home() / "research" / "benchmark.json").read_text(encoding="utf-8"))
+            last["stale"] = bool(self.lib) and last.get("stamp") != self.lib.national_stamp
+        except (OSError, ValueError):
+            last = None
+        return {"built_in": len(load_series(local=False)), "yours": len(mine), "problems": problems,
+                "folder": str(home() / "benchmarks"), "last": last}
 
     # ---- research --------------------------------------------------------------------------
     def flags(self) -> tuple[dict | None, list[dict]]:
@@ -767,12 +820,19 @@ class App:
         counts = {k: sum(1 for d in dec if d.get("status") == k) for k in research.STATUSES}
         return {"version": __version__, "mode": self.mode, "home": str(home()), "notice": NOTICE,
                 "data": {"ready": lib is not None, "files": files, "check": self.check},
-                "national": lib.national_summary() if lib else None,
+                "national": _slim(lib.national_summary()) if lib else None,
                 "plugins": {"detectors": on["detectors"], "enrichers": on["enrichers"],
                             "files": len(plugins.files())},
                 "decisions": counts,
                 "datasets": len(datasets.all_meta()),
                 "job": self.job.view() if self.job else None}
+
+
+def _slim(summary: dict | None) -> dict | None:
+    """The scan summary without the list of gone flags (served separately at /api/history)."""
+    if not summary or not summary.get("history"):
+        return summary
+    return {**summary, "history": {k: v for k, v in summary["history"].items() if k != "gone_flags"}}
 
 
 def _handler(app: App):
@@ -901,6 +961,8 @@ def _handler(app: App):
                     return self._json(200, app.check_updates())
                 if u.path == "/api/national":
                     return self._json(202, app.national().view())
+                if u.path == "/api/benchmark":
+                    return self._json(202, app.benchmark().view())
                 if u.path == "/api/decide":
                     b = self._body()
                     flag = b.get("flag")
@@ -1012,6 +1074,11 @@ def _handler(app: App):
                     return self._json(200, app.view(unquote(path.rsplit("/", 1)[1]), q))
                 if path == "/api/map":
                     return self._json(200, research.map_counties(app._data(), q.get("sex", "all")))
+                if path == "/api/benchmark":
+                    return self._json(200, app.benchmark_view())
+                if path == "/api/history":
+                    s = app.lib.national_summary() if app.lib else None
+                    return self._json(200, (s or {}).get("history") or {})
                 if path == "/api/datasets":
                     from .. import datasets
                     return self._json(200, datasets.all_meta())
