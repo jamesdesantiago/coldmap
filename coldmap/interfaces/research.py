@@ -139,10 +139,39 @@ def state_profile(data, flags: list[dict], state: str, sex: str) -> dict:
             for k in f.get("counties") or [f.get("county")]:
                 nflags[k] = nflags.get(k, 0) + 1
     trend = c.groupby("year").solved.agg(["size", "sum"])
-    return {"state": state,
-            "counties": [{"county": k, "killings": int(n), "solved": int(s), "flags": nflags.get(k, 0)}
+    rates = per_capita(c, "county")
+    return {"state": state, "population_source": rates.get("_source"),
+            "counties": [{"county": k, "killings": int(n), "solved": int(s), "flags": nflags.get(k, 0),
+                          "per_100k": rates.get(k)}
                          for k, (n, s) in g.iterrows()],
             "trend": [[int(y), int(n), int(s)] for y, (n, s) in trend.iterrows()]}
+
+
+def population() -> tuple[str, "object"] | tuple[None, None]:
+    """A county-level dataset of yours with a population column, if there is one:
+    (dataset name, frame with place, year, population)."""
+    from .. import datasets
+    for m in datasets.all_meta():
+        col = next((c for c in m["numeric"] if "population" in c.lower() or c.lower() in ("pop", "pop_total")), None)
+        if m["level"] == "county" and col:
+            df = datasets.load(m["slug"])[["place", "year", col]].rename(columns={col: "population"})
+            return m["name"], df.groupby(["place", "year"]).population.sum().reset_index()
+    return None, None
+
+
+def per_capita(cases, level: str = "county") -> dict:
+    """Killings per 100,000 people per year, by county, over the years both the case file and your
+    population dataset cover. Empty when there is no population dataset."""
+    name, pop = population()
+    if pop is None or cases.empty:
+        return {}
+    k = cases.groupby([level, "year"]).size().rename("killings").reset_index().rename(columns={level: "place"})
+    j = k.merge(pop, on=["place", "year"], how="inner")
+    j = j[j.population > 0]
+    g = j.groupby("place").agg(killings=("killings", "sum"), person_years=("population", "sum"))
+    out = {pl: round(float(r.killings / r.person_years * 100000), 2) for pl, r in g.iterrows() if r.person_years > 0}
+    out["_source"] = name
+    return out
 
 
 def county_profile(data, state: str, county: str, sex: str) -> dict:
@@ -154,7 +183,9 @@ def county_profile(data, state: str, county: str, sex: str) -> dict:
     cells = [[WEAPONS.index(w) if w in WEAPONS else 5, int(y), int(n), int(s)] for (w, y), (n, s) in g.iterrows()]
     agencies = c.groupby("agency").solved.agg(["size", "sum"]).sort_values("size", ascending=False).head(12)
     yrs = data.cases.year
-    return {"state": state, "county": county, "weapons": WEAPONS, "years": [int(yrs.min()), int(yrs.max())],
+    rate = per_capita(c, "county")
+    return {"state": state, "county": county, "per_100k": rate.get(county), "population_source": rate.get("_source"),
+            "weapons": WEAPONS, "years": [int(yrs.min()), int(yrs.max())],
             "cells": cells, "killings": int(len(c)), "solved": int(c.solved.sum()),
             "agencies": [{"agency": a, "killings": int(n), "solved": int(s)} for a, (n, s) in agencies.iterrows()]}
 

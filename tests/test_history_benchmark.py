@@ -67,3 +67,22 @@ def test_benchmark_runs_in_the_app(tmp_path, monkeypatch):
     out = json.loads((tmp_path / "home" / "research" / "benchmark.json").read_text())
     assert out["series"][0]["label"] == "Harbor County, SS (synthetic)"
     assert out["caught"]["ensemble"]["full"] + out["caught"]["ensemble"]["partial"] == 1  # the planted series is found
+
+
+def test_population_dataset_gives_per_capita_rates(tmp_path, monkeypatch):
+    from coldmap import datasets, load
+    from coldmap.interfaces import research
+    from coldmap.sample import make_sample
+    monkeypatch.setenv("COLDMAP_HOME", str(tmp_path / "home"))
+    cases, clearance = make_sample(tmp_path)
+    data = load(cases, clearance_path=clearance)
+    county = data.cases.county.dropna().iloc[0]
+    years = sorted(data.cases.year.unique())
+    assert research.state_profile(data, [], "Samplestate", "all")["population_source"] is None  # none yet
+    text = "County,Year,Population\n" + "\n".join(f'"{county}",{y},100000' for y in years)
+    datasets.add("County population", text, data, "County", "county", "Year")
+    prof = research.state_profile(data, [], "Samplestate", "all")
+    row = next(c for c in prof["counties"] if c["county"] == county)
+    killed = int(((data.cases.county == county) & (data.cases.vic_age >= 12)).sum())
+    assert prof["population_source"] == "County population"
+    assert row["per_100k"] == round(killed / (100000 * len(years)) * 100000, 2)
