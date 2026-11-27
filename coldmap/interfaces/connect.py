@@ -25,7 +25,11 @@ def desktop_candidates() -> list[Path]:
     if sys.platform == "win32":
         appdata = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
         local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
-        # The Microsoft Store app keeps its files in a per-app folder.
+        # Current Claude Desktop builds keep settings in %LOCALAPPDATA%\Claude-Data\claude_<id> (its
+        # README: "your settings, your sign-in, and your Cowork tasks").
+        out += sorted((local / "Claude-Data").glob("claude_*/claude_desktop_config.json"))
+        out += [p / "claude_desktop_config.json" for p in sorted((local / "Claude-Data").glob("claude_*")) if p.is_dir()]
+        # Older Microsoft Store builds used a per-app folder.
         out += sorted((local / "Packages").glob("Claude_*/LocalCache/Roaming/Claude/claude_desktop_config.json"))
         out += [p / "claude_desktop_config.json" for p in (local / "Packages").glob("Claude_*/LocalCache/Roaming/Claude")]
         out.append(appdata / "Claude" / "claude_desktop_config.json")
@@ -42,12 +46,12 @@ def desktop_candidates() -> list[Path]:
 
 
 def desktop_path() -> Path:
-    """The config file to use: the most recently changed one that exists, else where the
-    installed app will look."""
+    """The config file to use: the first one that exists, in the order Claude Desktop builds
+    prefer, else where the installed app will look."""
     cands = desktop_candidates()
     existing = [p for p in cands if p.exists()]
     if existing:
-        return max(existing, key=lambda p: p.stat().st_mtime)
+        return existing[0]
     for p in cands:  # the app's folder exists but has no config yet
         if p.parent.exists():
             return p
