@@ -352,6 +352,9 @@ class Busy(Exception):
     pass
 
 
+STOPPABLE = {"controls"}
+
+
 class Job:
     """One piece of background work with named steps, shown live on the home page."""
 
@@ -366,6 +369,7 @@ class Job:
         self.result: dict | None = None
         self.started = time.time()
         self.ended: float | None = None
+        self.stop = False   # set by "Stop"; long jobs check it between pieces of work
 
     def step(self, key: str, done: int | None = None, total: int | None = None) -> None:
         """Mark `key` as running and every step before it as done; done/total count within it."""
@@ -396,7 +400,8 @@ class Job:
     def view(self) -> dict:
         return {"id": self.id, "kind": self.kind, "title": self.title, "steps": self.steps,
                 "bytes": self.bytes, "count": self.count, "notes": self.notes, "error": self.error, "result": self.result,
-                "running": self.running, "elapsed": round((self.ended or time.time()) - self.started, 1)}
+                "running": self.running, "stoppable": self.kind in STOPPABLE, "stopping": self.stop,
+                "elapsed": round((self.ended or time.time()) - self.started, 1)}
 
 
 class App:
@@ -636,6 +641,7 @@ class App:
                   "agency": [r["place"]] if r.get("level") == "agency" else []}
         mine = datasets.for_place(counties, places, (r["start"] - 10, r["end"] + 10))
         return {"flag": r, "decision": research.decisions().get(fid), **detail, "datasets": mine,
+                "chance": self.chance_for(r),
                 "sections": self.flag_sections(r)}
 
     def dataset_action(self, action: str, q: dict, b: dict) -> dict:
@@ -745,6 +751,77 @@ class App:
                     ["false_alarms", "How often a detector flags shuffled data"],
                     ["benchmark", "Which known, solved series each detector finds"],
                     ["list_plugins", "Installed models, enrichers, fixes and presets"]]}
+
+    # ---- false alarms in every state --------------------------------------------------------------
+    def _controls_path(self) -> Path:
+        return home() / "research" / "controls.json"
+
+    def controls_saved(self) -> dict | None:
+        try:
+            out = json.loads(self._controls_path().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        out["stale"] = bool(self.lib) and out.get("stamp") != self.lib.national_stamp
+        return out
+
+    def controls_all(self, runs: int = 2) -> Job:
+        """Count flags on shuffled copies of every state's data (women and men), with the models in
+        use. Saved after each state, so it can be stopped and picked up where it left off."""
+        from .. import plugins
+        from ..benchmarks.controls import false_alarms
+        from ..core.types import Query
+        if self.lib is None:
+            raise click.ClickException("Get the data first.")
+        lib, on = self.lib, plugins.enabled()
+        params = {"ensemble": {"detectors": on["detectors"], "params": on["params"]}}
+        stamp = lib.national_stamp
+        saved = self.controls_saved()
+        out = saved if saved and saved.get("stamp") == stamp and saved.get("runs") == runs else \
+            {"stamp": stamp, "runs": runs, "states": {}}
+        out.pop("stale", None)
+
+        def work(job: Job):
+            job.step("load")
+            data = lib.data()
+            todo = [(st, sx) for st in sorted(data.cases.state.dropna().unique()) for sx in ("Female", "Male")]
+            job.step("measure", 0, len(todo))
+            for i, (st, sx) in enumerate(todo, 1):
+                if job.stop:
+                    job.notes.append(f"Stopped after {i - 1} of {len(todo)}; run it again to continue.")
+                    job.finish({"stopped": True})
+                    return
+                key = f"{st}|{sx}"
+                if key not in out["states"]:
+                    t = false_alarms(data, Query(state=st, victim_sex=sx), detectors=("ensemble",), params=params,
+                                     runs=runs)
+                    out["states"][key] = {r["detector"].replace("ensemble: ", "").replace("ensemble", "all"):
+                                          {"real": int(r["real_findings"]), "chance": float(r["null_findings"])}
+                                          for r in t.to_dict("records")}
+                    out["updated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                    self._controls_path().parent.mkdir(parents=True, exist_ok=True)
+                    self._controls_path().write_text(json.dumps(out), encoding="utf-8")
+                job.step("measure", i, len(todo))
+            job.finish({"states": len(out["states"])})
+        return self.start("controls", "Measuring false alarms in every state",
+                          [("load", "Read the case file"),
+                           ("measure", "Scan shuffled copies of each state (women, men)")], work)
+
+    def stop_job(self) -> dict:
+        job = self.job
+        if job and job.running and job.kind in STOPPABLE:
+            job.stop = True
+        return {"ok": True}
+
+    def chance_for(self, flag: dict) -> dict | None:
+        """How often flags like this one (same state, victims, confidence) appear by chance."""
+        saved = self.controls_saved()
+        if not saved or flag.get("sex") not in ("Female", "Male"):
+            return None
+        row = saved["states"].get(f"{flag.get('state')}|{flag['sex']}")
+        if not row:
+            return None
+        c = row.get(flag.get("confidence") or "all") or row.get("all")
+        return {**c, "runs": saved["runs"], "stale": saved["stale"], "confidence": flag.get("confidence")}
 
     def methods(self) -> dict:
         from .. import FIXES
@@ -1018,6 +1095,10 @@ def _handler(app: App):
                     return self._json(202, app.national().view())
                 if u.path == "/api/benchmark":
                     return self._json(202, app.benchmark().view())
+                if u.path == "/api/controls":
+                    return self._json(202, app.controls_all().view())
+                if u.path == "/api/job/stop":
+                    return self._json(200, app.stop_job())
                 if u.path == "/api/cities/wapo":
                     return self._json(202, app.city_get_wapo().view())
                 if u.path == "/api/cities/scan":
@@ -1137,6 +1218,8 @@ def _handler(app: App):
                     return self._json(200, research.map_counties(app._data(), q.get("sex", "all")))
                 if path == "/api/benchmark":
                     return self._json(200, app.benchmark_view())
+                if path == "/api/controls":
+                    return self._json(200, app.controls_saved() or {})
                 if path == "/api/cities":
                     return self._json(200, app.cities_view())
                 if path == "/api/cities/grid":

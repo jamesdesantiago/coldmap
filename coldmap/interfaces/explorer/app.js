@@ -43,6 +43,7 @@ async function poll(){
  if(job&&!job.running&&S.lastJob===job.id+':run'){S.lastJob=job.id;if(!job.error)toast(job.title.replace(/^(Preparing|Scanning|Getting|Updating)/,m=>({Preparing:'Prepared',Scanning:'Scanned',Getting:'Got',Updating:'Updated'})[m])+' — done')}
  if(job&&job.running)S.lastJob=job.id+':run';
  if(job&&job.kind==='benchmark'&&!job.running&&S.benchWatch){S.benchWatch=0;S.bench=null}
+ if(job&&job.kind==='controls'&&S.ctlWatch&&(!job.running||Date.now()-(S.ctlAt||0)>20000)){S.ctlAt=Date.now();if(!job.running)S.ctlWatch=0;api('/api/controls').then(j=>{S.ctl=j;render()})}
  if(job&&['cities','cities-get'].includes(job.kind)&&!job.running&&S.cityWatch){S.cityWatch=0;S.cities=null;S.cgrid={}}
  if(wantDownload&&st&&!S.didDl&&st.mode==='map'&&!(job&&job.running)){S.didDl=1;try{await post('/api/download'+(wantDownload==='refresh'?'?refresh=1':''))}catch(e){}}
  render();
@@ -203,6 +204,7 @@ async function renderFlag(id){
   ${historyLine(f)}
   ${decideBox(id,f,dec)}
   ${ruleoutBox(f)}
+  ${d.chance?`<p class="muted" style="font-size:12.5px">False-alarm test${d.chance.stale?' (out of date)':''}: in ${esc(f.state)}, for ${esc(who(f.sex))}, shuffled copies of the data produced ${d.chance.chance} ${d.chance.confidence?esc(d.chance.confidence)+'-confidence ':''}flags on average against ${d.chance.real} on the real data${d.chance.real?`, so about <b>${pct(Math.min(1,d.chance.chance/d.chance.real))}</b> of flags like this one may be chance`:''}.</p>`:''}
   <h3>Why it was flagged</h3><div class="notes"><p><b>${esc(f.what)}</b></p><p>${esc(f.agreement||'')}</p>${f.statistics?`<p class="muted">${esc(f.statistics)}</p>`:''}</div>
   ${(f.plugins||[]).length?`<h3>From plugins</h3>${f.plugins.map(n=>`<div class="plug"><b>${esc(n.title)}</b> <span class="by">${esc(n.by)}</span><p style="margin:4px 0 0">${esc(n.text)}</p></div>`).join('')}`:''}
   ${(d.sections||[]).map(x=>`<h3>${esc(x.title)} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">from a plugin</span></h3><div class="vsec">${renderBlocks(x.blocks)}</div>`).join('')}
@@ -761,7 +763,8 @@ function renderMethods(){
  const m=S.methods,states=[...new Set((S.flags||[]).map(f=>f.state).filter(Boolean))].sort();
  const qk=S.qState||'';const qd=qk?S.quality&&S.quality[qk]:null;
  if(!S.bench&&!S.benchLoading){S.benchLoading=1;api('/api/benchmark').then(j=>{S.bench=j;S.benchLoading=0;render()})}
- setTimeout(renderBench,0);
+ if(!S.ctl&&!S.ctlLoading){S.ctlLoading=1;api('/api/controls').then(j=>{S.ctl=j;S.ctlLoading=0;render()})}
+ setTimeout(renderBench,0);setTimeout(renderControls,0);
  setMain('methods:'+qk+(qd?Object.keys(qd).length:'x'),`<div class="view"><div class="page">
   <h1>Methods</h1><p class="lede">How a flag is made, how much to trust it, and how to make coldmap better. Everything here is open: the code, the tests and the false-alarm measurements.</p>
   <h3>How a flag is made</h3><ol class="notes" style="padding-left:18px">
@@ -776,12 +779,29 @@ function renderMethods(){
   <h3>Data quality, by state</h3><div class="row"><select class="sel" id="qState" aria-label="State"><option value="">Choose a state</option>${states.map(s=>`<option${s===qk?' selected':''}>${esc(s)}</option>`).join('')}</select><span class="muted">Reporting gaps and oddities that can create or hide flags.</span></div>
   <div id="qBody" style="margin-top:10px">${qk?(qd?Object.entries(qd).map(([n,t])=>`<p style="margin:12px 0 4px"><b>${esc(n)}</b> <span class="muted">${esc(t.summary)}</span></p>${t.rows.length?`<table><thead><tr>${Object.keys(t.rows[0]).map(k=>`<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${t.rows.map(r=>`<tr>${Object.values(r).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<p class="muted">Nothing found.</p>'}`).join(''):'<p><span class="spin"></span> Checking…</p>'):''}</div>
   <h3>How well it works</h3><p>Two measurements keep coldmap honest. The <b>benchmark</b> checks which known series that went through the courts each model finds, using your current models and settings. <b>False-alarm tests</b> (<code>coldmap controls</code> in a terminal) shuffle the solved labels to count how many flags appear by chance. A model that catches more but invents more isn't an improvement.</p>
-  <div class="box" id="benchBox"></div>
+  <div class="box" id="benchBox"></div><div class="box" id="ctlBox"></div>
   <h3>Ethics</h3><ul class="notes" style="padding-left:18px"><li>A flag is a pattern worth review, never evidence that cases are linked. Only investigators can link cases.</li><li>Never contact families, witnesses or possible suspects.</li><li>Never describe a flag as a “serial killer”, name suspects, or profile neighbourhoods or groups.</li><li>A second person reviews every lead before it goes to MAP or the investigating agency.</li></ul>
   <h3>Improve the research</h3><ul class="notes" style="padding-left:18px"><li>Write a model: start from <a href="/models" data-nav>Models</a> › Write your own, then share it as a file or a package.</li><li>Add a known, adjudicated series to the benchmark so every model is measured against it: <a href="${REPO}CONTRIBUTING.md#add-a-known-series" target="_blank" rel="noopener">how</a>.</li><li>Document a data problem you found: <a href="${REPO}DATA_ISSUES.md" target="_blank" rel="noopener">DATA_ISSUES.md</a>.</li><li>Read the full guide for contributors: <a href="${REPO}CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a>.</li></ul>
  </div></div>`);
 }
 
+function renderControls(){
+ const el=$('ctlBox');if(!el)return;const c=S.ctl,job=S.st&&S.st.job,run=job&&job.running;
+ if(!c){if(el._h!=='l'){el.innerHTML='<span class="spin"></span> Loading…';el._h='l'}return}
+ const cj=job&&job.kind==='controls'&&(job.running||job.error)?job:null;
+ const st=c.states||{},keys=Object.keys(st).sort();
+ const share=(x)=>x&&x.real?Math.min(1,x.chance/x.real):null;
+ const cell=x=>{if(!x)return '<td class="n muted">—</td>';const s=share(x);return `<td class="n" title="${x.real} flags on the real data; ${x.chance} on average on shuffled copies">${x.real?`<b>${pct(s)}</b> <span class="muted">${x.chance} / ${x.real}</span>`:x.chance?`<span class="muted">0 real, ${x.chance} chance</span>`:'<span class="muted">none</span>'}</td>`};
+ const tot=k=>{let r=0,ch=0;for(const v of Object.values(st)){if(v[k]){r+=v[k].real;ch+=v[k].chance}}return {real:r,chance:+ch.toFixed(1)}};
+ const tbl=keys.length?`<p class="muted" style="font-size:12.5px">${c.updated?'Last measured '+esc(day(c.updated))+'. ':''}${keys.length} of ${S.st&&S.st.data&&S.st.data.states?S.st.data.states*2:'all'} state-and-victim groups measured, ${c.runs} shuffled copies each${c.stale?' · <b>out of date</b>: your data or models changed since':''}. Each cell: the share of flags expected by chance (flags on shuffled copies ÷ flags on the real data).</p>
+  <div class="cases" style="max-height:420px;margin-bottom:10px"><table><thead><tr><th>State</th><th>Victims</th><th class="n">All flags</th><th class="n">High</th><th class="n">Strong</th><th class="n">Possible</th></tr></thead><tbody>
+  <tr><td><b>Every state measured</b></td><td></td>${['all','high','strong','possible'].map(k=>cell(tot(k))).join('')}</tr>
+  ${keys.map(k=>{const [s,x]=k.split('|');const v=st[k];return `<tr><td>${esc(s)}</td><td>${esc(who(x))}</td>${['all','high','strong','possible'].map(kk=>cell(v[kk])).join('')}</tr>`}).join('')}</tbody></table></div>`:'<p class="muted">Not measured yet.</p>';
+ const h=`<h2>False alarms, state by state</h2><p>The solved and unsolved labels are shuffled within each state, year, method and victims, which keeps every statewide rate but destroys any real cluster. Flags that still appear are false alarms by construction. Measured with the models you have switched on.</p>
+  ${cj?jobView(cj)+(cj.running?`<div class="row"><button class="btn" id="ctlStop"${cj.stopping?' disabled':''}>${cj.stopping?'Stopping after this state…':'Stop'}</button><span class="muted">progress is saved; run it again to continue</span></div>`:''):tbl}
+  ${cj&&cj.running?'':`<div class="row"><button class="btn${!keys.length||c.stale?' primary':''}" id="ctlRun"${run?' disabled':''}>${keys.length&&!c.stale?'Measure again':keys.length?'Continue or redo':'Measure every state'}</button><span class="muted">about 20–40 minutes; you can stop and continue later</span></div>`}`;
+ if(el._h!==h){el.innerHTML=h;el._h=h}
+}
 function renderBench(){
  const el=$('benchBox');if(!el)return;const b=S.bench,job=S.st&&S.st.job,run=job&&job.running;
  if(!b){if(el._h!=='l'){el.innerHTML='<span class="spin"></span> Loading…';el._h='l'}return}
@@ -941,6 +961,8 @@ document.addEventListener('click',async e=>{
  if(t.dataset&&t.dataset.cirm){if(!confirm('Remove this city data and the last city scan?'))return;post('/api/cities/remove?slug='+encodeURIComponent(t.dataset.cirm)).then(()=>{S.cities=null;S.cgrid={};render()}).catch(err=>toast(err.message));return}
  if(t.id==='ciWapo'){try{await post('/api/cities/wapo')}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
  if(t.id==='ciScan'){try{await post('/api/cities/scan'+(S.cityPeriods?'?periods=1':''))}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
+ if(t.id==='ctlRun'){try{await post('/api/controls')}catch(err){toast(err.message)}S.ctlWatch=1;poll();return}
+ if(t.id==='ctlStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
  if(t.id==='benchRun'){try{await post('/api/benchmark')}catch(err){toast(err.message)}S.benchWatch=1;poll();return}
  if(t.id==='rescan'){try{await post('/api/national')}catch(err){toast(err.message)}$('main').dataset.key='';poll();return}
  if(t.id==='check'){S.checking=1;render();try{await post('/api/check')}catch(err){toast(err.message)}S.checking=0;poll();return}
