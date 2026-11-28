@@ -672,7 +672,7 @@ class App:
         self._flags = (s["generated"], rows)
         return s, rows
 
-    def flag(self, fid: str) -> dict:
+    def _flag_row(self, fid: str) -> dict:
         from . import research
         _, rows = self.flags()
         r = next((x for x in rows if x["id"] == fid), None)
@@ -681,6 +681,25 @@ class App:
             if not saved:
                 raise KeyError(fid)
             r = {**saved["flag"], "id": fid, "archived": True}
+        return r
+
+    def case_links(self, fid: str, q: dict) -> dict:
+        """Which of a flag's unsolved cases resemble each other (see coldmap.linkage)."""
+        from .. import linkage
+        r = self._flag_row(fid)
+
+        def year(k):
+            v = q.get(k, "")
+            return int(v) if v.lstrip("-").isdigit() else None
+        start, end = year("start"), year("end")
+        if start is not None and end is not None and start > end:
+            start, end = end, start
+        res = linkage.links(self._data(), r, start, end)
+        return {**res, "checklist": linkage.checklist(r, res, self.chance_for(r))}
+
+    def flag(self, fid: str) -> dict:
+        from . import research
+        r = self._flag_row(fid)
         from .. import datasets
         detail = research.flag_detail(self._data(), r)
         counties = r.get("counties") or ([r["county"]] if r.get("county") else [])
@@ -1282,6 +1301,8 @@ def _handler(app: App):
                 if path == "/api/flags":
                     summary, rows = app.flags()
                     return self._json(200, {"meta": summary, "flags": rows})
+                if path.startswith("/api/links/"):
+                    return self._json(200, app.case_links(unquote(path.rsplit("/", 1)[1]), q))
                 if path.startswith("/api/flag/"):
                     return self._json(200, app.flag(unquote(path.rsplit("/", 1)[1])))
                 if path == "/api/decisions":

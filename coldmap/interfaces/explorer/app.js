@@ -215,6 +215,8 @@ async function renderFlag(id){
   ${(f.data||[]).length?`<h3>Known problems in the data</h3><div class="notes"><ul>${f.data.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></div>`:''}
   ${f.cases?`<h3>Victims, in aggregate</h3><p>${esc(f.cases)}</p>`:''}
   ${f.namus?`<h3>NamUs</h3><p>${esc(f.namus)}</p>`:''}
+  <h3>Case links <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">which unsolved cases resemble each other · uses the years selected on the chart below</span></h3>
+  <section id="lk"></section>
   <h3>Explore the evidence <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">hover for numbers · click or drag across years · click any value to filter</span></h3>
   <section class="wb" id="wb"></section>
   <h3>Next steps</h3><div class="notes"><ol style="padding-left:18px"><li>Search public news and court records: is a series here already known or solved?</li><li>Read the case rows: do dates, ages and circumstances resemble each other?</li><li>If it still looks unexplained, keep it and ask a second person to review it, then export it for MAP.</li></ol><p class="muted" style="margin-top:8px">Never contact families, witnesses or possible suspects. A flag is a pattern worth review, not evidence that cases are linked.</p></div>
@@ -256,6 +258,46 @@ const FACETS=[['month','Month',r=>String(r[1]||0),v=>MONTHS[+v]],['age','Victim 
  ['agency','Agency',r=>r[2],v=>v],['weapon','Weapon recorded',r=>r[6],v=>v],['race','Victim race',r=>r[5],v=>v]];
 const CASEH=['Year','Month','Agency','Solved','Age','Race','Weapon','Relationship','Circumstance'];
 S.wb={};
+// ---- case links ----------------------------------------------------------------------------------
+const GCOL=['#c0392b','#1f6fb2','#2e8b57','#b8860b','#7b4fa0','#c2185b','#00838f','#6d4c41','#5c6bc0','#9e9d24'];
+function renderLinks(id){
+ const el=$('lk');const d=S.detail[id];if(!el||!d)return;const w=wbOf(id),key=id+':'+w.y0+':'+w.y1;
+ S.lk=S.lk||{};const L=S.lk[key];
+ if(!L){S.lk[key]='l';api(`/api/links/${encodeURIComponent(id)}?start=${w.y0}&end=${w.y1}`).then(j=>{S.lk[key]=j;renderLinks(id)}).catch(e=>{S.lk[key]={error:e.message};renderLinks(id)})}
+ if(!L||L==='l'){if(el._h!=='l'){el.innerHTML='<p class="muted"><span class="spin"></span> Comparing the unsolved cases…</p>';el._h='l'}return}
+ if(L.error){el.innerHTML=`<p class="msg err">${esc(L.error)}</p>`;el._h='e';return}
+ const sel=S.lkSel&&S.lkSel.key===key?S.lkSel.g:null;
+ const ck=`<ul class="checks">${L.checklist.map(c=>`<li class="${c.ok===true?'ok':c.ok===false?'no':''}"><span>${c.ok===true?'✓':c.ok===false?'✕':'•'}</span>${esc(c.text)}</li>`).join('')}</ul>`;
+ const head=`<p class="muted" style="font-size:12.5px">${L.start}–${L.end}: ${nf.format(L.unsolved)} unsolved cases. Two cases are linked when they resemble each other more than ${Math.round(L.link_pct*100)}% of random pairs of unsolved cases from this place: same agency, specific weapon, circumstance or relationship (rare details count more), victim age and closeness in time. Victim race is never used, and "undetermined" codes never count as a match. This is similarity, <b>not</b> a probability that the cases share an offender.</p>`;
+ if(L.too_many||!L.cases||!L.cases.length){const h=head+ck+(L.too_many?'':'<p class="muted">Fewer than 3 unsolved cases in these years.</p>');if(el._h!==h){el.innerHTML=h;el._h=h}return}
+ const gcard=(g,k)=>`<div class="lgroup${sel===k?' on':''}"><div class="row" style="justify-content:space-between"><b><i style="background:${g.distinct.length?GCOL[k%GCOL.length]:'var(--mute)'}"></i>Group ${k+1}: ${g.size} cases, ${g.start}–${g.end}</b><span><button class="btn" data-lkshow="${k}" style="height:26px;font-size:12px">${sel===k?'Show all':'Show'}</button> <button class="btn" data-lkkeep="${k}" style="height:26px;font-size:12px">Keep this group for review</button></span></div>
+   ${g.distinct.length?`<p style="margin:4px 0 0;font-size:13px"><b>Distinctive:</b> ${g.distinct.map(esc).join(', ')}</p>`:''}
+   <ul>${g.shared.map(x=>`<li>${esc(x)}</li>`).join('')}${g.nearby.length?`<li>${g.nearby.length} similar unsolved case${g.nearby.length===1?'':'s'} just outside the flag (neighbouring counties or nearby years)</li>`:''}</ul></div>`;
+ const dk=L.groups.map((g,k)=>k).filter(k=>L.groups[k].distinct.length),ok=L.groups.map((g,k)=>k).filter(k=>!L.groups[k].distinct.length);
+ const groups=dk.map(k=>gcard(L.groups[k],k)).join('')+(ok.length?`<details style="margin-top:8px"><summary class="muted">${ok.length} group${ok.length===1?'':'s'} held together only by place, method and time</summary>${ok.map(k=>gcard(L.groups[k],k)).join('')}</details>`:'');
+ const h=head+ck+`<div class="box" style="padding:8px"><svg id="lkNet" style="width:100%;height:460px;display:block" role="img" aria-label="Network of similar unsolved cases"></svg>
+  <p class="muted" style="font-size:12px;margin:4px 6px">Each dot is an unsolved case, coloured by group; hollow dots are similar cases just outside the flag; lines join strongly similar cases. Hover a dot for the case.</p></div>
+  <p class="muted" style="font-size:12.5px">Groups are listed by date, not ranked. Tested on 9 known series, one of a flag's three largest groups usually fell inside the series' years, but no ranking reliably put that group first, so read each one. A group sharing rare details is worth more than one held together only by place and time.</p>
+  ${L.groups.length?groups:'<p class="muted">No groups of 3 or more.</p>'}`;
+ if(el._h!==h){el.innerHTML=h;el._h=h;drawNet(L,sel)}
+}
+async function drawNet(L,sel){
+ if(!window.d3)await loadScript('/vendor/d3.v7.min.js');
+ const svg=$('lkNet');if(!svg)return;const W=svg.clientWidth||700,H=460;
+ const gi=new Map();L.groups.forEach((g,k)=>g.members.forEach(m=>gi.set(m,k)));
+ const nodes=L.cases.map((c,i)=>({i,c,g:gi.has(i)?gi.get(i):null}));
+ const links=L.links.map(([a,b,p])=>({source:a,target:b,p}));
+ const sim=d3.forceSimulation(nodes).force('link',d3.forceLink(links).distance(28).strength(l=>.15+.8*(l.p-L.link_pct)/(1-L.link_pct+1e-9)))
+  .force('charge',d3.forceManyBody().strength(-14)).force('x',d3.forceX(W/2).strength(.05)).force('y',d3.forceY(H/2).strength(.07)).stop();
+ for(let k=0;k<260;k++)sim.tick();
+ const cx=v=>Math.max(8,Math.min(W-8,v)),cy=v=>Math.max(8,Math.min(H-8,v));
+ const dim=n=>sel!=null&&n.g!==sel;
+ const col=n=>n.g==null||(!L.groups[n.g].distinct.length&&sel!==n.g)?'var(--mute)':GCOL[n.g%GCOL.length];
+ const tip=c=>[`${c.outside?'Outside the flag · ':''}${c.year}${c.month?'-'+String(c.month).padStart(2,'0'):''}`,c.age!=null?'victim aged '+c.age:'age unknown',c.agency+(c.county?' ('+c.county+')':''),c.weapon,c.circumstance,c.relationship,'FBI case '+c.id].join(' · ');
+ svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+ svg.innerHTML=links.map(l=>`<line x1="${cx(l.source.x).toFixed(1)}" y1="${cy(l.source.y).toFixed(1)}" x2="${cx(l.target.x).toFixed(1)}" y2="${cy(l.target.y).toFixed(1)}" stroke="var(--line2)" stroke-width="${(.6+2*(l.p-L.link_pct)/(1-L.link_pct+1e-9)).toFixed(2)}" opacity="${dim(l.source)&&dim(l.target)?.12:.7}"/>`).join('')
+  +nodes.map(n=>`<circle cx="${cx(n.x).toFixed(1)}" cy="${cy(n.y).toFixed(1)}" r="${n.c.outside?4.5:5}" fill="${n.c.outside?'var(--surf)':col(n)}" stroke="${col(n)}" stroke-width="${n.c.outside?2:1}" opacity="${dim(n)?.18:1}" data-tip="${esc(tip(n.c))}"/>`).join('');
+}
 function wbOf(id){const f=S.detail[id].flag;return S.wb[id]||(S.wb[id]={y0:f.start,y1:f.end,sel:{},sort:[0,1],limit:300})}
 function wbRows(d,w,skip){return d.cases.filter(r=>r[0]>=w.y0&&r[0]<=w.y1&&FACETS.every(([k,,fn])=>k===skip||w.sel[k]==null||fn(r)===w.sel[k]))}
 function renderWB(id){
@@ -285,7 +327,7 @@ function renderWB(id){
   <div class="facets">${facets}</div>
   ${d.truncated?`<p class="muted" style="font-size:12px;margin:0">This place has ${nf.format(d.cases_total)} cases; the ones from ${d.covered[0]}–${d.covered[1]} are loaded here.</p>`:''}
   ${table}`;
- drawWBChart(id);drawTimeline(id,rows);
+ drawWBChart(id);drawTimeline(id,rows);renderLinks(id);
 }
 function drawWBChart(id){
  const el=$('ch');const d=S.detail[id];if(!el)return;const f=d.flag,w=wbOf(id);
@@ -973,6 +1015,11 @@ document.addEventListener('click',async e=>{
  if(t.id==='ciScan'){try{await post('/api/cities/scan'+(S.cityPeriods?'?periods=1':''))}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
  if(t.id==='leadRun'){try{await post('/api/leadtime')}catch(err){toast(err.message)}S.leadWatch=1;poll();return}
  if(t.id==='leadStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
+ if(t.dataset&&t.dataset.lkshow!=null){const id=S.sel,w=wbOf(id),key=id+':'+w.y0+':'+w.y1,k=+t.dataset.lkshow;S.lkSel=S.lkSel&&S.lkSel.key===key&&S.lkSel.g===k?null:{key,g:k};renderLinks(id);return}
+ if(t.dataset&&t.dataset.lkkeep!=null){const id=S.sel,w=wbOf(id),L=S.lk[id+':'+w.y0+':'+w.y1],g=L.groups[+t.dataset.lkkeep],f=S.detail[id].flag;
+  const cs=g.members.map(m=>L.cases[m]);const prev=(S.dec[id]&&S.dec[id].note)||'';
+  const note=(prev?prev+'\n\n':'')+`Group of ${g.size} similar unsolved cases, ${g.start}–${g.end}: ${g.shared.join('; ')}.\nFBI case IDs: ${cs.map(c=>c.id).join(', ')}`;
+  try{await post('/api/decide',{id,status:(S.dec[id]&&S.dec[id].status)||'kept',flag:f,note});await refreshDecisions();toast('Kept, with this group in the note');render()}catch(err){toast(err.message)}return}
  if(t.id==='ctlRun'){try{await post('/api/controls')}catch(err){toast(err.message)}S.ctlWatch=1;poll();return}
  if(t.id==='ctlStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
  if(t.id==='benchRun'){try{await post('/api/benchmark')}catch(err){toast(err.message)}S.benchWatch=1;poll();return}
