@@ -83,3 +83,49 @@ def test_link_strength_is_bounded(tmp_path, monkeypatch):
     assert loose["groups"] == tight["groups"]                     # groups don't depend on the slider
     for bad in ("nan", "abc", "5", "-1"):
         assert 0.95 <= app.case_links(f["id"], {"min": bad})["min_pct"] <= 0.999
+
+
+def test_network_by_flag_place_and_case_number(tmp_path, monkeypatch):
+    import time
+    import click
+    import pytest
+    from coldmap.interfaces import launch
+    from coldmap.sample import make_sample
+    monkeypatch.setenv("COLDMAP_HOME", str(tmp_path / "home"))
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    app.national()
+    while app.job.running:
+        time.sleep(0.05)
+    _, rows = app.flags()
+    f = next(r for r in rows if r["weapon"] == "Strangle/asphyxia")
+    by_flag = app.network({"flag": f["id"]})
+    assert by_flag["scope"] == {"kind": "flag", "flag": f["id"]} and by_flag["unsolved"] >= 3
+    # any place, victims and method, without a flag
+    county = f.get("county") or f["place"]
+    by_place = app.network({"state": f["state"], "county": county, "sex": f["sex"], "weapon": f["weapon"]})
+    assert by_place["scope"]["kind"] == "place" and by_place["unsolved"] >= by_flag["unsolved"]
+    for bad in ({"state": f["state"], "county": "../x", "sex": "Female", "weapon": "Gun"},
+                {"state": f["state"], "county": county, "sex": "all", "weapon": "Gun"},
+                {"state": f["state"], "county": county, "sex": "Female", "weapon": "<script>"}):
+        with pytest.raises(click.ClickException):
+            app.network(bad)
+    # a case number: found, with its flags; a solved one is added to a network as the searched case
+    c = app._data().cases
+    solved = c[(c.county == county) & c.solved & (c.vic_sex == f["sex"]) & (c.weapon_group == f["weapon"])].iloc[0]
+    found = app.find_case(" " + str(solved.case_id).lower() + " ")
+    assert found["id"] == solved.case_id and found["solved"] is True
+    net = app.network({"flag": f["id"], "focus": solved.case_id})
+    focus = net["cases"][net["focus"]]
+    assert focus["id"] == solved.case_id and focus["solved"] and focus["focus"]
+    with pytest.raises(click.ClickException):
+        app.find_case("NOPE")
+    opts = app.network_options({"state": f["state"]})
+    assert f["state"] in opts["states"] and any(x["id"] == f["id"] for x in opts["flags"])
+
+
+def test_bordering_counties_count_as_close():
+    a = pd.DataFrame({"county": ["Lucas, OH"]})
+    b = pd.DataFrame({"county": ["Lucas, OH", "Wood, OH", "Franklin, OH"]})
+    assert list(linkage._proximity(a.county.to_numpy(), b.county.to_numpy())[0]) == [
+        linkage.PROX_SAME, linkage.PROX_NEAR, 0.0]

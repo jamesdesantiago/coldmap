@@ -8,7 +8,10 @@ Similarity, for two cases (standard practice in case linkage: shared *rare* deta
 - same agency, same detailed weapon, same circumstance, same relationship: each adds
   -ln(share of the reference cases with that value), so a rare shared detail weighs more;
 - victim ages within 2 years (or 5, for half): -ln(share of reference cases in that age range);
-- time: up to TIME_W points, falling off over about two years.
+- time: up to TIME_W points, falling off over about two years;
+- place: PROX_SAME points for the same county, PROX_NEAR for a county that borders it (from the
+  Census county shapes). The FBI's case file has no location finer than the agency and county, so
+  this is the closest proximity it allows.
 "Undetermined", "not stated" and similar values never count as a match, and victim race is never
 used. The reference is every case of the same state, victims and method.
 
@@ -17,11 +20,11 @@ place and method in any year: "stronger than 99% of random pairs from this place
 similarity, NOT a probability that the cases share an offender: the case file doesn't mark which
 cases were later linked, so no such probability can be calibrated from it.
 
-Tested on the 9 adjudicated series (November 2026): in 6 of 9, one of the flag's three largest
-groups falls mostly inside the series' years (Los Angeles 1987-1998: a group of 18 cases, 1987-1992,
-94% coded "rape" against 26% across the flag). But no way of ranking groups (size, tightness, how
-distinctive their shared details are) put the series' group first more often than chance would: the
-top group fell in the series' years 33-41% of the time, against 45% for the flag's cases overall.
+Tested on the 9 adjudicated series (November 2026, with county proximity): in 8 of 9, one of the
+flag's three largest groups falls mostly inside the series' years (Los Angeles 1987-1998: a group of
+18 cases, 1987-1992, 94% coded "rape" against 26% across the flag). But the largest group fell in the
+series' years 48% of the time, against 45% for the flag's cases overall, and no other ranking (size,
+tightness, how distinctive the shared details are) did reliably better.
 So groups are listed by date for a person to read, never ranked as "the" pattern.
 
 Groups come from average-linkage clustering: every group's average pair is stronger than GROUP_PCT of
@@ -39,6 +42,8 @@ LINK_PCT = 0.99        # a link: stronger than 99% of random pairs from the same
 GROUP_PCT = 0.95       # a group: its average pair is stronger than 95% of random pairs
 MAX_CASES = 600        # unsolved cases linked at once; narrow the years beyond that
 TIME_W = 3.0
+PROX_SAME = 1.0
+PROX_NEAR = 0.5
 NULL_PAIRS = 20000
 UNINFORMATIVE = {"", "nan", "none", "unknown", "other", "other or type unknown", "firearm, type not stated",
                  "relationship not determined", "circumstances undetermined", "other - not specified",
@@ -79,6 +84,7 @@ class Scorer:
         known = ~np.isnan(gap)
         s += np.where(known & (gap <= 2), self.age_w2[idx], np.where(known & (gap <= 5), 0.5 * self.age_w5[idx], 0.0))
         s += TIME_W * np.exp(-np.abs(_t(a) - _t(b)) / 24.0)
+        s += _proximity(_counties(a), _counties(b), pairwise=True)
         return s
 
     def matrix(self, a: pd.DataFrame, b: pd.DataFrame) -> np.ndarray:
@@ -97,7 +103,33 @@ class Scorer:
         s += np.where(known & (gap <= 2), self.age_w2[idx][:, None],
                       np.where(known & (gap <= 5), 0.5 * self.age_w5[idx][:, None], 0.0))
         s += TIME_W * np.exp(-np.abs(_t(a)[:, None] - _t(b)[None, :]) / 24.0)
+        s += _proximity(_counties(a), _counties(b))
         return s
+
+
+def _counties(d: pd.DataFrame) -> np.ndarray:
+    return d["county"].to_numpy() if "county" in d else np.full(len(d), None, dtype=object)
+
+
+def _proximity(ca, cb, pairwise: bool = False) -> np.ndarray:
+    """PROX_SAME for the same county, PROX_NEAR for bordering counties, else 0 (matrix, or element-wise)."""
+    from .detectors.neighbours import adjacency
+    from .interfaces.research import county_fips
+    labels = sorted({str(x) for x in np.concatenate([ca, cb]) if isinstance(x, str)})
+    idx = {lb: k for k, lb in enumerate(labels)}
+    codes = [county_fips(lb) for lb in labels]
+    adj = adjacency()
+    m = np.zeros((len(labels) + 1, len(labels) + 1))   # last row/column: no county
+    for i, ci in enumerate(codes):
+        m[i, i] = PROX_SAME
+        if ci:
+            near = adj.get(ci, ())
+            for j, cj in enumerate(codes):
+                if cj and cj in near:
+                    m[i, j] = PROX_NEAR
+    ia = np.array([idx.get(x, len(labels)) if isinstance(x, str) else len(labels) for x in ca])
+    ib = np.array([idx.get(x, len(labels)) if isinstance(x, str) else len(labels) for x in cb])
+    return m[ia, ib] if pairwise else m[np.ix_(ia, ib)]
 
 
 def _t(d: pd.DataFrame) -> np.ndarray:
@@ -139,13 +171,14 @@ def _groups(P: np.ndarray, level: float) -> list[list[int]]:
 
 
 def _case(r, pct_best=None) -> dict:
-    return {"id": str(r.case_id), "year": int(r.year), "month": int(r.month) if r.month > 0 else None,
+    return {"id": str(r.case_id), "solved": bool(r.solved), "year": int(r.year),
+            "month": int(r.month) if r.month > 0 else None,
             "age": None if pd.isna(r.vic_age) else int(r.vic_age), "agency": str(r.agency), "county": r.county,
             "weapon": str(r.weapon), "circumstance": str(r.circumstance), "relationship": str(r.relationship)}
 
 
 def links(data, flag: dict, start: int | None = None, end: int | None = None, seed: int = 0,
-          min_pct: float = LINK_PCT) -> dict:
+          min_pct: float = LINK_PCT, focus: str | None = None) -> dict:
     """Unsolved cases of a flag (optionally narrowed to start..end), the links between them, groups,
     and similar unsolved cases just outside the flag."""
     from .interfaces.research import _mask
@@ -189,6 +222,21 @@ def links(data, flag: dict, start: int | None = None, end: int | None = None, se
                 near_links += [[len(inside) + len(nearby) - 1, int(m), round(float(Pn[k, m]), 4)] for m in hits]
     cases = [_case(r) for r in inside.itertuples(index=False)]
     links_ = [[int(i), int(j), round(float(P[i, j]), 4)] for i, j in zip(*np.nonzero(np.triu(strong, 1)))]
+    # a searched case that isn't among them (solved, outside the years, or another place): add it, with
+    # its links to the cases shown (at the loosest strength, closest 15)
+    focus_i = None
+    if focus:
+        known = [k for k, x in enumerate(cases + nearby) if x["id"] == focus]
+        if known:
+            focus_i = known[0]
+        else:
+            row = c[c.case_id == focus]
+            if len(row):
+                pf = _pct(null, scorer.matrix(row.iloc[[0]], inside))[0]
+                focus_i = len(cases) + len(nearby)
+                nearby.append({**_case(next(row.iloc[[0]].itertuples(index=False))), "outside": True, "focus": True})
+                top = [m for m in np.argsort(-pf)[:15] if pf[m] >= 0.95]
+                near_links += [[focus_i, int(m), round(float(pf[m]), 4)] for m in top]
     gsum = []
     for g in groups:
         sub = inside.iloc[g]
@@ -204,7 +252,7 @@ def links(data, flag: dict, start: int | None = None, end: int | None = None, se
                      "linked_share": round(float((pair >= LINK_PCT).mean()), 2), "nearby": attached})
     gsum.sort(key=lambda x: (x["start"], x["end"]))   # by date: no ranking reliably puts a real series first
     return {**out, "cases": cases + nearby, "links": links_ + near_links, "groups": gsum,
-            "grouped": int(sum(len(g) for g in groups)), "nearby_count": len(nearby)}
+            "grouped": int(sum(len(g) for g in groups)), "nearby_count": len(nearby), "focus": focus_i}
 
 
 DISTINCT_LIFT = 0.50   # a detail at least 50 points more common in the group than in the flag...
@@ -278,6 +326,31 @@ def _nearby(data, flag: dict, start: int, end: int, inside: pd.DataFrame) -> pd.
     fips = cand.county.map(lambda k: county_fips(k) if isinstance(k, str) else None)
     cand = cand[fips.isin(near_codes) | (cand.county.isin(counties) & ~cand.case_id.isin(inside.case_id))]
     return cand.head(400)
+
+
+def scope_flag(state: str, county: str, sex: str, weapon: str, start: int, end: int,
+               neighbours: bool = False) -> dict:
+    """A flag-shaped description of any place, victims, method and years, so the network can show
+    cases without a flag. With neighbours, the bordering counties in the same state are included."""
+    from .detectors.neighbours import groups
+    counties = [county]
+    if neighbours:
+        counties = groups([county] + _state_counties(state)).get(county, [county])
+    return {"state": state, "level": "region" if neighbours else "county", "place": county, "county": county,
+            "counties": counties, "sex": sex, "weapon": weapon, "start": int(start), "end": int(end)}
+
+
+_COUNTIES: dict[str, list[str]] = {}
+
+
+def _state_counties(state: str) -> list[str]:
+    return _COUNTIES.get(state, [])
+
+
+def remember_counties(data) -> None:
+    if not _COUNTIES:
+        for st, g in data.cases.dropna(subset=["county"]).groupby("state").county:
+            _COUNTIES[st] = sorted(g.unique())
 
 
 def checklist(flag: dict, result: dict, chance: dict | None) -> list[dict]:
