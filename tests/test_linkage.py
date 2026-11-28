@@ -62,3 +62,24 @@ def test_links_on_the_sample_and_the_route(tmp_path, monkeypatch):
     assert narrow["start"] == f["start"] and narrow["end"] == f["end"]
     monkeypatch.setattr(linkage, "MAX_CASES", 2)
     assert app.case_links(f["id"], {})["too_many"]
+
+
+def test_link_strength_is_bounded(tmp_path, monkeypatch):
+    import time
+    from coldmap.interfaces import launch
+    from coldmap.sample import make_sample
+    monkeypatch.setenv("COLDMAP_HOME", str(tmp_path / "home"))
+    cases, clearance = make_sample(tmp_path)
+    app = launch.App("files", cases, clearance)
+    app.national()
+    while app.job.running:
+        time.sleep(0.05)
+    _, rows = app.flags()
+    f = next(r for r in rows if r["weapon"] == "Strangle/asphyxia")
+    loose = app.case_links(f["id"], {"min": "0.95"})
+    tight = app.case_links(f["id"], {"min": "0.999"})
+    assert loose["min_pct"] == 0.95 and tight["min_pct"] == 0.999
+    assert len(loose["links"]) >= len(tight["links"])
+    assert loose["groups"] == tight["groups"]                     # groups don't depend on the slider
+    for bad in ("nan", "abc", "5", "-1"):
+        assert 0.95 <= app.case_links(f["id"], {"min": bad})["min_pct"] <= 0.999

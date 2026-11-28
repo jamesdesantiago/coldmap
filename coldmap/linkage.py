@@ -144,7 +144,8 @@ def _case(r, pct_best=None) -> dict:
             "weapon": str(r.weapon), "circumstance": str(r.circumstance), "relationship": str(r.relationship)}
 
 
-def links(data, flag: dict, start: int | None = None, end: int | None = None, seed: int = 0) -> dict:
+def links(data, flag: dict, start: int | None = None, end: int | None = None, seed: int = 0,
+          min_pct: float = LINK_PCT) -> dict:
     """Unsolved cases of a flag (optionally narrowed to start..end), the links between them, groups,
     and similar unsolved cases just outside the flag."""
     from .interfaces.research import _mask
@@ -153,7 +154,10 @@ def links(data, flag: dict, start: int | None = None, end: int | None = None, se
     end = int(end if end is not None else flag["end"])
     place_all = c[_mask(c, flag, by_year=True)]
     inside = place_all[place_all.year.between(start, end) & ~place_all.solved]
-    out = {"start": start, "end": end, "unsolved": int(len(inside)), "link_pct": LINK_PCT, "max_cases": MAX_CASES}
+    min_pct = float(min_pct) if np.isfinite(min_pct) else LINK_PCT
+    min_pct = min(max(min_pct, 0.95), 0.999)   # links shown: 95th to 99.9th percentile
+    out = {"start": start, "end": end, "unsolved": int(len(inside)), "link_pct": LINK_PCT, "min_pct": min_pct,
+           "max_cases": MAX_CASES}
     if len(inside) > MAX_CASES:
         return {**out, "too_many": True}
     if len(inside) < 3:
@@ -169,7 +173,7 @@ def links(data, flag: dict, start: int | None = None, end: int | None = None, se
     S = scorer.matrix(inside, inside)
     P = _pct(null, S)
     np.fill_diagonal(P, 0)
-    strong = P >= LINK_PCT
+    strong = P >= min_pct
     groups = _groups(P, GROUP_PCT)
     groups.sort(key=lambda g: -len(g))
     # similar unsolved cases outside the flag: neighbouring counties, a few years either side
@@ -179,7 +183,7 @@ def links(data, flag: dict, start: int | None = None, end: int | None = None, se
         Sn = scorer.matrix(near_df, inside)
         Pn = _pct(null, Sn)
         for k, r in enumerate(near_df.itertuples(index=False)):
-            hits = np.flatnonzero(Pn[k] >= LINK_PCT)
+            hits = np.flatnonzero(Pn[k] >= max(min_pct, LINK_PCT))
             if len(hits):
                 nearby.append({**_case(r), "outside": True})
                 near_links += [[len(inside) + len(nearby) - 1, int(m), round(float(Pn[k, m]), 4)] for m in hits]

@@ -694,7 +694,11 @@ class App:
         start, end = year("start"), year("end")
         if start is not None and end is not None and start > end:
             start, end = end, start
-        res = linkage.links(self._data(), r, start, end)
+        try:
+            min_pct = float(q.get("min", linkage.LINK_PCT))
+        except ValueError:
+            min_pct = linkage.LINK_PCT
+        res = linkage.links(self._data(), r, start, end, min_pct=min_pct)
         return {**res, "checklist": linkage.checklist(r, res, self.chance_for(r))}
 
     def flag(self, fid: str) -> dict:

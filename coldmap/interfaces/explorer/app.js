@@ -101,10 +101,10 @@ function render(){
  renderStatus();renderViewNav(r);
  const st=S.st;
  if(!st){$('main').innerHTML=`<div class="view"><div class="page"><p class="${S.err?'msg err':'muted'}">${esc(S.err||'Opening coldmap…')}</p></div></div>`;return}
- const research=['flags','shortlist','places','map','x'].includes(r.sec);
+ const research=['flags','shortlist','places','map','x','network'].includes(r.sec);
  if(research&&!st.national)return renderGate();
- ({flags:renderFlags,map:renderMap,x:renderViewPage,shortlist:renderShortlist,places:renderPlaces,cities:renderCities,models:renderModels,ai:renderAI,methods:renderMethods,data:renderData}[r.sec]||renderFlags)(r);
- document.title=({flags:'Flags',map:'Map',shortlist:'Shortlist',places:'Places',cities:'Cities',models:'Models',ai:'AI assistants',methods:'Methods',data:'Data'}[r.sec]||'coldmap')+' · coldmap';
+ ({flags:renderFlags,map:renderMap,network:renderNetwork,x:renderViewPage,shortlist:renderShortlist,places:renderPlaces,cities:renderCities,models:renderModels,ai:renderAI,methods:renderMethods,data:renderData}[r.sec]||renderFlags)(r);
+ document.title=({flags:'Flags',map:'Map',network:'Case network',shortlist:'Shortlist',places:'Places',cities:'Cities',models:'Models',ai:'AI assistants',methods:'Methods',data:'Data'}[r.sec]||'coldmap')+' · coldmap';
 }
 function setMain(key,html){const m=$('main');if(m.dataset.key!==key){m.dataset.key=key;m.innerHTML=html;return true}return false}
 
@@ -270,33 +270,133 @@ function renderLinks(id){
  const ck=`<ul class="checks">${L.checklist.map(c=>`<li class="${c.ok===true?'ok':c.ok===false?'no':''}"><span>${c.ok===true?'✓':c.ok===false?'✕':'•'}</span>${esc(c.text)}</li>`).join('')}</ul>`;
  const head=`<p class="muted" style="font-size:12.5px">${L.start}–${L.end}: ${nf.format(L.unsolved)} unsolved cases. Two cases are linked when they resemble each other more than ${Math.round(L.link_pct*100)}% of random pairs of unsolved cases from this place: same agency, specific weapon, circumstance or relationship (rare details count more), victim age and closeness in time. Victim race is never used, and "undetermined" codes never count as a match. This is similarity, <b>not</b> a probability that the cases share an offender.</p>`;
  if(L.too_many||!L.cases||!L.cases.length){const h=head+ck+(L.too_many?'':'<p class="muted">Fewer than 3 unsolved cases in these years.</p>');if(el._h!==h){el.innerHTML=h;el._h=h}return}
- const gcard=(g,k)=>`<div class="lgroup${sel===k?' on':''}"><div class="row" style="justify-content:space-between"><b><i style="background:${g.distinct.length?GCOL[k%GCOL.length]:'var(--mute)'}"></i>Group ${k+1}: ${g.size} cases, ${g.start}–${g.end}</b><span><button class="btn" data-lkshow="${k}" style="height:26px;font-size:12px">${sel===k?'Show all':'Show'}</button> <button class="btn" data-lkkeep="${k}" style="height:26px;font-size:12px">Keep this group for review</button></span></div>
+ const gcard=(g,k)=>`<div class="lgroup${sel===k?' on':''}"><div class="row" style="justify-content:space-between"><b><i style="background:${g.distinct.length?GCOL[k%GCOL.length]:'var(--mute)'}"></i>Group ${k+1}: ${g.size} cases, ${g.start}–${g.end}</b><span><a class="btn" href="/network/${encodeURIComponent(id)}?start=${L.start}&end=${L.end}&group=${k}" data-nav style="height:26px;font-size:12px">Show in the network</a> <button class="btn" data-lkkeep="${k}" style="height:26px;font-size:12px">Keep this group for review</button></span></div>
    ${g.distinct.length?`<p style="margin:4px 0 0;font-size:13px"><b>Distinctive:</b> ${g.distinct.map(esc).join(', ')}</p>`:''}
    <ul>${g.shared.map(x=>`<li>${esc(x)}</li>`).join('')}${g.nearby.length?`<li>${g.nearby.length} similar unsolved case${g.nearby.length===1?'':'s'} just outside the flag (neighbouring counties or nearby years)</li>`:''}</ul></div>`;
  const dk=L.groups.map((g,k)=>k).filter(k=>L.groups[k].distinct.length),ok=L.groups.map((g,k)=>k).filter(k=>!L.groups[k].distinct.length);
  const groups=dk.map(k=>gcard(L.groups[k],k)).join('')+(ok.length?`<details style="margin-top:8px"><summary class="muted">${ok.length} group${ok.length===1?'':'s'} held together only by place, method and time</summary>${ok.map(k=>gcard(L.groups[k],k)).join('')}</details>`:'');
- const h=head+ck+`<div class="box" style="padding:8px"><svg id="lkNet" style="width:100%;height:460px;display:block" role="img" aria-label="Network of similar unsolved cases"></svg>
-  <p class="muted" style="font-size:12px;margin:4px 6px">Each dot is an unsolved case, coloured by group; hollow dots are similar cases just outside the flag; lines join strongly similar cases. Hover a dot for the case.</p></div>
+ const nurl=`/network/${encodeURIComponent(id)}?start=${L.start}&end=${L.end}`;
+ const h=head+ck+`<div class="row" style="margin:10px 0"><a class="btn primary" href="${nurl}" data-nav>Explore the case network</a><span class="muted">${nf.format(L.cases.length)} cases, ${nf.format(L.links.length)} links: click around the cases, see why they link, select groups</span></div>
   <p class="muted" style="font-size:12.5px">Groups are listed by date, not ranked. Tested on 9 known series, one of a flag's three largest groups usually fell inside the series' years, but no ranking reliably put that group first, so read each one. A group sharing rare details is worth more than one held together only by place and time.</p>
   ${L.groups.length?groups:'<p class="muted">No groups of 3 or more.</p>'}`;
- if(el._h!==h){el.innerHTML=h;el._h=h;drawNet(L,sel)}
+ if(el._h!==h){el.innerHTML=h;el._h=h}
 }
-async function drawNet(L,sel){
- if(!window.d3)await loadScript('/vendor/d3.v7.min.js');
- const svg=$('lkNet');if(!svg)return;const W=svg.clientWidth||700,H=460;
- const gi=new Map();L.groups.forEach((g,k)=>g.members.forEach(m=>gi.set(m,k)));
- const nodes=L.cases.map((c,i)=>({i,c,g:gi.has(i)?gi.get(i):null}));
- const links=L.links.map(([a,b,p])=>({source:a,target:b,p}));
- const sim=d3.forceSimulation(nodes).force('link',d3.forceLink(links).distance(28).strength(l=>.15+.8*(l.p-L.link_pct)/(1-L.link_pct+1e-9)))
-  .force('charge',d3.forceManyBody().strength(-14)).force('x',d3.forceX(W/2).strength(.05)).force('y',d3.forceY(H/2).strength(.07)).stop();
- for(let k=0;k<260;k++)sim.tick();
- const cx=v=>Math.max(8,Math.min(W-8,v)),cy=v=>Math.max(8,Math.min(H-8,v));
- const dim=n=>sel!=null&&n.g!==sel;
- const col=n=>n.g==null||(!L.groups[n.g].distinct.length&&sel!==n.g)?'var(--mute)':GCOL[n.g%GCOL.length];
- const tip=c=>[`${c.outside?'Outside the flag · ':''}${c.year}${c.month?'-'+String(c.month).padStart(2,'0'):''}`,c.age!=null?'victim aged '+c.age:'age unknown',c.agency+(c.county?' ('+c.county+')':''),c.weapon,c.circumstance,c.relationship,'FBI case '+c.id].join(' · ');
- svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
- svg.innerHTML=links.map(l=>`<line x1="${cx(l.source.x).toFixed(1)}" y1="${cy(l.source.y).toFixed(1)}" x2="${cx(l.target.x).toFixed(1)}" y2="${cy(l.target.y).toFixed(1)}" stroke="var(--line2)" stroke-width="${(.6+2*(l.p-L.link_pct)/(1-L.link_pct+1e-9)).toFixed(2)}" opacity="${dim(l.source)&&dim(l.target)?.12:.7}"/>`).join('')
-  +nodes.map(n=>`<circle cx="${cx(n.x).toFixed(1)}" cy="${cy(n.y).toFixed(1)}" r="${n.c.outside?4.5:5}" fill="${n.c.outside?'var(--surf)':col(n)}" stroke="${col(n)}" stroke-width="${n.c.outside?2:1}" opacity="${dim(n)?.18:1}" data-tip="${esc(tip(n.c))}"/>`).join('');
+// ---- case network (full screen, like the map) -----------------------------------------------------
+const NW={};
+const NCOL=['#ff6b5f','#46d4ff','#5fd38d','#f5a524','#c39bff','#ff7ac8','#3fd0c9','#d8b48a','#8fa8ff','#cddc39','#ff9f6b','#7fe0ff'];
+const nwWhy=(a,b)=>{const out=[];const inf=v=>v&&!/undetermined|not determined|not stated|type unknown|^other$|not specified|unknown/i.test(v);
+ if(a.agency===b.agency)out.push('same agency');else if(a.county&&a.county===b.county)out.push('same county');
+ for(const [k,l] of [['weapon','weapon'],['circumstance','circumstance'],['relationship','relationship']])if(a[k]===b[k]&&inf(a[k]))out.push(`same ${l}: ${a[k]}`);
+ if(a.age!=null&&b.age!=null&&Math.abs(a.age-b.age)<=5)out.push(a.age===b.age?`victims both ${a.age}`:`victims ${Math.abs(a.age-b.age)} year${Math.abs(a.age-b.age)===1?'':'s'} apart in age`);
+ const mo=x=>x.year*12+(x.month||6),dm=Math.abs(mo(a)-mo(b));out.push(dm<12?`${dm} month${dm===1?'':'s'} apart`:`${(dm/12).toFixed(1)} years apart`);return out};
+const nwDate=c=>c.year+(c.month?'-'+String(c.month).padStart(2,'0'):'');
+function renderNetwork(r){
+ const fid=r.a,qs=new URLSearchParams(location.search);
+ const d0=S.detail[fid]&&S.detail[fid].flag;
+ const start=qs.get('start')||(d0?d0.start:''),end=qs.get('end')||(d0?d0.end:''),min=qs.get('min')||'0.99';
+ const key=`${fid}:${start}:${end}:${min}`;
+ const fresh=setMain('network:'+key,`<div class="mapwrap" id="nwwrap"><svg id="nwsvg" role="img" aria-label="Network of similar unsolved cases"></svg>
+  <div class="mapload" id="nwload"><span><span class="spin"></span> Comparing the unsolved cases…</span></div>
+  <aside class="mpanel left" id="nwLeft" aria-label="Network settings"></aside><aside class="mpanel right" id="nwRight" aria-label="Selection"></aside>
+  <div class="mzoom"><button id="nzIn" aria-label="Zoom in">+</button><button id="nzOut" aria-label="Zoom out">−</button><button id="nzHome" aria-label="Fit everything" style="font-size:11px">All</button></div>
+  <div class="mlegend" id="nwLegend"></div><div class="mtime" id="nwTime"></div></div>`);
+ if(fresh){NW.svg=null;NW.key=key;NW.fid=fid;NW.L=null;NW.sel=qs.get('group')!=null?{type:'group',k:+qs.get('group'),zoom:true}:NW.sel&&NW.fid===fid?NW.sel:null;NW.colorBy=NW.colorBy||'group';NW.outside=NW.outside??true;
+  const load=async()=>{try{if(!window.d3)await loadScript('/vendor/d3.v7.min.js');if(!S.detail[fid])S.detail[fid]=await api('/api/flag/'+encodeURIComponent(fid));
+    const L=await api(`/api/links/${encodeURIComponent(fid)}?start=${start}&end=${end}&min=${min}`);if(NW.key!==key)return;NW.L=L;buildNet();updateNet()}
+   catch(e){const el=$('nwload');if(el)el.innerHTML=`<p class="msg err">${esc(e.message)}</p>`}};load();return}
+ if(NW.L&&NW.svg)updateNet();
+}
+function nwGroups(){const L=NW.L,gi=new Map();L.groups.forEach((g,k)=>g.members.forEach(m=>gi.set(m,k)));return gi}
+function nwColor(n){const L=NW.L,by=NW.colorBy;
+ if(by==='group'){if(n.g==null)return '#4b5d6e';return L.groups[n.g].distinct.length?NCOL[n.g%NCOL.length]:'#7d91a4'}
+ if(by==='year'){const y0=L.start,y1=L.end;return d3.interpolateTurbo(.1+.8*((n.c.year-y0)/Math.max(1,y1-y0)))}
+ const v=n.c[by];const top=NW.top[by]||[];const i=top.indexOf(v);return i<0?'#4b5d6e':NCOL[i%NCOL.length]}
+function buildNet(){
+ const L=NW.L,wrap=$('nwwrap');if(!wrap)return;const W=wrap.clientWidth,H=wrap.clientHeight;
+ const svg=d3.select('#nwsvg');svg.attr('viewBox',`0 0 ${W} ${H}`);svg.selectAll('*').remove();
+ const ld=$('nwload');if(ld)ld.remove();
+ if(L.too_many||!L.cases||L.cases.length<2){$('nwRight').innerHTML=`<h2>Nothing to draw</h2><p>${L.too_many?`${nf.format(L.unsolved)} unsolved cases in ${L.start}–${L.end}: too many to link at once. Pick fewer years on the timeline below or on the flag page.`:'Fewer than 3 unsolved cases in these years.'}</p>`;NW.svg=svg;renderNwLeft();renderNwTime();return}
+ const gi=nwGroups();
+ NW.top={};for(const k of ['agency','circumstance'])NW.top[k]=Object.entries(L.cases.reduce((a,c)=>(a[c[k]]=(a[c[k]]||0)+1,a),{})).sort((a,b)=>b[1]-a[1]).slice(0,10).map(x=>x[0]);
+ NW.nodes=L.cases.map((c,i)=>({i,c,g:gi.has(i)?gi.get(i):null}));
+ NW.links=L.links.map(([a,b,p])=>({source:a,target:b,p}));
+ NW.adj=NW.nodes.map(()=>[]);NW.links.forEach(l=>{NW.adj[l.source].push([l.target,l.p]);NW.adj[l.target].push([l.source,l.p])});
+ const g=svg.append('g');NW.g=g;NW.gL=g.append('g');NW.gN=g.append('g');
+ NW.k=1;NW.zoom=d3.zoom().scaleExtent([.2,12]).on('zoom',e=>{g.attr('transform',e.transform);NW.k=e.transform.k;nwSize()});
+ svg.call(NW.zoom).on('dblclick.zoom',null);
+ svg.on('click',e=>{if(e.target===svg.node()){NW.sel=null;updateNet()}});
+ const lo=L.min_pct;
+ NW.sim=d3.forceSimulation(NW.nodes).force('link',d3.forceLink(NW.links).distance(34).strength(l=>.1+.8*(l.p-lo)/(1-lo+1e-9)))
+  .force('charge',d3.forceManyBody().strength(-26)).force('x',d3.forceX(W/2).strength(.04)).force('y',d3.forceY(H/2).strength(.06))
+  .force('collide',d3.forceCollide(7)).on('tick',nwTick);
+ NW.lineSel=NW.gL.selectAll('line').data(NW.links).join('line').attr('class','nlink').attr('vector-effect','non-scaling-stroke').attr('stroke-width',l=>.5+2.2*(l.p-lo)/(1-lo+1e-9));
+ NW.nodeSel=NW.gN.selectAll('circle').data(NW.nodes).join('circle').attr('class','nnode').attr('r',d=>d.c.outside?5:6)
+  .attr('data-tip',d=>`${d.c.outside?'Outside the flag · ':''}${nwDate(d.c)} · ${d.c.age!=null?'aged '+d.c.age:'age unknown'} · ${d.c.agency} · ${d.c.circumstance} · click for details`)
+  .on('mouseenter',(e,d)=>{NW.hover=d.i;nwHighlight()}).on('mouseleave',()=>{NW.hover=null;nwHighlight()})
+  .on('click',(e,d)=>{e.stopPropagation();NW.sel={type:'case',i:d.i};updateNet()})
+  .call(d3.drag().on('start',(e,d)=>{if(!e.active)NW.sim.alphaTarget(.2).restart();d.fx=d.x;d.fy=d.y}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y}).on('end',(e,d)=>{if(!e.active)NW.sim.alphaTarget(0);d.fx=null;d.fy=null}));
+ NW.svg=svg;NW.W=W;NW.H=H;
+ NW.sim.on('end.fit',()=>{if(NW.sel&&NW.sel.zoom){nwZoomTo(NW.sel);NW.sel.zoom=false}else if(!NW.fitted){nwFit();NW.fitted=true}});
+ NW.fitted=false;renderNwLeft();renderNwTime();
+}
+function nwSize(){if(!NW.nodeSel)return;const k=Math.pow(NW.k||1,.75);NW.nodeSel.attr('r',d=>(d.c.outside?5:6)/k);nwHighlight()}
+function nwTick(){NW.lineSel.attr('x1',l=>l.source.x).attr('y1',l=>l.source.y).attr('x2',l=>l.target.x).attr('y2',l=>l.target.y);NW.nodeSel.attr('cx',d=>d.x).attr('cy',d=>d.y)}
+function nwFit(ids){const ns=ids?ids.map(i=>NW.nodes[i]):NW.nodes;if(!ns.length)return;
+ const xs=ns.map(n=>n.x),ys=ns.map(n=>n.y),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+ const padL=290,padR=360,W=NW.W-padL-padR,H=NW.H-170,k=Math.min(6,.9*Math.min(W/Math.max(40,x1-x0),H/Math.max(40,y1-y0)));
+ NW.svg.transition().duration(600).call(NW.zoom.transform,d3.zoomIdentity.translate(padL+W/2-k*(x0+x1)/2,30+H/2-k*(y0+y1)/2).scale(k))}
+function nwZoomTo(sel){if(!sel)return nwFit();if(sel.type==='group')return nwFit(NW.L.groups[sel.k].members);if(sel.type==='case')return nwFit([sel.i,...NW.adj[sel.i].map(x=>x[0])])}
+function nwFocus(){const s=NW.sel;if(NW.hover!=null)return new Set([NW.hover,...NW.adj[NW.hover].map(x=>x[0])]);
+ if(!s)return null;if(s.type==='case')return new Set([s.i,...NW.adj[s.i].map(x=>x[0])]);if(s.type==='group')return new Set(NW.L.groups[s.k].members);return null}
+function nwHighlight(){if(!NW.nodeSel)return;const f=nwFocus(),s=NW.sel;
+ const vis=d=>NW.outside||!d.c.outside;
+ NW.nodeSel.attr('display',d=>vis(d)?null:'none').attr('fill',d=>d.c.outside?'#060a0f':nwColor(d)).attr('stroke',d=>d.c.outside?nwColor(d):(s&&s.type==='case'&&s.i===d.i?'#fff':'#060a0f'))
+  .attr('stroke-width',d=>(d.c.outside?2:(s&&s.type==='case'&&s.i===d.i?2.5:1))/Math.pow(NW.k||1,.75)).attr('opacity',d=>!f||f.has(d.i)?1:.13);
+ NW.lineSel.attr('display',l=>vis(l.source)&&vis(l.target)?null:'none').attr('stroke',l=>f&&f.has(l.source.i)&&f.has(l.target.i)&&(NW.hover!=null||s)?'#cfe9ff':'#2d4256')
+  .attr('opacity',l=>!f?.55:(f.has(l.source.i)&&f.has(l.target.i)?.9:.05));
+}
+function updateNet(){if(!NW.L||!NW.svg)return;if(NW.nodeSel)nwHighlight();renderNwRight();renderNwLegend();
+ if(NW.sel&&NW.sel.zoom&&NW.nodeSel&&NW.sim.alpha()<.1){nwZoomTo(NW.sel);NW.sel.zoom=false}}
+function renderNwLeft(){const L=NW.L,el=$('nwLeft');if(!el)return;const f=S.detail[NW.fid]&&S.detail[NW.fid].flag;
+ const dk=L.groups?L.groups.map((g,k)=>k).filter(k=>L.groups[k].distinct.length):[],rest=L.groups?L.groups.length-dk.length:0;
+ el.innerHTML=`<h2>Case network</h2><p>${f?`<a href="/flags/${encodeURIComponent(NW.fid)}" data-nav style="color:var(--m-link)">${esc(f.place)}: ${esc(String(f.weapon).toLowerCase())}, ${esc(who(f.sex))}</a>, `:''}${L.start}–${L.end}. ${nf.format(L.unsolved)} unsolved cases${L.nearby_count?`, plus ${L.nearby_count} similar ones just outside the flag`:''}.</p>
+  <p style="font-size:11.5px">Lines join cases that resemble each other more than ${(L.min_pct*100).toFixed(1)}% of random pairs of unsolved cases from this place. Similarity, not a probability of the same offender. Race is never used.</p>
+  <span class="lbl">Colour by</span><div class="seg">${[['group','Group'],['year','Year'],['agency','Agency'],['circumstance','Circum.']].map(([v,l])=>`<button data-nwcol="${v}" aria-pressed="${NW.colorBy===v}">${l}</button>`).join('')}</div>
+  <span class="lbl">Link strength: stronger than ${(L.min_pct*100).toFixed(1)}% of random pairs</span><input type="range" id="nwMin" min="0.95" max="0.999" step="0.001" value="${L.min_pct}"><p style="font-size:11px;margin-top:2px">Left: more, looser links. Right: only the closest resemblances.</p>
+  <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="nwOut"${NW.outside?' checked':''}> Show similar cases outside the flag (hollow)</label>
+  <span class="lbl">Groups with a distinctive detail</span>${dk.length?dk.map(k=>{const g=L.groups[k];return `<button class="nwg${NW.sel&&NW.sel.type==='group'&&NW.sel.k===k?' on':''}" data-nwg="${k}"><i style="background:${NCOL[k%NCOL.length]}"></i>${g.size} cases, ${g.start}–${g.end}<small>${esc(g.distinct.join(', '))}</small></button>`}).join(''):'<p>None.</p>'}
+  ${rest?`<details><summary style="cursor:pointer;color:var(--m-mute)">${rest} more held together only by place and time</summary>${L.groups.map((g,k)=>g.distinct.length?'':`<button class="nwg${NW.sel&&NW.sel.type==='group'&&NW.sel.k===k?' on':''}" data-nwg="${k}"><i style="background:#7d91a4"></i>${g.size} cases, ${g.start}–${g.end}</button>`).join('')}</details>`:''}`;
+}
+function renderNwRight(){const L=NW.L,el=$('nwRight');if(!el||!L.cases||!L.cases.length)return;const s=NW.sel;
+ if(!s){el.innerHTML=`<h2>Explore</h2><p>Click a case to see it and every case it links to, with why. Click a group on the left to select it. Hover to light up a case's links; drag to pan, scroll to zoom, drag a dot to move it.</p><p>Drag across the timeline below to relink just those years.</p>`;return}
+ if(s.type==='case'){const c=L.cases[s.i],n=NW.nodes[s.i];const nb=NW.adj[s.i].slice().sort((a,b)=>b[1]-a[1]);
+  el.innerHTML=`<h2>${c.outside?'Outside the flag · ':''}Case ${nwDate(c)}</h2>
+  <dl class="nwdl"><dt>Victim</dt><dd>${c.age!=null?'aged '+c.age:'age unknown'}</dd><dt>Agency</dt><dd>${esc(c.agency)}${c.county?` (${esc(c.county)})`:''}</dd><dt>Weapon</dt><dd>${esc(c.weapon)}</dd><dt>Circumstance</dt><dd>${esc(c.circumstance)}</dd><dt>Relationship</dt><dd>${esc(c.relationship)}</dd><dt>FBI case</dt><dd><code>${esc(c.id)}</code></dd>
+  <dt>Group</dt><dd>${n.g!=null?`<a href="#" data-nwg="${n.g}" style="color:var(--m-link)">${L.groups[n.g].size} cases, ${L.groups[n.g].start}–${L.groups[n.g].end}</a>`:'none'}</dd></dl>
+  <span class="lbl">Linked to ${nb.length} case${nb.length===1?'':'s'}, closest first</span>
+  ${nb.length?nb.map(([j,p])=>{const o=L.cases[j];return `<button class="nwlink" data-nwc="${j}"><b>${nwDate(o)}</b>${o.outside?' · outside':''} · ${o.age!=null?'aged '+o.age:'age ?'} · ${esc(o.agency)}<small>stronger than ${(p*100).toFixed(1)}% of random pairs · ${esc(nwWhy(c,o).join(' · '))}</small></button>`}).join(''):'<p>No links at this strength. Move the slider left to see looser ones.</p>'}`;return}
+ if(s.type==='group'){const g=L.groups[s.k];const f=S.detail[NW.fid]&&S.detail[NW.fid].flag;
+  el.innerHTML=`<h2>Group: ${g.size} cases, ${g.start}–${g.end}</h2>${g.distinct.length?`<p><b style="color:var(--m-ink)">Distinctive:</b> ${esc(g.distinct.join(', '))}</p>`:'<p>Held together only by place, method and time.</p>'}
+  <ul style="padding-left:16px;margin:0 0 8px">${g.shared.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+  <button class="btn primary" data-nwkeep="${s.k}" style="width:100%;justify-content:center;margin:4px 0 8px">Keep this group for review</button>
+  <span class="lbl">Cases</span>${g.members.map(j=>{const o=L.cases[j];return `<button class="nwlink" data-nwc="${j}"><b>${nwDate(o)}</b> · ${o.age!=null?'aged '+o.age:'age ?'} · ${esc(o.agency)}<small>${esc(o.circumstance)} · ${esc(o.relationship)}</small></button>`}).join('')}
+  ${g.nearby.length?`<span class="lbl">Similar, just outside the flag</span>${g.nearby.map(j=>{const o=L.cases[j];return `<button class="nwlink" data-nwc="${j}"><b>${nwDate(o)}</b> · ${o.age!=null?'aged '+o.age:'age ?'} · ${esc(o.agency)}<small>${esc(o.county||'')}</small></button>`}).join('')}`:''}`}
+}
+function renderNwLegend(){const el=$('nwLegend');if(!el||!NW.L||!NW.L.cases)return;const by=NW.colorBy;
+ let h='';if(by==='group')h=`<span><i style="background:${NCOL[0]}"></i>distinctive groups (one colour each)</span><span><i style="background:#7d91a4"></i>place-and-time groups</span><span><i style="background:#4b5d6e"></i>no group</span>`;
+ else if(by==='year')h=`<span>${NW.L.start}</span><span style="width:120px;height:8px;border-radius:4px;background:linear-gradient(90deg,${[0,.25,.5,.75,1].map(t=>d3.interpolateTurbo(.1+.8*t)).join(',')})"></span><span>${NW.L.end}</span>`;
+ else h=(NW.top[by]||[]).map((v,i)=>`<span><i style="background:${NCOL[i%NCOL.length]}"></i>${esc(v)}</span>`).join('')+'<span><i style="background:#4b5d6e"></i>other</span>';
+ el.innerHTML=h+'<span><i style="background:transparent;border:2px solid #7d91a4"></i>outside the flag</span>'}
+function nwHash(s){let h=2166136261;for(const ch of String(s)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function renderNwTime(){const el=$('nwTime'),L=NW.L,f=S.detail[NW.fid]&&S.detail[NW.fid].flag;if(!el||!f)return;
+ const d=S.detail[NW.fid],[Y0,Y1]=d.years,W=el.clientWidth||800,H=70,x=d3.scaleLinear().domain([Y0,Y1+1]).range([10,W-10]);
+ const cs=(L.cases||[]).filter(c=>!c.outside);
+ el.innerHTML=`<svg id="nwTsvg" width="${W}" height="${H}"><rect x="${x(f.start)}" y="4" width="${x(f.end+1)-x(f.start)}" height="${H-22}" fill="rgba(245,165,36,.10)"/>
+  ${cs.map((c,i)=>`<circle cx="${(x(c.year+((c.month||6)-.5)/12)).toFixed(1)}" cy="${(10+(nwHash(c.id)%1000)/1000*(H-32)).toFixed(1)}" r="2.2" fill="#7d91a4"/>`).join('')}
+  ${d3.range(Math.ceil(Y0/5)*5,Y1+1,5).map(y=>`<text x="${x(y)}" y="${H-4}" fill="#7d91a4" font-size="10" text-anchor="middle">${y}</text>`).join('')}</svg>`;
+ const br=d3.brushX().extent([[10,4],[W-10,H-18]]).on('end',e=>{if(!e.selection||!e.sourceEvent)return;const [a,b]=e.selection.map(v=>Math.floor(x.invert(v)));
+  const q=new URLSearchParams(location.search);q.set('start',Math.max(Y0,a));q.set('end',Math.min(Y1,b));q.delete('group');history.pushState(null,'','?'+q);NW.sel=null;render()});
+ const g=d3.select('#nwTsvg').append('g').call(br);g.call(br.move,[x(L.start),x(L.end+1)]);
 }
 function wbOf(id){const f=S.detail[id].flag;return S.wb[id]||(S.wb[id]={y0:f.start,y1:f.end,sel:{},sort:[0,1],limit:300})}
 function wbRows(d,w,skip){return d.cases.filter(r=>r[0]>=w.y0&&r[0]<=w.y1&&FACETS.every(([k,,fn])=>k===skip||w.sel[k]==null||fn(r)===w.sel[k]))}
@@ -1015,6 +1115,15 @@ document.addEventListener('click',async e=>{
  if(t.id==='ciScan'){try{await post('/api/cities/scan'+(S.cityPeriods?'?periods=1':''))}catch(err){toast(err.message)}S.cityWatch=1;poll();return}
  if(t.id==='leadRun'){try{await post('/api/leadtime')}catch(err){toast(err.message)}S.leadWatch=1;poll();return}
  if(t.id==='leadStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
+ if(t.closest&&t.closest('[data-nwc]')){const j=+t.closest('[data-nwc]').dataset.nwc;NW.sel={type:'case',i:j};updateNet();nwZoomTo(NW.sel);e.preventDefault();return}
+ if(t.closest&&t.closest('[data-nwg]')){const k=+t.closest('[data-nwg]').dataset.nwg;NW.sel=NW.sel&&NW.sel.type==='group'&&NW.sel.k===k?null:{type:'group',k};updateNet();renderNwLeft();nwZoomTo(NW.sel);e.preventDefault();return}
+ if(t.dataset&&t.dataset.nwcol){NW.colorBy=t.dataset.nwcol;renderNwLeft();updateNet();return}
+ if(t.id==='nzIn'||t.id==='nzOut'){NW.svg.transition().call(NW.zoom.scaleBy,t.id==='nzIn'?1.5:1/1.5);return}
+ if(t.id==='nzHome'){nwFit();return}
+ if(t.dataset&&t.dataset.nwkeep!=null){const L=NW.L,g=L.groups[+t.dataset.nwkeep],id=NW.fid,f=S.detail[id].flag;
+  const cs=g.members.map(m=>L.cases[m]);const prev=(S.dec[id]&&S.dec[id].note)||'';
+  const note=(prev?prev+'\n\n':'')+`Group of ${g.size} similar unsolved cases, ${g.start}–${g.end}: ${g.shared.join('; ')}.\nFBI case IDs: ${cs.map(c=>c.id).join(', ')}`;
+  try{await post('/api/decide',{id,status:(S.dec[id]&&S.dec[id].status)||'kept',flag:f,note});await refreshDecisions();toast('Kept, with this group in the note')}catch(err){toast(err.message)}return}
  if(t.dataset&&t.dataset.lkshow!=null){const id=S.sel,w=wbOf(id),key=id+':'+w.y0+':'+w.y1,k=+t.dataset.lkshow;S.lkSel=S.lkSel&&S.lkSel.key===key&&S.lkSel.g===k?null:{key,g:k};renderLinks(id);return}
  if(t.dataset&&t.dataset.lkkeep!=null){const id=S.sel,w=wbOf(id),L=S.lk[id+':'+w.y0+':'+w.y1],g=L.groups[+t.dataset.lkkeep],f=S.detail[id].flag;
   const cs=g.members.map(m=>L.cases[m]);const prev=(S.dec[id]&&S.dec[id].note)||'';
@@ -1105,6 +1214,8 @@ document.addEventListener('change',async e=>{
  if(t.id==='fSort'){S.f.sort=t.value;render()}
  if(t.id==='qState'){S.qState=t.value;S.quality=S.quality||{};if(t.value&&!S.quality[t.value])api('/api/quality?state='+encodeURIComponent(t.value)).then(j=>{S.quality[t.value]=j;render()}).catch(err=>toast(err.message));render()}
  if(t.id==='noteBox'){post('/api/note',{id:t.dataset.id,note:t.value}).then(()=>{refreshDecisions();toast('Note saved')}).catch(err=>toast(err.message))}
+ if(t.id==='nwOut'){NW.outside=t.checked;nwHighlight();return}
+ if(t.id==='nwMin'){const q=new URLSearchParams(location.search);q.set('min',t.value);q.delete('group');history.pushState(null,'','?'+q);NW.sel=null;render();return}
  if(t.id==='ciPeriods'){S.cityPeriods=t.checked;render();return}
  if(t.id==='ciFile'&&t.files[0]){const fl=t.files[0];t.value='';
   if(fl.size>25*1024*1024){toast('That file is over 25 MB.');return}
@@ -1140,6 +1251,6 @@ document.addEventListener('keydown',e=>{
  else if(e.key==='s'&&S.sel&&!status(S.sel)){act('kept')}
  else if(e.key==='x'&&S.sel&&!status(S.sel)){act('dismissed')}
 });
-addEventListener('resize',()=>{if(route().sec==='map'&&MP.svg){MP.svg=null;$('main').dataset.key='';MP.brush=null}const m=$('main');if(m){const pane=$('flagPane');if(pane)pane._h='';tipEl.hidden=true;m.dataset.key=location.pathname.startsWith('/places')?'':m.dataset.key;render()}});
+addEventListener('resize',()=>{if(route().sec==='map'&&MP.svg){MP.svg=null;$('main').dataset.key='';MP.brush=null}if(route().sec==='network'&&NW.svg){NW.svg=null;$('main').dataset.key=''}const m=$('main');if(m){const pane=$('flagPane');if(pane)pane._h='';tipEl.hidden=true;m.dataset.key=location.pathname.startsWith('/places')?'':m.dataset.key;render()}});
 if(location.pathname==='/')history.replaceState(null,'','/flags');
 poll();
