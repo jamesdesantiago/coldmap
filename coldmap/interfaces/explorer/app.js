@@ -270,12 +270,12 @@ function renderLinks(id){
  const ck=`<ul class="checks">${L.checklist.map(c=>`<li class="${c.ok===true?'ok':c.ok===false?'no':''}"><span>${c.ok===true?'✓':c.ok===false?'✕':'•'}</span>${esc(c.text)}</li>`).join('')}</ul>`;
  const head=`<p class="muted" style="font-size:12.5px">${L.start}–${L.end}: ${nf.format(L.unsolved)} unsolved cases. Two cases are linked when they resemble each other more than ${Math.round(L.link_pct*100)}% of random pairs of unsolved cases from this place: same agency, specific weapon, circumstance or relationship (rare details count more), victim age and closeness in time. Victim race is never used, and "undetermined" codes never count as a match. This is similarity, <b>not</b> a probability that the cases share an offender.</p>`;
  if(L.too_many||!L.cases||!L.cases.length){const h=head+ck+(L.too_many?'':'<p class="muted">Fewer than 3 unsolved cases in these years.</p>');if(el._h!==h){el.innerHTML=h;el._h=h}return}
- const gcard=(g,k)=>`<div class="lgroup${sel===k?' on':''}"><div class="row" style="justify-content:space-between"><b><i style="background:${g.distinct.length?GCOL[k%GCOL.length]:'var(--mute)'}"></i>Group ${k+1}: ${g.size} cases, ${g.start}–${g.end}</b><span><a class="btn" href="/network/${encodeURIComponent(id)}?start=${L.start}&end=${L.end}&group=${k}" data-nav style="height:26px;font-size:12px">Show in the network</a> <button class="btn" data-lkkeep="${k}" style="height:26px;font-size:12px">Keep this group for review</button></span></div>
+ const gcard=(g,k)=>`<div class="lgroup${sel===k?' on':''}"><div class="row" style="justify-content:space-between"><b><i style="background:${g.distinct.length?GCOL[k%GCOL.length]:'var(--mute)'}"></i>Group ${k+1}: ${g.size} cases, ${g.start}–${g.end}</b><span><a class="btn" href="/network?flag=${encodeURIComponent(id)}&start=${L.start}&end=${L.end}&group=${k}" data-nav style="height:26px;font-size:12px">Show in the network</a> <button class="btn" data-lkkeep="${k}" style="height:26px;font-size:12px">Keep this group for review</button></span></div>
    ${g.distinct.length?`<p style="margin:4px 0 0;font-size:13px"><b>Distinctive:</b> ${g.distinct.map(esc).join(', ')}</p>`:''}
    <ul>${g.shared.map(x=>`<li>${esc(x)}</li>`).join('')}${g.nearby.length?`<li>${g.nearby.length} similar unsolved case${g.nearby.length===1?'':'s'} just outside the flag (neighbouring counties or nearby years)</li>`:''}</ul></div>`;
  const dk=L.groups.map((g,k)=>k).filter(k=>L.groups[k].distinct.length),ok=L.groups.map((g,k)=>k).filter(k=>!L.groups[k].distinct.length);
  const groups=dk.map(k=>gcard(L.groups[k],k)).join('')+(ok.length?`<details style="margin-top:8px"><summary class="muted">${ok.length} group${ok.length===1?'':'s'} held together only by place, method and time</summary>${ok.map(k=>gcard(L.groups[k],k)).join('')}</details>`:'');
- const nurl=`/network/${encodeURIComponent(id)}?start=${L.start}&end=${L.end}`;
+ const nurl=`/network?flag=${encodeURIComponent(id)}&start=${L.start}&end=${L.end}`;
  const h=head+ck+`<div class="row" style="margin:10px 0"><a class="btn primary" href="${nurl}" data-nav>Explore the case network</a><span class="muted">${nf.format(L.cases.length)} cases, ${nf.format(L.links.length)} links: click around the cases, see why they link, select groups</span></div>
   <p class="muted" style="font-size:12.5px">Groups are listed by date, not ranked. Tested on 9 known series, one of a flag's three largest groups usually fell inside the series' years, but no ranking reliably put that group first, so read each one. A group sharing rare details is worth more than one held together only by place and time.</p>
   ${L.groups.length?groups:'<p class="muted">No groups of 3 or more.</p>'}`;
@@ -290,21 +290,32 @@ const nwWhy=(a,b)=>{const out=[];const inf=v=>v&&!/undetermined|not determined|n
  if(a.age!=null&&b.age!=null&&Math.abs(a.age-b.age)<=5)out.push(a.age===b.age?`victims both ${a.age}`:`victims ${Math.abs(a.age-b.age)} year${Math.abs(a.age-b.age)===1?'':'s'} apart in age`);
  const mo=x=>x.year*12+(x.month||6),dm=Math.abs(mo(a)-mo(b));out.push(dm<12?`${dm} month${dm===1?'':'s'} apart`:`${(dm/12).toFixed(1)} years apart`);return out};
 const nwDate=c=>c.year+(c.month?'-'+String(c.month).padStart(2,'0'):'');
+function nwParams(){const q=new URLSearchParams(location.search);const r=route();if(r.a&&!q.get('flag'))q.set('flag',r.a);return q}
+function nwGo(o){const q=new URLSearchParams();for(const [k,v] of Object.entries(o))if(v!=null&&v!=='')q.set(k,v);history.pushState(null,'','/network?'+q);NW.sel=null;render()}
+async function nwOptions(state,county){NW.opt=NW.opt||{};const k=(state||'')+'|'+(county||'');if(!NW.opt[k])NW.opt[k]=await api(`/api/network/options?state=${encodeURIComponent(state||'')}&county=${encodeURIComponent(county||'')}`);return NW.opt[k]}
 function renderNetwork(r){
- const fid=r.a,qs=new URLSearchParams(location.search);
- const d0=S.detail[fid]&&S.detail[fid].flag;
- const start=qs.get('start')||(d0?d0.start:''),end=qs.get('end')||(d0?d0.end:''),min=qs.get('min')||'0.99';
- const key=`${fid}:${start}:${end}:${min}`;
+ const q=nwParams();const key=q.toString();
+ const has=q.get('flag')||(q.get('state')&&q.get('county')&&q.get('sex')&&q.get('weapon'));
  const fresh=setMain('network:'+key,`<div class="mapwrap" id="nwwrap"><svg id="nwsvg" role="img" aria-label="Network of similar unsolved cases"></svg>
-  <div class="mapload" id="nwload"><span><span class="spin"></span> Comparing the unsolved cases…</span></div>
-  <aside class="mpanel left" id="nwLeft" aria-label="Network settings"></aside><aside class="mpanel right" id="nwRight" aria-label="Selection"></aside>
+  <div class="mapload" id="nwload"><span>${has?'<span class="spin"></span> Comparing the unsolved cases…':''}</span></div>
+  <aside class="mpanel left" id="nwLeft" aria-label="What to look at"></aside><aside class="mpanel right" id="nwRight" aria-label="Selection"></aside>
   <div class="mzoom"><button id="nzIn" aria-label="Zoom in">+</button><button id="nzOut" aria-label="Zoom out">−</button><button id="nzHome" aria-label="Fit everything" style="font-size:11px">All</button></div>
   <div class="mlegend" id="nwLegend"></div><div class="mtime" id="nwTime"></div></div>`);
- if(fresh){NW.svg=null;NW.key=key;NW.fid=fid;NW.L=null;NW.sel=qs.get('group')!=null?{type:'group',k:+qs.get('group'),zoom:true}:NW.sel&&NW.fid===fid?NW.sel:null;NW.colorBy=NW.colorBy||'group';NW.outside=NW.outside??true;
-  const load=async()=>{try{if(!window.d3)await loadScript('/vendor/d3.v7.min.js');if(!S.detail[fid])S.detail[fid]=await api('/api/flag/'+encodeURIComponent(fid));
-    const L=await api(`/api/links/${encodeURIComponent(fid)}?start=${start}&end=${end}&min=${min}`);if(NW.key!==key)return;NW.L=L;buildNet();updateNet()}
-   catch(e){const el=$('nwload');if(el)el.innerHTML=`<p class="msg err">${esc(e.message)}</p>`}};load();return}
- if(NW.L&&NW.svg)updateNet();
+ if(!fresh){if(NW.L&&NW.svg)updateNet();return}
+ NW.svg=null;NW.key=key;NW.L=null;NW.q=q;NW.nodeSel=null;NW.colorBy=NW.colorBy||'group';NW.outside=NW.outside??true;
+ NW.mode=q.get('flag')?'flag':q.get('state')?'place':(NW.mode||'flag');
+ NW.sel=q.get('group')!=null?{type:'group',k:+q.get('group'),zoom:true}:null;
+ const load=async()=>{try{
+   if(!window.d3)await loadScript('/vendor/d3.v7.min.js');
+   const base=await nwOptions();NW.base=base;
+   if(!has){$('nwload').remove();renderNwLeft();renderNwRight();return}
+   const qq=new URLSearchParams(q);qq.delete('group');
+   const L=await api('/api/network?'+qq);if(NW.key!==key)return;NW.L=L;
+   if(!NW.pick)NW.pick={};NW.pick.state=L.flag.state;NW.pick.county=L.scope.kind==='place'?L.scope.county:(NW.pick.county||'');
+   if(L.focus!=null&&!NW.sel)NW.sel={type:'case',i:L.focus,zoom:true};
+   buildNet();updateNet()}
+  catch(e){const el=$('nwload');if(el)el.innerHTML=`<p class="msg err">${esc(e.message)}</p>`;renderNwLeft()}};
+ renderNwLeft();renderNwRight();load();
 }
 function nwGroups(){const L=NW.L,gi=new Map();L.groups.forEach((g,k)=>g.members.forEach(m=>gi.set(m,k)));return gi}
 function nwColor(n){const L=NW.L,by=NW.colorBy;
@@ -328,16 +339,20 @@ function buildNet(){
  const lo=L.min_pct;
  NW.sim=d3.forceSimulation(NW.nodes).force('link',d3.forceLink(NW.links).distance(34).strength(l=>.1+.8*(l.p-lo)/(1-lo+1e-9)))
   .force('charge',d3.forceManyBody().strength(-26)).force('x',d3.forceX(W/2).strength(.04)).force('y',d3.forceY(H/2).strength(.06))
-  .force('collide',d3.forceCollide(7)).on('tick',nwTick);
+  .force('collide',d3.forceCollide(7)).stop();
+ // Lay it out now, not over animation frames (which a browser throttles in background tabs); the live
+ // simulation only runs while a dot is dragged.
+ for(let k=0;k<320;k++)NW.sim.tick();
+ NW.sim.on('tick',nwTick);
  NW.lineSel=NW.gL.selectAll('line').data(NW.links).join('line').attr('class','nlink').attr('vector-effect','non-scaling-stroke').attr('stroke-width',l=>.5+2.2*(l.p-lo)/(1-lo+1e-9));
  NW.nodeSel=NW.gN.selectAll('circle').data(NW.nodes).join('circle').attr('class','nnode').attr('r',d=>d.c.outside?5:6)
   .attr('data-tip',d=>`${d.c.outside?'Outside the flag · ':''}${nwDate(d.c)} · ${d.c.age!=null?'aged '+d.c.age:'age unknown'} · ${d.c.agency} · ${d.c.circumstance} · click for details`)
   .on('mouseenter',(e,d)=>{NW.hover=d.i;nwHighlight()}).on('mouseleave',()=>{NW.hover=null;nwHighlight()})
   .on('click',(e,d)=>{e.stopPropagation();NW.sel={type:'case',i:d.i};updateNet()})
   .call(d3.drag().on('start',(e,d)=>{if(!e.active)NW.sim.alphaTarget(.2).restart();d.fx=d.x;d.fy=d.y}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y}).on('end',(e,d)=>{if(!e.active)NW.sim.alphaTarget(0);d.fx=null;d.fy=null}));
- NW.svg=svg;NW.W=W;NW.H=H;
- NW.sim.on('end.fit',()=>{if(NW.sel&&NW.sel.zoom){nwZoomTo(NW.sel);NW.sel.zoom=false}else if(!NW.fitted){nwFit();NW.fitted=true}});
- NW.fitted=false;renderNwLeft();renderNwTime();
+ NW.svg=svg;NW.W=W;NW.H=H;nwTick();
+ if(NW.sel&&NW.sel.zoom){nwZoomTo(NW.sel);NW.sel.zoom=false}else nwFit();
+ renderNwLeft();renderNwTime();
 }
 function nwSize(){if(!NW.nodeSel)return;const k=Math.pow(NW.k||1,.75);NW.nodeSel.attr('r',d=>(d.c.outside?5:6)/k);nwHighlight()}
 function nwTick(){NW.lineSel.attr('x1',l=>l.source.x).attr('y1',l=>l.source.y).attr('x2',l=>l.target.x).attr('y2',l=>l.target.y);NW.nodeSel.attr('cx',d=>d.x).attr('cy',d=>d.y)}
@@ -356,26 +371,54 @@ function nwHighlight(){if(!NW.nodeSel)return;const f=nwFocus(),s=NW.sel;
   .attr('opacity',l=>!f?.55:(f.has(l.source.i)&&f.has(l.target.i)?.9:.05));
 }
 function updateNet(){if(!NW.L||!NW.svg)return;if(NW.nodeSel)nwHighlight();renderNwRight();renderNwLegend();
- if(NW.sel&&NW.sel.zoom&&NW.nodeSel&&NW.sim.alpha()<.1){nwZoomTo(NW.sel);NW.sel.zoom=false}}
-function renderNwLeft(){const L=NW.L,el=$('nwLeft');if(!el)return;const f=S.detail[NW.fid]&&S.detail[NW.fid].flag;
- const dk=L.groups?L.groups.map((g,k)=>k).filter(k=>L.groups[k].distinct.length):[],rest=L.groups?L.groups.length-dk.length:0;
- el.innerHTML=`<h2>Case network</h2><p>${f?`<a href="/flags/${encodeURIComponent(NW.fid)}" data-nav style="color:var(--m-link)">${esc(f.place)}: ${esc(String(f.weapon).toLowerCase())}, ${esc(who(f.sex))}</a>, `:''}${L.start}–${L.end}. ${nf.format(L.unsolved)} unsolved cases${L.nearby_count?`, plus ${L.nearby_count} similar ones just outside the flag`:''}.</p>
-  <p style="font-size:11.5px">Lines join cases that resemble each other more than ${(L.min_pct*100).toFixed(1)}% of random pairs of unsolved cases from this place. Similarity, not a probability of the same offender. Race is never used.</p>
+}
+function nwPicker(){
+ const base=NW.base;if(!base)return '<p><span class="spin"></span></p>';
+ const pk=NW.pick=NW.pick||{};const q=NW.q||new URLSearchParams();
+ const st=pk.state||q.get('state')||'',cty=pk.county??(q.get('county')||'');
+ const opt=NW.opt&&NW.opt[st+'|'+cty],optS=NW.opt&&NW.opt[st+'|'];
+ if(st&&!optS)nwOptions(st,'').then(()=>renderNwLeft());
+ if(st&&cty&&!opt)nwOptions(st,cty).then(()=>renderNwLeft());
+ const stSel=`<select class="sel" id="nwState"><option value="">Choose a state…</option>${base.states.map(x=>`<option${x===st?' selected':''}>${esc(x)}</option>`).join('')}</select>`;
+ const cSel=st?`<select class="sel" id="nwCounty" style="margin-top:6px"><option value="">${NW.mode==='flag'?'Every county':'Choose a county…'}</option>${(optS?optS.counties:[]).map(([k,n])=>`<option value="${esc(k)}"${k===cty?' selected':''}>${esc(k)} (${nf.format(n)} unsolved)</option>`).join('')}</select>`:'';
+ let body='';
+ if(NW.mode==='flag'){const fl=(opt||optS||{}).flags;
+  body=st?(fl?(fl.length?`<select class="sel" id="nwFlag" style="margin-top:6px"><option value="">Choose a flag (${fl.length})…</option>${fl.map(f=>`<option value="${esc(f.id)}"${q.get('flag')===f.id?' selected':''}>${esc(f.place)} · ${esc(String(f.weapon).toLowerCase())} · ${f.sex==='Female'?'women':'men'} · ${f.start}–${f.end} · ${f.total-f.solved} unsolved</option>`).join('')}</select>`:'<p style="margin-top:6px">No flags here. Switch to “A place” to look at its cases anyway.</p>'):'<p><span class="spin"></span></p>'):'';
+ }else{const yrs=base.years;const sx=pk.sex||q.get('sex')||'Female',wp=pk.weapon||q.get('weapon')||'',y0=pk.start||q.get('start')||'',y1=pk.end||q.get('end')||'';
+  body=st&&cty?`<div class="seg" style="margin-top:6px">${[['Female','Women'],['Male','Men']].map(([v,l])=>`<button data-nwsex="${v}" aria-pressed="${sx===v}">${l}</button>`).join('')}</div>
+   <select class="sel" id="nwWeapon" style="margin-top:6px"><option value="">Choose a method…</option>${base.weapons.map(w=>`<option${w===wp?' selected':''}>${esc(w)}</option>`).join('')}</select>
+   <div style="display:flex;gap:6px;margin-top:6px"><input class="sel" id="nwY0" type="number" min="${yrs[0]}" max="${yrs[1]}" placeholder="from ${yrs[0]}" value="${esc(y0)}"><input class="sel" id="nwY1" type="number" min="${yrs[0]}" max="${yrs[1]}" placeholder="to ${yrs[1]}" value="${esc(y1)}"></div>
+   <label style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="nwNb"${(pk.neighbours??q.get('neighbours')==='1')?' checked':''}> Include bordering counties</label>
+   <button class="btn primary" id="nwShow" style="width:100%;justify-content:center;margin-top:8px">Show these cases</button>`:'';}
+ return `<form id="nwFind" style="display:flex;gap:6px"><input class="sel" id="nwCase" placeholder="FBI case number" value="${esc(q.get('focus')||'')}" style="flex:1;background-image:none;padding-right:8px" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Find</button></form>
+  <span class="lbl">Look at</span><div class="seg">${[['flag','A flag'],['place','A place']].map(([v,l])=>`<button data-nwmode="${v}" aria-pressed="${NW.mode===v}">${l}</button>`).join('')}</div>
+  <div style="margin-top:6px">${stSel}${cSel}${body}</div>`;
+}
+function renderNwLeft(){const L=NW.L,el=$('nwLeft');if(!el)return;
+ const top=`<h2>Case network</h2>${nwPicker()}`;
+ if(!L||L.too_many||!L.cases||!L.cases.length){el.innerHTML=top;return}
+ const f=L.flag,sc=L.scope;const dk=L.groups.map((g,k)=>k).filter(k=>L.groups[k].distinct.length),rest=L.groups.length-dk.length;
+ const what=sc.kind==='flag'?`<a href="/flags/${encodeURIComponent(sc.flag)}" data-nav style="color:var(--m-link)">${esc(f.place)}: ${esc(String(f.weapon).toLowerCase())}, ${esc(who(f.sex))}</a>`
+  :`${esc(sc.county)}${sc.neighbours?` and ${sc.counties.length-1} bordering counties`:''}: ${esc(String(f.weapon).toLowerCase())}, ${esc(who(f.sex))}`;
+ el.innerHTML=top+`<hr style="border:0;border-top:1px solid var(--m-line);margin:12px 0"><p>${what}, ${L.start}–${L.end}. ${nf.format(L.unsolved)} unsolved cases${L.nearby_count?`, plus ${L.nearby_count} similar ones outside`:''}.</p>
+  <p style="font-size:11.5px">Lines join cases that resemble each other more than ${(L.min_pct*100).toFixed(1)}% of random pairs of unsolved cases from this place: agency, county (same or bordering), weapon, circumstance, relationship, victim age and time. Similarity, not a probability of the same offender. Race is never used.</p>
   <span class="lbl">Colour by</span><div class="seg">${[['group','Group'],['year','Year'],['agency','Agency'],['circumstance','Circum.']].map(([v,l])=>`<button data-nwcol="${v}" aria-pressed="${NW.colorBy===v}">${l}</button>`).join('')}</div>
   <span class="lbl">Link strength: stronger than ${(L.min_pct*100).toFixed(1)}% of random pairs</span><input type="range" id="nwMin" min="0.95" max="0.999" step="0.001" value="${L.min_pct}"><p style="font-size:11px;margin-top:2px">Left: more, looser links. Right: only the closest resemblances.</p>
-  <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="nwOut"${NW.outside?' checked':''}> Show similar cases outside the flag (hollow)</label>
+  <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="nwOut"${NW.outside?' checked':''}> Show similar cases outside (hollow)</label>
   <span class="lbl">Groups with a distinctive detail</span>${dk.length?dk.map(k=>{const g=L.groups[k];return `<button class="nwg${NW.sel&&NW.sel.type==='group'&&NW.sel.k===k?' on':''}" data-nwg="${k}"><i style="background:${NCOL[k%NCOL.length]}"></i>${g.size} cases, ${g.start}–${g.end}<small>${esc(g.distinct.join(', '))}</small></button>`}).join(''):'<p>None.</p>'}
   ${rest?`<details><summary style="cursor:pointer;color:var(--m-mute)">${rest} more held together only by place and time</summary>${L.groups.map((g,k)=>g.distinct.length?'':`<button class="nwg${NW.sel&&NW.sel.type==='group'&&NW.sel.k===k?' on':''}" data-nwg="${k}"><i style="background:#7d91a4"></i>${g.size} cases, ${g.start}–${g.end}</button>`).join('')}</details>`:''}`;
 }
-function renderNwRight(){const L=NW.L,el=$('nwRight');if(!el||!L.cases||!L.cases.length)return;const s=NW.sel;
+function renderNwRight(){const L=NW.L,el=$('nwRight');if(!el)return;
+ if(!L){el.innerHTML=`<h2>Case network</h2><p>See which unsolved cases resemble each other, and why.</p><ul style="padding-left:16px;margin:0"><li>Type an <b>FBI case number</b> to open the network around that case.</li><li>Or choose <b>a flag</b>: a state, optionally a county, then one of its flags.</li><li>Or choose <b>a place</b>: a state, a county, the victims, a method and years, even where there's no flag.</li></ul><p style="margin-top:8px">The FBI's case file locates cases only by agency and county, so “close” means the same agency, the same county or a bordering one.</p>`;return}
+ if(!L.cases||!L.cases.length)return;const s=NW.sel;
  if(!s){el.innerHTML=`<h2>Explore</h2><p>Click a case to see it and every case it links to, with why. Click a group on the left to select it. Hover to light up a case's links; drag to pan, scroll to zoom, drag a dot to move it.</p><p>Drag across the timeline below to relink just those years.</p>`;return}
  if(s.type==='case'){const c=L.cases[s.i],n=NW.nodes[s.i];const nb=NW.adj[s.i].slice().sort((a,b)=>b[1]-a[1]);
-  el.innerHTML=`<h2>${c.outside?'Outside the flag · ':''}Case ${nwDate(c)}</h2>
+  el.innerHTML=`<h2>${c.focus||L.focus===s.i?'Searched · ':c.outside?'Outside the flag · ':''}Case ${nwDate(c)}</h2>${c.solved?'<p><b style="color:var(--m-ink)">Solved</b> when reported; shown with the unsolved cases most like it.</p>':''}
   <dl class="nwdl"><dt>Victim</dt><dd>${c.age!=null?'aged '+c.age:'age unknown'}</dd><dt>Agency</dt><dd>${esc(c.agency)}${c.county?` (${esc(c.county)})`:''}</dd><dt>Weapon</dt><dd>${esc(c.weapon)}</dd><dt>Circumstance</dt><dd>${esc(c.circumstance)}</dd><dt>Relationship</dt><dd>${esc(c.relationship)}</dd><dt>FBI case</dt><dd><code>${esc(c.id)}</code></dd>
-  <dt>Group</dt><dd>${n.g!=null?`<a href="#" data-nwg="${n.g}" style="color:var(--m-link)">${L.groups[n.g].size} cases, ${L.groups[n.g].start}–${L.groups[n.g].end}</a>`:'none'}</dd></dl>
+  <dt>County</dt><dd>${esc(c.county||'—')}</dd><dt>Group</dt><dd>${n.g!=null?`<a href="#" data-nwg="${n.g}" style="color:var(--m-link)">${L.groups[n.g].size} cases, ${L.groups[n.g].start}–${L.groups[n.g].end}</a>`:'none'}</dd></dl>
   <span class="lbl">Linked to ${nb.length} case${nb.length===1?'':'s'}, closest first</span>
   ${nb.length?nb.map(([j,p])=>{const o=L.cases[j];return `<button class="nwlink" data-nwc="${j}"><b>${nwDate(o)}</b>${o.outside?' · outside':''} · ${o.age!=null?'aged '+o.age:'age ?'} · ${esc(o.agency)}<small>stronger than ${(p*100).toFixed(1)}% of random pairs · ${esc(nwWhy(c,o).join(' · '))}</small></button>`}).join(''):'<p>No links at this strength. Move the slider left to see looser ones.</p>'}`;return}
- if(s.type==='group'){const g=L.groups[s.k];const f=S.detail[NW.fid]&&S.detail[NW.fid].flag;
+ if(s.type==='group'){const g=L.groups[s.k];
   el.innerHTML=`<h2>Group: ${g.size} cases, ${g.start}–${g.end}</h2>${g.distinct.length?`<p><b style="color:var(--m-ink)">Distinctive:</b> ${esc(g.distinct.join(', '))}</p>`:'<p>Held together only by place, method and time.</p>'}
   <ul style="padding-left:16px;margin:0 0 8px">${g.shared.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
   <button class="btn primary" data-nwkeep="${s.k}" style="width:100%;justify-content:center;margin:4px 0 8px">Keep this group for review</button>
@@ -388,14 +431,14 @@ function renderNwLegend(){const el=$('nwLegend');if(!el||!NW.L||!NW.L.cases)retu
  else h=(NW.top[by]||[]).map((v,i)=>`<span><i style="background:${NCOL[i%NCOL.length]}"></i>${esc(v)}</span>`).join('')+'<span><i style="background:#4b5d6e"></i>other</span>';
  el.innerHTML=h+'<span><i style="background:transparent;border:2px solid #7d91a4"></i>outside the flag</span>'}
 function nwHash(s){let h=2166136261;for(const ch of String(s)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
-function renderNwTime(){const el=$('nwTime'),L=NW.L,f=S.detail[NW.fid]&&S.detail[NW.fid].flag;if(!el||!f)return;
- const d=S.detail[NW.fid],[Y0,Y1]=d.years,W=el.clientWidth||800,H=70,x=d3.scaleLinear().domain([Y0,Y1+1]).range([10,W-10]);
+function renderNwTime(){const el=$('nwTime'),L=NW.L;if(!el||!L||!NW.base)return;const f=L.flag;
+ const [Y0,Y1]=NW.base.years,W=el.clientWidth||800,H=70,x=d3.scaleLinear().domain([Y0,Y1+1]).range([10,W-10]);
  const cs=(L.cases||[]).filter(c=>!c.outside);
- el.innerHTML=`<svg id="nwTsvg" width="${W}" height="${H}"><rect x="${x(f.start)}" y="4" width="${x(f.end+1)-x(f.start)}" height="${H-22}" fill="rgba(245,165,36,.10)"/>
+ el.innerHTML=`<svg id="nwTsvg" width="${W}" height="${H}"><rect x="${x(f.start)}" y="4" width="${x(f.end+1)-x(f.start)}" height="${H-22}" fill="rgba(245,165,36,${L.scope.kind==='flag'?'.10':'0'})"/>
   ${cs.map((c,i)=>`<circle cx="${(x(c.year+((c.month||6)-.5)/12)).toFixed(1)}" cy="${(10+(nwHash(c.id)%1000)/1000*(H-32)).toFixed(1)}" r="2.2" fill="#7d91a4"/>`).join('')}
   ${d3.range(Math.ceil(Y0/5)*5,Y1+1,5).map(y=>`<text x="${x(y)}" y="${H-4}" fill="#7d91a4" font-size="10" text-anchor="middle">${y}</text>`).join('')}</svg>`;
  const br=d3.brushX().extent([[10,4],[W-10,H-18]]).on('end',e=>{if(!e.selection||!e.sourceEvent)return;const [a,b]=e.selection.map(v=>Math.floor(x.invert(v)));
-  const q=new URLSearchParams(location.search);q.set('start',Math.max(Y0,a));q.set('end',Math.min(Y1,b));q.delete('group');history.pushState(null,'','?'+q);NW.sel=null;render()});
+  const q=nwParams();q.set('start',Math.max(Y0,a));q.set('end',Math.min(Y1,b));q.delete('group');history.pushState(null,'','/network?'+q);NW.sel=null;render()});
  const g=d3.select('#nwTsvg').append('g').call(br);g.call(br.move,[x(L.start),x(L.end+1)]);
 }
 function wbOf(id){const f=S.detail[id].flag;return S.wb[id]||(S.wb[id]={y0:f.start,y1:f.end,sel:{},sort:[0,1],limit:300})}
@@ -1086,6 +1129,12 @@ async function dsCheck(){const im=S.imp;if(!im||!im.preview)return;im.check=null
  try{im.check=await post('/api/datasets/check',{text:im.text,place:im.place,level:im.level,time:im.time})}catch(e){im.check={error:e.message}}render()}
 
 // ---- events ----------------------------------------------------------------------------------
+document.addEventListener('submit',async e=>{if(e.target.id!=='nwFind')return;e.preventDefault();const id=$('nwCase').value.trim();if(!id)return;
+ try{const c=await api('/api/case?id='+encodeURIComponent(id));
+  if(c.flags.length){const f=(S.flags||[]).find(x=>x.id===c.flags[0]);const lo=f?Math.max(f.start,c.year-5):c.year-5,hi=f?Math.min(f.end,c.year+5):c.year+5;
+   NW.mode='flag';nwGo({flag:c.flags[0],start:lo,end:hi,focus:c.id});toast(`${c.id}: in ${c.flags.length} flag${c.flags.length===1?'':'s'}${c.solved?' · solved when reported':''}`)}
+  else{NW.mode='place';nwGo({state:c.state,county:c.county,sex:c.sex,weapon:c.weapon,start:c.year-5,end:c.year+5,neighbours:'1',focus:c.id});toast(`${c.id}: in no flag; showing similar cases around it`)}}
+ catch(err){toast(err.message)}});
 document.addEventListener('click',async e=>{
  const a=e.target.closest('a[data-nav]');
  if(a&&!e.metaKey&&!e.ctrlKey){e.preventDefault();if(a.dataset.scope!=null){S.f.state=a.dataset.scope;S.f.county='';S.sel=null}go(a.getAttribute('href'));return}
@@ -1117,10 +1166,15 @@ document.addEventListener('click',async e=>{
  if(t.id==='leadStop'){post('/api/job/stop').then(poll).catch(err=>toast(err.message));return}
  if(t.closest&&t.closest('[data-nwc]')){const j=+t.closest('[data-nwc]').dataset.nwc;NW.sel={type:'case',i:j};updateNet();nwZoomTo(NW.sel);e.preventDefault();return}
  if(t.closest&&t.closest('[data-nwg]')){const k=+t.closest('[data-nwg]').dataset.nwg;NW.sel=NW.sel&&NW.sel.type==='group'&&NW.sel.k===k?null:{type:'group',k};updateNet();renderNwLeft();nwZoomTo(NW.sel);e.preventDefault();return}
+ if(t.dataset&&t.dataset.nwmode){NW.mode=t.dataset.nwmode;renderNwLeft();return}
+ if(t.dataset&&t.dataset.nwsex){NW.pick={...NW.pick,sex:t.dataset.nwsex};renderNwLeft();return}
+ if(t.id==='nwShow'){const pk=NW.pick||{},q=NW.q||new URLSearchParams();const o={state:pk.state||q.get('state'),county:pk.county||q.get('county'),sex:pk.sex||q.get('sex')||'Female',weapon:pk.weapon||q.get('weapon'),start:pk.start||q.get('start'),end:pk.end||q.get('end'),neighbours:(pk.neighbours??q.get('neighbours')==='1')?'1':''};
+  if(!o.weapon){toast('Choose a method.');return}nwGo(o);return}
  if(t.dataset&&t.dataset.nwcol){NW.colorBy=t.dataset.nwcol;renderNwLeft();updateNet();return}
  if(t.id==='nzIn'||t.id==='nzOut'){NW.svg.transition().call(NW.zoom.scaleBy,t.id==='nzIn'?1.5:1/1.5);return}
  if(t.id==='nzHome'){nwFit();return}
- if(t.dataset&&t.dataset.nwkeep!=null){const L=NW.L,g=L.groups[+t.dataset.nwkeep],id=NW.fid,f=S.detail[id].flag;
+ if(t.dataset&&t.dataset.nwkeep!=null){const L=NW.L,g=L.groups[+t.dataset.nwkeep],id=L.scope.flag;if(!id){toast('Groups can be kept from a flag; open one of the flags here.');return}
+  if(!S.detail[id])S.detail[id]=await api('/api/flag/'+encodeURIComponent(id));const f=S.detail[id].flag;
   const cs=g.members.map(m=>L.cases[m]);const prev=(S.dec[id]&&S.dec[id].note)||'';
   const note=(prev?prev+'\n\n':'')+`Group of ${g.size} similar unsolved cases, ${g.start}–${g.end}: ${g.shared.join('; ')}.\nFBI case IDs: ${cs.map(c=>c.id).join(', ')}`;
   try{await post('/api/decide',{id,status:(S.dec[id]&&S.dec[id].status)||'kept',flag:f,note});await refreshDecisions();toast('Kept, with this group in the note')}catch(err){toast(err.message)}return}
@@ -1215,7 +1269,13 @@ document.addEventListener('change',async e=>{
  if(t.id==='qState'){S.qState=t.value;S.quality=S.quality||{};if(t.value&&!S.quality[t.value])api('/api/quality?state='+encodeURIComponent(t.value)).then(j=>{S.quality[t.value]=j;render()}).catch(err=>toast(err.message));render()}
  if(t.id==='noteBox'){post('/api/note',{id:t.dataset.id,note:t.value}).then(()=>{refreshDecisions();toast('Note saved')}).catch(err=>toast(err.message))}
  if(t.id==='nwOut'){NW.outside=t.checked;nwHighlight();return}
- if(t.id==='nwMin'){const q=new URLSearchParams(location.search);q.set('min',t.value);q.delete('group');history.pushState(null,'','?'+q);NW.sel=null;render();return}
+ if(t.id==='nwMin'){const q=nwParams();q.set('min',t.value);q.delete('group');history.pushState(null,'','/network?'+q);NW.sel=null;render();return}
+ if(t.id==='nwState'){NW.pick={state:t.value,county:''};renderNwLeft();return}
+ if(t.id==='nwCounty'){NW.pick={...NW.pick,county:t.value};renderNwLeft();return}
+ if(t.id==='nwFlag'&&t.value){nwGo({flag:t.value});return}
+ if(t.id==='nwWeapon'){NW.pick={...NW.pick,weapon:t.value};return}
+ if(t.id==='nwY0'||t.id==='nwY1'){NW.pick={...NW.pick,[t.id==='nwY0'?'start':'end']:t.value};return}
+ if(t.id==='nwNb'){NW.pick={...NW.pick,neighbours:t.checked};return}
  if(t.id==='ciPeriods'){S.cityPeriods=t.checked;render();return}
  if(t.id==='ciFile'&&t.files[0]){const fl=t.files[0];t.value='';
   if(fl.size>25*1024*1024){toast('That file is over 25 MB.');return}
