@@ -703,8 +703,9 @@ class App:
 
     # ---- the case network page --------------------------------------------------------------------
     def network(self, q: dict) -> dict:
-        """Links for a flag (flag=<id>) or for any place, victims, method and years (state, county, sex,
-        weapon, start, end, neighbours=1), optionally with a searched case (focus=<FBI case id>)."""
+        """Links for a flag (flag=<id>) or for any place (state, county, optional agency, neighbours=1),
+        victims (sex: Female, Male or all), method (weapon: a group or all) and years, optionally with a
+        searched case (focus=<FBI case id>) and similar solved cases (solved=1)."""
         from .. import linkage
 
         def year(k):
@@ -718,32 +719,41 @@ class App:
         except ValueError:
             min_pct = linkage.LINK_PCT
         data = self._data()
+        linkage.remember_counties(data)
         if q.get("flag"):
             r = self._flag_row(q["flag"])
             scope = {"kind": "flag", "flag": q["flag"]}
         else:
-            linkage.remember_counties(data)
             state, county = q.get("state", ""), q.get("county", "")
-            sex, weapon = q.get("sex", ""), q.get("weapon", "")
+            sex, weapon, agency = q.get("sex", ""), q.get("weapon", ""), q.get("agency") or None
             if county not in linkage._state_counties(state):
                 raise click.ClickException("Choose a state and one of its counties.")
-            if sex not in ("Female", "Male"):
-                raise click.ClickException("Choose women or men.")
-            if weapon not in set(data.cases.weapon_group.unique()):
+            if sex not in ("Female", "Male", "all"):
+                raise click.ClickException("Choose women, men or both.")
+            if weapon != "all" and weapon not in set(data.cases.weapon_group.unique()):
                 raise click.ClickException("Choose a method.")
+            if agency and agency not in self._agencies(data, county):
+                raise click.ClickException("Choose one of this county's agencies.")
             y0, y1 = int(data.cases.year.min()), int(data.cases.year.max())
             start = start if start is not None else y0
             end = end if end is not None else y1
-            r = linkage.scope_flag(state, county, sex, weapon, start, end, q.get("neighbours") == "1")
-            scope = {"kind": "place", "state": state, "county": county, "sex": sex, "weapon": weapon,
-                     "neighbours": q.get("neighbours") == "1", "counties": r["counties"]}
-        res = linkage.links(data, r, start, end, min_pct=min_pct, focus=q.get("focus") or None)
+            r = linkage.scope(state, county, sex, weapon, start, end, q.get("neighbours") == "1", agency)
+            scope = {k: r[k] for k in ("kind", "state", "states", "county", "counties", "agency", "sex", "weapon",
+                                       "neighbours", "place")}
+        res = linkage.links(data, r, start, end, min_pct=min_pct, focus=q.get("focus") or None,
+                            solved=q.get("solved") == "1")
         return {**res, "scope": scope, "flag": {k: r.get(k) for k in ("id", "state", "place", "county", "counties",
                                                                          "sex", "weapon", "start", "end",
                                                                          "confidence")}}
 
+    @staticmethod
+    def _agencies(data, county: str) -> list[str]:
+        c = data.cases
+        return sorted(c.loc[c.county == county, "agency"].dropna().astype(str).unique())
+
     def network_options(self, q: dict) -> dict:
-        """States; counties of a state with their unsolved counts; flags in that state (or county)."""
+        """States; counties of a state with their unsolved counts; a county's agencies; flags in that
+        state (or county)."""
         from .. import linkage
         data = self._data()
         linkage.remember_counties(data)
@@ -756,6 +766,9 @@ class App:
             out["counties"] = [[k, int(n)] for k, n in cs.county.value_counts().sort_index().items()]
             _, rows = self.flags()
             cty = q.get("county")
+            if cty:
+                ca = c[(c.county == cty) & ~c.solved]
+                out["agencies"] = [[k, int(n)] for k, n in ca.agency.astype(str).value_counts().sort_index().items()]
             out["flags"] = [{k: r.get(k) for k in ("id", "place", "level", "county", "sex", "weapon", "start", "end",
                                                    "confidence", "total", "solved")}
                             for r in rows if r.get("state") == st and r.get("sex") in ("Female", "Male")
@@ -777,6 +790,40 @@ class App:
         return {"id": str(r.case_id), "state": r.state, "county": r.county, "agency": str(r.agency),
                 "year": int(r.year), "sex": r.vic_sex, "weapon": r.weapon_group, "solved": bool(r.solved),
                 "flags": holding}
+
+    def search_cases(self, q: dict) -> dict:
+        """Cases by state and year, narrowed by county, agency, month, victim age (within 2 years) and sex:
+        up to 50, to open one in the network. Returns what the case file records; no names exist in it."""
+        import pandas as pd
+        from .. import linkage
+        data = self._data()
+        linkage.remember_counties(data)
+        c = data.cases
+        st = q.get("state", "")
+        if st not in linkage._COUNTIES:
+            raise click.ClickException("Choose a state.")
+        y = str(q.get("year", ""))
+        if not y.isdigit():
+            raise click.ClickException("Add the year.")
+        m = (c.state == st) & (c.year == int(y))
+        if q.get("county"):
+            m &= c.county == q["county"]
+        if q.get("agency"):
+            m &= c.agency.astype(str).str.contains(str(q["agency"])[:60], case=False, regex=False)
+        if str(q.get("month", "")).isdigit():
+            m &= c.month == int(q["month"])
+        if str(q.get("age", "")).isdigit():
+            m &= c.vic_age.between(int(q["age"]) - 2, int(q["age"]) + 2)
+        if q.get("sex") in ("Female", "Male"):
+            m &= c.vic_sex == q["sex"]
+        hits = c[m].sort_values(["month", "agency"])
+        cols = ("case_id", "year", "month", "county", "agency", "vic_age", "vic_sex", "weapon", "circumstance",
+                "solved")
+        return {"total": int(len(hits)), "cases": [
+            {"id": str(r.case_id), "year": int(r.year), "month": int(r.month) if r.month > 0 else None,
+             "county": r.county, "agency": str(r.agency), "age": None if pd.isna(r.vic_age) else int(r.vic_age),
+             "sex": r.vic_sex, "weapon": str(r.weapon), "circumstance": str(r.circumstance), "solved": bool(r.solved)}
+            for r in hits.head(50)[list(cols)].itertuples(index=False)]}
 
     def flag(self, fid: str) -> dict:
         from . import research
@@ -1388,6 +1435,8 @@ def _handler(app: App):
                     return self._json(200, app.network_options(q))
                 if path == "/api/case":
                     return self._json(200, app.find_case(q.get("id", "")))
+                if path == "/api/cases/search":
+                    return self._json(200, app.search_cases(q))
                 if path.startswith("/api/links/"):
                     return self._json(200, app.case_links(unquote(path.rsplit("/", 1)[1]), q))
                 if path.startswith("/api/flag/"):

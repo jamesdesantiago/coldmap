@@ -40,15 +40,21 @@ import pandas as pd
 
 LINK_PCT = 0.99        # a link: stronger than 99% of random pairs from the same place
 GROUP_PCT = 0.95       # a group: its average pair is stronger than 95% of random pairs
-MAX_CASES = 600        # unsolved cases linked at once; narrow the years beyond that
+MAX_CASES = 1500       # unsolved cases linked at once; narrow the years beyond that
 TIME_W = 3.0
 PROX_SAME = 1.0
 PROX_NEAR = 0.5
 NULL_PAIRS = 20000
 UNINFORMATIVE = {"", "nan", "none", "unknown", "other", "other or type unknown", "firearm, type not stated",
                  "relationship not determined", "circumstances undetermined", "other - not specified",
-                 "not recorded", "not reported", "undetermined"}
-FIELDS = ("agency", "weapon", "circumstance", "relationship")
+                 "not recorded", "not reported", "undetermined", "other/unknown"}
+# Victim sex and the method group count too: they add nothing when the view is one sex and one method
+# (every case shares them, so their weight is -ln(1) = 0), and they matter when it's both or all.
+FIELDS = ("agency", "weapon", "circumstance", "relationship", "vic_sex", "weapon_group")
+
+
+def _col(d: pd.DataFrame, f: str) -> np.ndarray:
+    return d[f].astype(str).to_numpy() if f in d else np.full(len(d), "nan", dtype=object)
 
 
 def _informative(v) -> bool:
@@ -61,7 +67,7 @@ class Scorer:
     def __init__(self, ref: pd.DataFrame):
         self.w = {}
         for f in FIELDS:
-            share = ref[f].astype(str).value_counts(normalize=True)
+            share = pd.Series(_col(ref, f)).value_counts(normalize=True)
             self.w[f] = {k: float(-np.log(max(v, 1e-4))) for k, v in share.items() if _informative(k)}
         ages = pd.to_numeric(ref.vic_age, errors="coerce").dropna().astype(int)
         hist = np.bincount(ages.clip(0, 110), minlength=111).astype(float)
@@ -74,7 +80,7 @@ class Scorer:
         """Scores of a[k] with b[k] for each k (same length)."""
         s = np.zeros(len(a))
         for f in FIELDS:
-            va, vb = a[f].astype(str).to_numpy(), b[f].astype(str).to_numpy()
+            va, vb = _col(a, f), _col(b, f)
             wa = np.nan_to_num(pd.Series(va).map(self.w[f]).to_numpy(dtype=float))
             s += np.where(va == vb, wa, 0.0)
         aa = pd.to_numeric(a.vic_age, errors="coerce").to_numpy(dtype=float)
@@ -91,10 +97,11 @@ class Scorer:
         """Scores between every case in a and every case in b."""
         s = np.zeros((len(a), len(b)))
         for f in FIELDS:
-            wa = a[f].astype(str).map(self.w[f]).to_numpy(dtype=float)
-            va, vb = a[f].astype(str).to_numpy(), b[f].astype(str).to_numpy()
-            same = va[:, None] == vb[None, :]
-            s += np.where(same, np.nan_to_num(wa)[:, None], 0.0)
+            va, vb = _col(a, f), _col(b, f)
+            codes, uniq = pd.factorize(np.concatenate([va, vb]))
+            ca, cb = codes[:len(va)], codes[len(va):]
+            w = np.array([self.w[f].get(u, 0.0) for u in uniq] + [0.0])
+            s += np.where(ca[:, None] == cb[None, :], w[ca][:, None], 0.0)
         aa = pd.to_numeric(a.vic_age, errors="coerce").to_numpy(dtype=float)
         ab = pd.to_numeric(b.vic_age, errors="coerce").to_numpy(dtype=float)
         gap = np.abs(aa[:, None] - ab[None, :])
@@ -171,21 +178,21 @@ def _groups(P: np.ndarray, level: float) -> list[list[int]]:
 
 
 def _case(r, pct_best=None) -> dict:
-    return {"id": str(r.case_id), "solved": bool(r.solved), "year": int(r.year),
+    return {"id": str(r.case_id), "solved": bool(r.solved), "sex": str(r.vic_sex), "year": int(r.year),
             "month": int(r.month) if r.month > 0 else None,
             "age": None if pd.isna(r.vic_age) else int(r.vic_age), "agency": str(r.agency), "county": r.county,
             "weapon": str(r.weapon), "circumstance": str(r.circumstance), "relationship": str(r.relationship)}
 
 
 def links(data, flag: dict, start: int | None = None, end: int | None = None, seed: int = 0,
-          min_pct: float = LINK_PCT, focus: str | None = None) -> dict:
+          min_pct: float = LINK_PCT, focus: str | None = None, solved: bool = False) -> dict:
     """Unsolved cases of a flag (optionally narrowed to start..end), the links between them, groups,
     and similar unsolved cases just outside the flag."""
     from .interfaces.research import _mask
     c = data.cases
     start = int(start if start is not None else flag["start"])
     end = int(end if end is not None else flag["end"])
-    place_all = c[_mask(c, flag, by_year=True)]
+    place_all = c[scope_mask(c, flag) if flag.get("kind") == "place" else _mask(c, flag, by_year=True)]
     inside = place_all[place_all.year.between(start, end) & ~place_all.solved]
     min_pct = float(min_pct) if np.isfinite(min_pct) else LINK_PCT
     min_pct = min(max(min_pct, 0.95), 0.999)   # links shown: 95th to 99.9th percentile
@@ -195,7 +202,12 @@ def links(data, flag: dict, start: int | None = None, end: int | None = None, se
         return {**out, "too_many": True}
     if len(inside) < 3:
         return {**out, "cases": [], "links": [], "groups": [], "nearby": []}
-    ref = c[(c.state == flag["state"]) & (c.vic_sex == flag["sex"]) & (c.weapon_group == flag["weapon"])]
+    rm = c.state.isin(flag.get("states") or [flag["state"]])
+    if flag["sex"] != "all":
+        rm &= c.vic_sex == flag["sex"]
+    if flag["weapon"] != "all":
+        rm &= c.weapon_group == flag["weapon"]
+    ref = c[rm]
     scorer = Scorer(ref)
     rng = np.random.default_rng(seed)
     pool = place_all[~place_all.solved]
@@ -237,6 +249,25 @@ def links(data, flag: dict, start: int | None = None, end: int | None = None, se
                 nearby.append({**_case(next(row.iloc[[0]].itertuples(index=False))), "outside": True, "focus": True})
                 top = [m for m in np.argsort(-pf)[:15] if pf[m] >= 0.95]
                 near_links += [[focus_i, int(m), round(float(pf[m]), 4)] for m in top]
+    # solved cases from the same place and years that resemble the unsolved ones (context only: they
+    # never join a group, and the data names no offenders)
+    solved_n = 0
+    if solved:
+        sv = place_all[place_all.year.between(start, end) & place_all.solved]
+        if focus:
+            sv = sv[sv.case_id != focus]
+        if len(sv):
+            Ps = _pct(null, scorer.matrix(sv, inside))
+            best = Ps.max(1)
+            for k in np.argsort(-best)[:200]:
+                if best[k] < min_pct:
+                    break
+                i = len(cases) + len(nearby)
+                nearby.append({**_case(next(sv.iloc[[k]].itertuples(index=False))), "outside": False,
+                               "context": True})
+                hits = np.flatnonzero(Ps[k] >= min_pct)
+                near_links += [[i, int(m), round(float(Ps[k, m]), 4)] for m in hits[np.argsort(-Ps[k, hits])][:8]]
+                solved_n += 1
     gsum = []
     for g in groups:
         sub = inside.iloc[g]
@@ -252,11 +283,13 @@ def links(data, flag: dict, start: int | None = None, end: int | None = None, se
                      "linked_share": round(float((pair >= LINK_PCT).mean()), 2), "nearby": attached})
     gsum.sort(key=lambda x: (x["start"], x["end"]))   # by date: no ranking reliably puts a real series first
     return {**out, "cases": cases + nearby, "links": links_ + near_links, "groups": gsum,
-            "grouped": int(sum(len(g) for g in groups)), "nearby_count": len(nearby), "focus": focus_i}
+            "grouped": int(sum(len(g) for g in groups)),
+            "nearby_count": sum(1 for x in nearby if x.get("outside") and not x.get("focus")),
+            "solved_count": solved_n, "focus": focus_i}
 
 
 DISTINCT_LIFT = 0.50   # a detail at least 50 points more common in the group than in the flag...
-DISTINCT_RARE = 0.30   # ...and held by at most 30% of the flag's unsolved cases
+DISTINCT_RARE = 0.30   # ...and held by at most 30% of the unsolved cases shown
 DISTINCT_MIN = 4       # in a group of at least 4
 
 
@@ -295,7 +328,7 @@ def shared(sub: pd.DataFrame, everyone: pd.DataFrame) -> list[str]:
         if len(vc) and vc.iloc[0] >= 0.6:
             v = vc.index[0]
             rest = float((everyone[f].astype(str) == v).mean())
-            out.append(f"{label} {v}: {vc.iloc[0]:.0%} of the group, {rest:.0%} of the flag's unsolved cases")
+            out.append(f"{label} {v}: {vc.iloc[0]:.0%} of the group, {rest:.0%} of the unsolved cases shown")
     ages = pd.to_numeric(sub.vic_age, errors="coerce").dropna()
     if len(ages) >= 3:
         lo, hi = int(ages.quantile(0.25)), int(ages.quantile(0.75))
@@ -303,7 +336,7 @@ def shared(sub: pd.DataFrame, everyone: pd.DataFrame) -> list[str]:
         rest = float(all_ages.between(lo, hi).mean()) if len(all_ages) else 0.0
         if hi - lo <= 8:
             out.append(f"victims mostly aged {lo}–{hi}: {float(ages.between(lo, hi).mean()):.0%} of the group, "
-                       f"{rest:.0%} of the flag's unsolved cases")
+                       f"{rest:.0%} of the unsolved cases shown")
     t = _t(sub)
     span = (t.max() - t.min()) / 12
     out.append(f"within {span:.1f} years" if span >= 1 else f"within {int(t.max() - t.min()) + 1} months")
@@ -311,35 +344,61 @@ def shared(sub: pd.DataFrame, everyone: pd.DataFrame) -> list[str]:
 
 
 def _nearby(data, flag: dict, start: int, end: int, inside: pd.DataFrame) -> pd.DataFrame:
+    """Unsolved cases in counties that border the view (in any state), a few years either side."""
+    c = data.cases
+    remember_counties(data)
+    counties = set(flag.get("counties") or ([flag["county"]] if flag.get("county") else []))
+    near = set().union(*(bordering(k) for k in counties)) - counties if counties else set()
+    if not near:
+        return c.iloc[0:0]
+    m = c.county.isin(near) & (c.vic_age >= 12) & ~c.solved & c.year.between(start - 3, end + 3)
+    if flag["sex"] != "all":
+        m &= c.vic_sex == flag["sex"]
+    if flag["weapon"] != "all":
+        m &= c.weapon_group == flag["weapon"]
+    return c[m].head(400)
+
+
+def scope(state: str, county: str, sex: str, weapon: str, start: int, end: int, neighbours: bool = False,
+          agency: str | None = None) -> dict:
+    """Any place (a county, one agency in it, or a county with the counties that border it, across
+    state lines too), victims (Female, Male or all) and method (a group or all), and years."""
+    counties = [county] + (bordering(county) if neighbours and not agency else [])
+    states = sorted({state} | {_STATE_OF.get(k, state) for k in counties})
+    label = agency or county
+    if neighbours and not agency:
+        label = f"{county} and {len(counties) - 1} bordering count{'y' if len(counties) == 2 else 'ies'}"
+    return {"kind": "place", "state": state, "states": states, "place": label, "county": county,
+            "counties": counties, "agency": agency, "sex": sex, "weapon": weapon, "start": int(start),
+            "end": int(end), "neighbours": bool(neighbours and not agency)}
+
+
+def scope_mask(c: pd.DataFrame, sc: dict, by_year: bool = True) -> pd.Series:
+    m = c.state.isin(sc["states"]) & c.county.isin(sc["counties"]) & (c.vic_age >= 12)
+    if sc.get("agency"):
+        m &= c.agency == sc["agency"]
+    if sc["sex"] != "all":
+        m &= c.vic_sex == sc["sex"]
+    if sc["weapon"] != "all":
+        m &= c.weapon_group == sc["weapon"]
+    if not by_year:
+        m &= c.year.between(sc["start"], sc["end"])
+    return m
+
+
+def bordering(county: str) -> list[str]:
+    """Counties that share a border with this one, in any state (labels as the case file writes them)."""
     from .detectors.neighbours import adjacency
     from .interfaces.research import county_fips
-    c = data.cases
-    counties = set(flag.get("counties") or ([flag["county"]] if flag.get("county") else []))
-    codes = {county_fips(k) for k in counties} - {None}
-    adj = adjacency()
-    near_codes = set().union(*(adj.get(x, set()) for x in codes)) - codes if codes else set()
-    m = (c.state == flag["state"]) & (c.vic_sex == flag["sex"]) & (c.weapon_group == flag["weapon"]) & \
-        (c.vic_age >= 12) & ~c.solved & c.year.between(start - 3, end + 3)
-    cand = c[m]
-    if not len(cand):
-        return cand
-    fips = cand.county.map(lambda k: county_fips(k) if isinstance(k, str) else None)
-    cand = cand[fips.isin(near_codes) | (cand.county.isin(counties) & ~cand.case_id.isin(inside.case_id))]
-    return cand.head(400)
+    code = county_fips(county)
+    if not code:
+        return []
+    near = adjacency().get(code, ())
+    return sorted(lb for lb, c in _FIPS_OF.items() if c in near)
 
 
-def scope_flag(state: str, county: str, sex: str, weapon: str, start: int, end: int,
-               neighbours: bool = False) -> dict:
-    """A flag-shaped description of any place, victims, method and years, so the network can show
-    cases without a flag. With neighbours, the bordering counties in the same state are included."""
-    from .detectors.neighbours import groups
-    counties = [county]
-    if neighbours:
-        counties = groups([county] + _state_counties(state)).get(county, [county])
-    return {"state": state, "level": "region" if neighbours else "county", "place": county, "county": county,
-            "counties": counties, "sex": sex, "weapon": weapon, "start": int(start), "end": int(end)}
-
-
+_STATE_OF: dict[str, str] = {}
+_FIPS_OF: dict[str, str] = {}
 _COUNTIES: dict[str, list[str]] = {}
 
 
@@ -348,9 +407,15 @@ def _state_counties(state: str) -> list[str]:
 
 
 def remember_counties(data) -> None:
+    from .interfaces.research import county_fips
     if not _COUNTIES:
         for st, g in data.cases.dropna(subset=["county"]).groupby("state").county:
             _COUNTIES[st] = sorted(g.unique())
+            for k in _COUNTIES[st]:
+                _STATE_OF[k] = st
+                code = county_fips(k)
+                if code:
+                    _FIPS_OF[k] = code
 
 
 def checklist(flag: dict, result: dict, chance: dict | None) -> list[dict]:

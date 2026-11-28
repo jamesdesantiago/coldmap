@@ -261,13 +261,15 @@ def export_markdown(d: dict, version: str, data_date: str | None) -> str:
     if d.get("status") not in ("reviewed", "sent"):
         raise ValueError("Only leads a second person has reviewed can be exported.")
     f = d["flag"]
-    who = {"Female": "women", "Male": "men"}.get(f["sex"], "victims")
+    who = {"Female": "women", "Male": "men"}.get(f["sex"], "women and men")
+    group = f.get("kind") == "network-group"
     rate = f["solved"] / f["total"] if f["total"] else 0
     gap = round((rate - f["expected"]) * 100) if f.get("expected") is not None else None
     years = f"{f['start']}–{f['end']}" if f["start"] != f["end"] else str(f["start"])
     lines = [
         f"# Lead for review: {f['place']}, {f['state']}",
-        f"{f['weapon']} killings of {who}, {years}",
+        (f"A group of {f['total']} similar unsolved killings of {who} ({str(f['weapon']).lower()}), {years}, "
+         "found in coldmap's case network" if group else f"{f['weapon']} killings of {who}, {years}"),
         "",
         "> A flag is a pattern worth review, not evidence that cases are linked. Only investigators can link "
         "cases. Do not contact families, witnesses or possible suspects.",
@@ -280,10 +282,17 @@ def export_markdown(d: dict, version: str, data_date: str | None) -> str:
     ]
     if gap is not None:
         lines.append(f"- Expected solve rate {f['expected']:.0%}; gap {gap:+d} points")
-    lines += [f"- Confidence: {f.get('confidence')}; found by {', '.join(f.get('by') or [])}"]
+    if not group:
+        lines += [f"- Confidence: {f.get('confidence')}; found by {', '.join(f.get('by') or [])}"]
+    else:
+        lines += ["- Grouped by similarity (agency, county, weapon, circumstance, relationship, victim age, "
+                  "time), never by race. Similarity is not a probability that the cases share an offender."]
     if f.get("q") is not None:
         lines.append(f"- q = {f['q']}")
-    lines += ["", "## Why it was flagged", f.get("what", ""), "", f.get("agreement", "")]
+    lines += ["", "## Why it was flagged" if not group else "## What the cases share", f.get("what", ""), "",
+              f.get("agreement", "")]
+    if f.get("cases_ids"):
+        lines += ["", "## FBI case numbers", ", ".join(str(x) for x in f["cases_ids"][:200])]
     if f.get("ruleouts"):
         word = {"explains": "May explain this", "weakens": "Weakens this", "clear": "Nothing found"}
         lines += ["", "## Rule-out checks", *[f"- {r['title']}: {word.get(r['status'], r['status'])}. {r['text']}"
